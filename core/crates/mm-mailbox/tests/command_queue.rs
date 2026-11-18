@@ -244,6 +244,13 @@ impl Tx for World {
         unreachable!("the worker's try never asks it")
     }
 
+    fn release(&self, account: &str, now: i64) -> Result<usize, Fault> {
+        let mut rows = self.rows.lock().unwrap();
+        let waiting =
+            rows.iter_mut().filter(|r| r.account == account && r.state == "queued" && r.next_attempt_at > now);
+        Ok(waiting.map(|r| r.next_attempt_at = now).count())
+    }
+
     fn counts(&self) -> Result<BTreeMap<String, i64>, Fault> {
         unreachable!("the worker's try never asks it")
     }
@@ -414,6 +421,32 @@ fn a_try_that_panics_is_an_attempt_that_failed_and_the_next_row_still_applies() 
     world.now.fetch_add(20, Ordering::SeqCst);
     commands.drain().unwrap();
     assert_eq!(world.row(1).attempts, 2);
+}
+
+#[test]
+fn a_server_that_answers_again_lets_its_changes_go_at_once_their_attempts_counted() {
+    let world = World::new();
+    world.trash(1, PANICS, 10, false, 0);
+    let commands = commands(&world);
+    commands.drain().unwrap();
+    assert_eq!(world.row(1).next_attempt_at, NOW + 20, "it backs off");
+    assert_eq!(commands.release(ADA).unwrap(), 0, "another account's server lets nothing of it go");
+    commands.drain().unwrap();
+    assert_eq!(world.row(1).attempts, 1, "nor is it tried before its time");
+
+    assert_eq!(commands.release(PANICS).unwrap(), 1);
+    assert_eq!(world.row(1).next_attempt_at, NOW);
+    commands.drain().unwrap();
+    assert_eq!(world.row(1).attempts, 2, "tried at once, and counted, so one that keeps failing still gives up");
+}
+
+#[test]
+fn a_read_only_process_lets_nothing_go_as_it_tries_nothing() {
+    let world = World::new();
+    world.trash(1, ADA, 10, false, 1);
+    world.change(1, |r| r.next_attempt_at = NOW + 40);
+    assert_eq!(commands_of(&world, true).release(ADA).unwrap(), 0);
+    assert_eq!(world.row(1).next_attempt_at, NOW + 40, "it waits for a full run");
 }
 
 #[test]

@@ -144,6 +144,41 @@ fn a_block_that_fails_leaves_nothing_behind() {
 }
 
 #[test]
+fn an_accounts_changes_backing_off_come_due_at_once_and_no_others() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = database(dir.path());
+    let params = json!({});
+    let insert = |key: &str, account: &'static str| {
+        let row = NewCommand { account, ..new(key, &params) };
+        command_ports::write(&store, |tx| tx.insert_command(&row)).unwrap().0.unwrap()
+    };
+    let (waiting, given_up, running, due, bea) = (
+        insert("r1", "ada@example.test"),
+        insert("r2", "ada@example.test"),
+        insert("r3", "ada@example.test"),
+        insert("r4", "ada@example.test"),
+        insert("r5", "bea@example.test"),
+    );
+    command_ports::write(&store, |tx| {
+        tx.attempt_failed(waiting, false, 3, 500, "ConnectionRefused")?;
+        tx.attempt_failed(given_up, true, 101, 0, "refused")?;
+        tx.claim(running)?;
+        tx.attempt_failed(due, false, 1, 90, "ConnectionRefused")?;
+        tx.attempt_failed(bea, false, 2, 500, "ConnectionRefused")
+    })
+    .unwrap();
+
+    let released = command_ports::write(&store, |tx| tx.release("ada@example.test", 100)).unwrap();
+    assert_eq!(released, 1, "only the one still waiting");
+    assert_eq!(command_ports::read(&store, |tx| tx.due(100)).unwrap(), [waiting, due]);
+    let row = command_ports::read(&store, |tx| tx.command(waiting)).unwrap().unwrap();
+    assert_eq!((row.attempts, row.next_attempt_at), (3, 100), "its attempts stand");
+    let state = |id| command_ports::read(&store, |tx| tx.command(id)).unwrap().unwrap().state;
+    assert_eq!((state(given_up), state(running)), ("error".to_owned(), "running".to_owned()));
+    assert_eq!(command_ports::read(&store, |tx| tx.next_due(100)).unwrap(), Some(500), "Bea's still waits");
+}
+
+#[test]
 fn the_undo_stack_keeps_its_newest_and_finds_a_group() {
     let dir = tempfile::tempdir().unwrap();
     let store = database(dir.path());
