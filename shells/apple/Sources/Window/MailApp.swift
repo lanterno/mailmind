@@ -32,14 +32,16 @@ final class MailApp {
     /// The data folder the core opens, once chosen: where its log is, and what Start Fresh moves the database out of.
     private(set) var folder: URL?
     /// Where the window is. Choosing a place opens its list; the brief, in the pane beside the Inbox, keeps the
-    /// Inbox's list and closes the message open, as the pane is the brief's.
+    /// Inbox's list and closes the message open, as the pane is the brief's. A page across the window (the gate, the
+    /// paper trail) closes it too: it spans the window only while no message is open, and one left open from the
+    /// place before would keep it in the list's room, beside a message that isn't its own.
     var place: Place? = .allInboxes {
         didSet {
             guard place != oldValue else { return }
             let was = listed
             listed = place.map { Self.listed($0, beside: was) }
             if listed != was { openList() }
-            if let place, place != listed { closeMessage() }
+            if let place, place != listed || place.spansTheWindow { closeMessage() }
         }
     }
     /// The place whose list the window shows: the place's own (`Place.listed`), but beside the brief the Inbox the
