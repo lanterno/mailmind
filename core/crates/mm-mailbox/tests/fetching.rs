@@ -19,7 +19,7 @@ use mm_mailbox::fetching::{FETCH_BYTES, Fetching, FetchingParts, OPENING_BYTES, 
 use mm_mailbox::gates::{Gates, Priority, Refused, Wait};
 use mm_mailbox::ports::{BodyFetch, MailSession, Row, SessionError, StoredBodies};
 use mm_mailbox::roles::Folder;
-use mm_mailbox::session::{Headers, MailServer, MailServers, Opening, Search, Selected, ServerError};
+use mm_mailbox::session::{Headers, MailServer, MailServers, NO_SUCH_FOLDER, Opening, Search, Selected, ServerError};
 use serde_json::json;
 
 const ADA: &str = "ada@example.test";
@@ -46,6 +46,8 @@ enum Body {
     Refuses,
     Lost,
     RefusesTheSelect,
+    /// Refuses the select, and its LIST leaves the folder out: another client deleted it.
+    HasNoArchive,
 }
 
 /// A server with the messages it is given, RAW at UID 7 unless told else, which writes down what it was asked.
@@ -73,7 +75,9 @@ The plans, attached.\r\n--b\r\nContent-Type: application/pdf; name=plans.pdf\r\n
 
 impl MailSession for Server {
     fn folders(&mut self) -> Result<Vec<Folder>, SessionError> {
-        Ok(Vec::new())
+        self.asked.lock().unwrap().push("LIST".to_owned());
+        let archive = (self.body != Body::HasNoArchive).then(|| Folder::named("Archive"));
+        Ok([Some(Folder::named("INBOX")), archive].into_iter().flatten().collect())
     }
 
     fn status(&mut self, _folder: &str) -> Result<(i64, i64), SessionError> {
@@ -92,7 +96,7 @@ impl MailServer for Server {
 
     fn select(&mut self, folder: &str, readonly: bool) -> Result<Selected, ServerError> {
         self.asked.lock().unwrap().push(format!("{} {folder}", if readonly { "EXAMINE" } else { "SELECT" }));
-        if self.body == Body::RefusesTheSelect {
+        if matches!(self.body, Body::RefusesTheSelect | Body::HasNoArchive) {
             return Err(ServerError::Refused("error"));
         }
         Ok(Selected::default())
@@ -378,6 +382,14 @@ fn a_lost_connection_or_a_refused_select_fails_and_still_logs_out() {
         assert_eq!(world.asked().last().map(String::as_str), Some("LOGOUT"));
         assert!(world.store.bodies.lock().unwrap().is_empty());
     }
+}
+
+#[test]
+fn a_select_refused_of_a_folder_the_list_leaves_out_says_the_folder_is_gone() {
+    let world = World::new(Body::HasNoArchive);
+    assert_eq!(world.fetching.fetch(1), Err(Fault::new(NO_SUCH_FOLDER)));
+    assert_eq!(world.asked(), [&format!("LOGIN {ADA}"), "EXAMINE Archive", "LIST", "LOGOUT"]);
+    assert!(world.store.bodies.lock().unwrap().is_empty());
 }
 
 #[test]

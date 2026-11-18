@@ -7,7 +7,9 @@
 
 mod stand_in;
 
+use mm_kernel::errors::Problem;
 use mm_kernel::seams::Keychain;
+use mm_mailbox::bodies::FOLDER_GONE;
 use mm_mailbox::lists::Paging;
 use serde_json::{Value, json};
 use stand_in::{ADA, BEA, Imap, World, note, world};
@@ -148,31 +150,141 @@ fn a_message_another_client_expunged_while_open_still_reads_and_filing_it_moves_
     assert!(changes_heard(&w, mark).is_empty());
 }
 
-/// A known bug: a folder another client deleted while the older-mail lane read its first scan is asked for at every
-/// round of the lane, a login each time, for good; its list still shows the mail it held, saying nothing; and a message
-/// of it fails to open as a fault. Once the server's folders say it is gone, it should be forgotten as a folder MailMind
-/// deleted is (`FolderStore::forget_folder`). Fixing it fails this test until the marker goes.
-#[test]
-#[should_panic(expected = "the lane stopped asking for a folder the server no longer has")]
-fn a_folder_another_client_deleted_is_no_longer_read() {
+/// What Ada's Plans lists now: how many it holds.
+fn plans_total(w: &World) -> Value {
+    let page = Paging { offset: 0, limit: 50, grouped: false };
+    w.app.reading.lists.messages_in(Some(ADA), "Plans", page).unwrap()["total"].clone()
+}
+
+/// Ada's Inbox of two notes and her Plans of 1200, synced, and Plans opened: its first scan stores the newest 500 and
+/// leaves the rest to the older-mail lane.
+fn plans_half_read() -> World {
     let imap = Imap::start();
     imap.add(ADA, "INBOX", (1..=2).map(|uid| (uid, note(uid))));
     imap.add(ADA, "Plans", (1..=1200).map(|uid| (uid, note(uid))));
     let w = world(imap, &[ADA], &[]);
     w.app.syncing.sync_once();
-    let page = Paging { offset: 0, limit: 50, grouped: false };
-    assert_eq!(w.app.reading.lists.messages_in(Some(ADA), "Plans", page).unwrap()["total"], 500);
+    assert_eq!(plans_total(&w), 500);
+    w
+}
+
+/// Whether the lane's next round asks Ada's server anything of Plans.
+fn lane_asks_for_plans(w: &World) -> bool {
+    let mark = w.imap.mark();
+    w.app.syncing.read_older().unwrap();
+    w.imap.since(mark, ADA).iter().any(|c| c.contains("Plans"))
+}
+
+/// A folder another client deleted while the older-mail lane read its first scan: once the rail's LIST leaves it out,
+/// it is forgotten, as a folder MailMind deleted is, and the lane asks for it no more.
+#[test]
+fn a_folder_another_client_deleted_is_no_longer_read() {
+    let w = plans_half_read();
     w.imap.delete_folder(ADA, "Plans");
     w.app.folders.invalidate(None).unwrap();
     let rail = w.app.folders.of_account(ADA).unwrap();
     assert!(rail.folders.iter().all(|(folder, _)| folder.name != "Plans"), "the rail has heard it is gone");
-    w.app.syncing.read_older().unwrap();
+    assert!(!lane_asks_for_plans(&w), "the lane stopped asking for a folder the server no longer has");
+    assert_eq!(plans_total(&w), 0, "and its list holds nothing");
+}
+
+/// With no LIST asked meanwhile, the lane finds the folder gone itself: its EXAMINE is refused, and a LIST that works
+/// leaves the folder out.
+#[test]
+fn the_older_mail_lane_forgets_a_folder_its_server_no_longer_lists() {
+    let w = plans_half_read();
+    w.imap.delete_folder(ADA, "Plans");
     let mark = w.imap.mark();
     w.app.syncing.read_older().unwrap();
-    assert!(
-        !w.imap.since(mark, ADA).iter().any(|c| c.contains("Plans")),
-        "the lane stopped asking for a folder the server no longer has"
-    );
+    let heard = w.imap.since(mark, ADA);
+    assert!(heard.iter().any(|c| c == "EXAMINE \"Plans\"") && heard.iter().any(|c| c.starts_with("LIST")), "{heard:?}");
+    assert!(!lane_asks_for_plans(&w), "forgotten once");
+    assert_eq!(plans_total(&w), 0);
+    let rail = w.app.folders.of_account(ADA).unwrap();
+    assert!(rail.folders.iter().all(|(folder, _)| folder.name != "Plans"));
+}
+
+/// A server whose NO says `[NONEXISTENT]` is taken at its word, with no LIST asked.
+#[test]
+fn a_folder_its_server_calls_nonexistent_is_forgotten_without_a_list() {
+    let w = plans_half_read();
+    w.imap.delete_folder(ADA, "Plans");
+    w.imap.held().says_nonexistent = true;
+    let mark = w.imap.mark();
+    w.app.syncing.read_older().unwrap();
+    let heard = w.imap.since(mark, ADA);
+    assert!(!heard.iter().any(|c| c.starts_with("LIST")), "{heard:?}");
+    assert!(!lane_asks_for_plans(&w));
+    assert_eq!(plans_total(&w), 0);
+}
+
+/// A folder its server can't open for now, a server away, and a folder gone where LIST fails too: each is kept, its
+/// mail listed still. Only a server that says the folder is gone forgets it.
+#[test]
+fn a_folder_is_never_forgotten_on_a_refusal_that_says_nothing_of_it_or_a_server_away() {
+    let w = plans_half_read();
+    w.imap.held().selects_refused = 1;
+    assert!(lane_asks_for_plans(&w));
+    assert_eq!(plans_total(&w), 500, "a NO for now, and LIST names it");
+
+    w.imap.away(true);
+    w.app.syncing.read_older().unwrap();
+    w.app.folders.invalidate(None).unwrap();
+    let rail = w.app.folders.of_account(ADA).unwrap();
+    assert!(rail.folders.iter().any(|(folder, _)| folder.name == "Plans"), "the stored folders serve");
+    w.imap.away(false);
+    assert_eq!(plans_total(&w), 500, "a server away");
+
+    w.imap.held().lists_refused = true;
+    w.imap.delete_folder(ADA, "Plans");
+    assert!(lane_asks_for_plans(&w));
+    assert!(lane_asks_for_plans(&w), "asked again: nothing said it is gone");
+    assert_eq!(plans_total(&w), 500, "a NO that says nothing, and a LIST that failed");
+}
+
+/// A message of a folder another client deleted, opened: the open says so in words, and the folder is forgotten, so
+/// its list is empty and the rail leaves it out.
+#[test]
+fn a_message_opened_from_a_folder_another_client_deleted_says_so_and_leaves_the_lists() {
+    let imap = Imap::start();
+    imap.add(ADA, "INBOX", (1..=2).map(|uid| (uid, note(uid))));
+    imap.add(ADA, "Plans", (1..=3).map(|uid| (uid, note(uid))));
+    let w = world(imap, &[ADA], &[]);
+    w.app.syncing.sync_once();
+    assert_eq!(plans_total(&w), 3);
+    assert!(!w.stored(ADA, "Plans", 2).fetched, "its body waits to be opened");
+    let pk = w.pk(ADA, "Plans", 2);
+    w.imap.delete_folder(ADA, "Plans");
+    let opened = w.app.reading.bodies.message_body(pk, false);
+    assert_eq!(opened, Err(Problem::not_found(FOLDER_GONE).into()));
+    assert_eq!(plans_total(&w), 0);
+    let rail = w.app.folders.of_account(ADA).unwrap();
+    assert!(rail.folders.iter().all(|(folder, _)| folder.name != "Plans"));
+    assert_eq!(w.app.reading.bodies.message_body(pk, false), Err(Problem::not_found("not found").into()));
+}
+
+/// A move into a folder another client deleted, queued while the server was away: once the folder is found gone, the
+/// move is given back as one the server refused, its message listed where it was, and nothing is tried.
+#[test]
+fn a_change_queued_for_a_folder_another_client_deleted_is_given_back_as_refused() {
+    let w = synced();
+    assert_eq!(plans_total(&w), 0, "opened once, so its sync state is stored");
+    w.imap.away(true);
+    assert_eq!(status(&w.app.filing.move_to(w.pk(ADA, "INBOX", 3), "Plans", None, Some("m-1")).unwrap()), "queued");
+    assert_eq!(listed(&w), [1, 2, 4]);
+    w.imap.delete_folder(ADA, "Plans");
+    w.imap.away(false);
+    w.app.folders.invalidate(None).unwrap();
+    let rail = w.app.folders.of_account(ADA).unwrap();
+    assert!(rail.folders.iter().all(|(folder, _)| folder.name != "Plans"));
+    assert_eq!(listed(&w), [1, 2, 3, 4], "the message is listed where it was");
+    let tray = w.app.commands.list_open(50).unwrap();
+    assert_eq!((&tray["items"][0]["state"], &tray["items"][0]["error"]), (&json!("error"), &json!("refused")));
+    assert_eq!((&tray["waiting"], &tray["stuck"]), (&json!(0), &json!(1)));
+    let mark = w.imap.mark();
+    later(&w);
+    assert!(changes_heard(&w, mark).is_empty(), "nothing is tried");
+    assert_eq!(w.imap.ids_in(ADA, "INBOX"), [id(1), id(2), id(3), id(4)]);
 }
 
 /// Ada's and Bea's Inboxes of three notes each, Bea's password gone from the Keychain, and a sync: what each account's

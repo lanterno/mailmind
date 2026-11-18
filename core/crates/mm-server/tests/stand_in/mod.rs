@@ -98,6 +98,14 @@ pub struct State {
     uid_next: BTreeMap<(String, String), u32>,
     /// The server is away: each connection hears BYE as it opens, and nothing more.
     pub away: bool,
+    /// A SELECT of a folder it doesn't hold says so in RFC 5530's code, `NO [NONEXISTENT]`, as Dovecot's and Gmail's
+    /// do; else a bare NO.
+    pub says_nonexistent: bool,
+    /// The next SELECTs and EXAMINEs of a folder it holds are refused with a bare NO, this many: a folder it can't
+    /// open for now.
+    pub selects_refused: usize,
+    /// LIST is refused.
+    pub lists_refused: bool,
 }
 
 impl State {
@@ -370,7 +378,17 @@ impl Connection {
             "SELECT" | "EXAMINE" => {
                 let name = command.split_once(' ').map(|(_, n)| n.trim_matches('"').to_owned()).unwrap_or_default();
                 let held = self.held().folders.get(&(user.clone(), name.clone())).map(BTreeMap::len);
+                let refused = held.is_some() && {
+                    let mut state = self.held();
+                    let refused = state.selects_refused > 0;
+                    state.selects_refused = state.selects_refused.saturating_sub(1);
+                    refused
+                };
                 match held {
+                    Some(_) if refused => {
+                        self.folder = None;
+                        self.say(format!("{tag} NO can't open it now\r\n").as_bytes())?;
+                    }
                     Some(exists) => {
                         self.folder = Some(name);
                         self.say(
@@ -380,7 +398,8 @@ impl Connection {
                     None => {
                         // A SELECT that fails leaves no folder selected.
                         self.folder = None;
-                        self.say(format!("{tag} NO no such mailbox\r\n").as_bytes())?;
+                        let code = if self.held().says_nonexistent { "[NONEXISTENT] " } else { "" };
+                        self.say(format!("{tag} NO {code}no such mailbox\r\n").as_bytes())?;
                     }
                 }
             }
@@ -388,8 +407,12 @@ impl Connection {
                 self.say(format!("* BYE\r\n{tag} OK\r\n").as_bytes())?;
                 return Ok(false);
             }
+            "LIST" if self.held().lists_refused => {
+                self.say(format!("{tag} NO can't list now\r\n").as_bytes())?;
+            }
             "LIST" => {
                 let mut said = String::new();
+
                 for (_, name) in self.held().folders.keys().filter(|(u, _)| *u == user) {
                     said.push_str(&format!("* LIST (\\HasNoChildren) \"/\" \"{name}\"\r\n"));
                 }

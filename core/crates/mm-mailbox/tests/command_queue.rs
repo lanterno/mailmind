@@ -318,6 +318,14 @@ impl Tx for World {
     fn audit(&self, _trail: &str, _records: &[Value]) -> Result<(), Fault> {
         unreachable!("the worker's try never asks it")
     }
+
+    fn queued_for_folder(&self, _account: &str, _folder: &str) -> Result<Vec<Command>, Fault> {
+        unreachable!("the worker's try never asks it")
+    }
+
+    fn forget_folder(&self, _account: &str, _folder: &str, _now: i64) -> Result<usize, Fault> {
+        unreachable!("the worker's try never asks it")
+    }
 }
 
 impl MoveAccounts for World {
