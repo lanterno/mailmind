@@ -131,4 +131,19 @@ final class ListKeysTests: XCTestCase {
         XCTAssertEqual(scroll.contentView.bounds.minY, 0, "and goes no higher than the top")
         window.contentView = nil
     }
+
+    // MARK: Esc
+
+    func testEscEndsFocusReadingBeforeTheListsOwnEsc() async throws {
+        let (app, controller) = try await table()
+        let shell = MeadowShell(defaults: try XCTUnwrap(UserDefaults(suiteName: "ListKeysTests-\(UUID())")))
+        controller.shell = shell
+        app.place = .search(Search(q: "from:grace", account: Fixture.ada))
+        shell.focus = true
+        press("\u{1b}", controller.table, code: 53)
+        XCTAssertFalse(shell.focus, "Esc leaves focus reading, as the legend says")
+        XCTAssertNotNil(app.place?.search, "and only that: the search stays")
+        press("\u{1b}", controller.table, code: 53)
+        XCTAssertNil(app.place?.search, "the next Esc leaves the search")
+    }
 }
