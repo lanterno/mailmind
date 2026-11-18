@@ -504,6 +504,10 @@ final class OpenedMessageVerbsTests: XCTestCase {
             if opened.next == nil { XCTAssertTrue(mailbox.chosenRows.isEmpty, said) }
             mailbox.undo()
             await waiting(for: said + " undone") { !server.asked(API.Post.Undo.path).isEmpty }
+            // Back, it opens again as it was opened: chosen in its row where the list or the lane holds it, else
+            // from outside them.
+            await waiting(for: said + " opens it again") { app.selection.copy == copy }
+            XCTAssertEqual(mailbox.marked, opened.next == nil ? [] : [copy], said)
         default:
             await waiting(for: said + " says so") { mailbox.toast != nil }
             XCTAssertEqual(app.selection.copy, copy, said + " keeps it open")
@@ -603,6 +607,69 @@ final class OpenedMessageVerbsTests: XCTestCase {
         reply.close(force: true)
         let asked = try XCTUnwrap(world.server.asked(API.Get.MessageBody.path).last)
         XCTAssertEqual(asked.query, ["key": "90", "folder": "INBOX", "uid": "90"])
+    }
+
+    // MARK: Undo
+
+    /// The Inbox's rows, listed one at a time.
+    static func listing(_ rows: [API.FolderRow]) -> FakeServer.Answer {
+        { asked in
+            FakeServer.ok(API.MessagesAnswer.folderListing(API.FolderListing(
+                account: asked.query["account"], folder: asked.query["folder"] ?? "INBOX", grouped: false,
+                hasMore: false, items: rows, offset: 0, ok: true, total: rows.count)))
+        }
+    }
+
+    /// A move's Undo brings the copy back with a new uid: the message it moved the pane on from is found by its key
+    /// in the folder it left, and chosen in its row.
+    func testUndoOpensTheMessageBackByItsKeyInTheFolderItLeft() async throws {
+        let server = Self.server()
+        let world = await world(server)
+        await inbox(world.app)
+        world.mailbox.chose([try XCTUnwrap(world.app.list?.copy(at: 0))])
+        await world.mailbox.fileNow(.archive)
+        XCTAssertEqual(world.app.selection.copy, MailCopy(Self.rows[1]), "it moved on")
+        var back = Self.rows
+        back[0].uid = 101
+        server.on("GET", API.Get.Messages.path, Self.listing(back))
+        await world.mailbox.undoNow()
+        let again = MailCopy(key: 1, folder: "INBOX", uid: 101, account: Fixture.ada)
+        await waiting(for: "it opens again") { world.app.selection.copy == again }
+        XCTAssertEqual(world.mailbox.marked, [again], "chosen in its row")
+    }
+
+    /// Undo opens nothing again when the last thing that can be undone didn't move the pane on, nor when a person
+    /// chose another row before the list came back, nor after a verb that can't be undone.
+    func testUndoOpensNothingAgainThatItDidntMoveThePaneOnFrom() async throws {
+        let world = await world()
+        await inbox(world.app)
+        world.mailbox.chose([try XCTUnwrap(world.app.list?.copy(at: 0))])
+        await world.mailbox.fileNow(.archive)
+        // Another row filed, which wasn't open: its Undo is the one next.
+        await world.mailbox.fileNow(.archive, rows: [try XCTUnwrap(world.app.list?.copy(at: 3))])
+        await world.mailbox.undoNow()
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(world.app.selection.copy, MailCopy(Self.rows[1]), "the pane stays where it moved on to")
+
+        world.mailbox.chose([try XCTUnwrap(world.app.list?.copy(at: 1))])
+        await world.mailbox.fileNow(.trash)
+        XCTAssertEqual(world.app.selection.copy, MailCopy(Self.rows[2]))
+        await world.mailbox.undoNow()
+        let chosen = try XCTUnwrap(world.app.list?.copy(at: 4))
+        world.mailbox.chose([chosen])
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(world.app.selection.copy, MailCopy(chosen), "a row chosen since the Undo stays")
+
+        let server = Self.server()
+        server.on("POST", API.Post.Archive.path, API.Filed(msg: "ok", ok: true, undoable: false))
+        let other = await self.world(server)
+        await inbox(other.app)
+        other.mailbox.chose([try XCTUnwrap(other.app.list?.copy(at: 0))])
+        await other.mailbox.fileNow(.archive)
+        XCTAssertNil(other.mailbox.toast?.undo, "no Undo offered")
+        await other.mailbox.undoNow()
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(other.app.selection.copy, MailCopy(Self.rows[1]), "nothing it can't undo opens again")
     }
 
     // MARK: Nothing done silently
