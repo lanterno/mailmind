@@ -24,6 +24,7 @@ use serde_json::json;
 
 use crate::folders::Folders;
 use crate::gates::{Gates, Priority, Wait, on_gate};
+use crate::ingest::SyncError;
 use crate::opening_ports::{Background, FolderSync, InboxSync, OlderMail};
 use crate::ports::{FolderSyncs, Opened, StoredLists};
 use crate::sync_plan;
@@ -205,6 +206,13 @@ impl Inner {
                     self.older.left_some();
                 }
                 Some(synced.kept + synced.junk)
+            }
+            // Another client deleted or renamed it: forgotten, its list is empty and the rail leaves it out.
+            Ok(Err(SyncError::Server(error))) if error.is_gone() => {
+                if let Err(fault) = self.folders.gone(account, folder) {
+                    log::warning(TAG, "a folder the server no longer has wasn't forgotten", &[], Some(fault.class));
+                }
+                None
             }
             Ok(Err(error)) => {
                 log::warning(TAG, "a folder's sync as it opened failed", &[], Some(error.class()));

@@ -37,6 +37,7 @@ use crate::fetch_ports::KeptBody;
 use crate::flights::{Flight, Flights};
 use crate::session::{
     HEADER_BATCH, HEADER_FIELDS, Headers, MailServer, MailServers, Search, ServerError, found_by_message_id,
+    select_or_gone,
 };
 use crate::sync_plan::{self, FLAG_REFRESH, Scan, Step};
 use crate::sync_ports::{
@@ -264,7 +265,7 @@ impl Ingest {
         let acct = self.account(account)?;
         let mut s = Open(self.servers.open(&acct.email, TIMEOUT_SECONDS)?);
         let condstore = s.0.enable_condstore()?;
-        let selected = s.0.select(folder, true)?;
+        let selected = select_or_gone(&mut *s.0, folder, true)?;
         let modseq = if condstore { selected.highest_modseq } else { None };
         let state = self.store.folder_state(&acct.email, folder)?;
         let plan =
@@ -326,7 +327,7 @@ impl Ingest {
         let acct = self.account(account)?;
         let Scan::Down(floor) = self.store.folder_state(&acct.email, folder)?.scan else { return Ok(None) };
         let mut s = Open(self.servers.open(&acct.email, TIMEOUT_SECONDS)?);
-        let selected = s.0.select(folder, true)?;
+        let selected = select_or_gone(&mut *s.0, folder, true)?;
         let state = self.store.folder_state(&acct.email, folder)?;
         let renumbered = matches!((selected.uidvalidity, state.uidvalidity), (Some(now), Some(known))
             if now != 0 && known != 0 && i64::from(now) != known);

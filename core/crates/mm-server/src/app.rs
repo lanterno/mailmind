@@ -254,6 +254,13 @@ impl App {
         // What the Mailbox and Attention say happened, told to the open tabs.
         let heard = Arc::new(Heard { hub: events.clone(), stats: stats.clone(), folders: folders.clone() });
         let mailbox_events: Arc<dyn Events> = heard.clone();
+        // A folder another client deleted or renamed, forgotten once the server is known not to have it.
+        folders.forgetting_with(Arc::new(mm_mailbox::gone_folders::GoneFolders::new(
+            database.clone(),
+            mailbox_events.clone(),
+            seams.clock.clone(),
+            stats.clone(),
+        )));
         let ingest = Arc::new(
             Ingest::new(
                 Arc::new(DirectoryAccounts(directory.clone())),
@@ -267,14 +274,18 @@ impl App {
             .reading_only(environment.read_only()),
         );
         // A message's body from its server where it isn't stored, on its account's gate; the reads a person waits on.
-        let fetch: Arc<dyn mm_mailbox::ports::BodyFetch> =
-            Arc::new(mm_mailbox::fetching::Fetching::new(mm_mailbox::fetching::FetchingParts {
+        // One whose folder has gone from the server forgets the folder.
+        let fetch: Arc<dyn mm_mailbox::ports::BodyFetch> = Arc::new(
+            mm_mailbox::fetching::Fetching::new(mm_mailbox::fetching::FetchingParts {
                 stored: database.clone(),
                 kept: database.clone(),
                 servers: servers.clone(),
                 gates: gates.clone(),
                 clock: seams.clock.clone(),
-            }));
+            })
+            .forgetting_gone(folders.clone()),
+        );
+
         // A folder's sync as it opens, on a thread counted as the requests being answered are.
         let work = Arc::new(Work::default());
         let jobs = Arc::new(Jobs::new(seams.clock.clone()));

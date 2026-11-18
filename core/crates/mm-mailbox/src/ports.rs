@@ -33,6 +33,12 @@ pub trait StoredMail: Send + Sync + fmt::Debug {
     /// (folder, unseen, total) of what is stored for the account, each folder a sync has read among them.
     fn stored_folder_counts(&self, account: &str) -> Result<Vec<(String, Option<i64>, i64)>, Fault>;
 
+    /// The name of each folder the account has mail stored in, or a sync has read: what a LIST that leaves one out
+    /// says another client deleted or renamed.
+    fn stored_folders(&self, account: &str) -> Result<Vec<String>, Fault> {
+        Ok(self.stored_folder_counts(account)?.into_iter().map(|(folder, _, _)| folder).collect())
+    }
+
     /// How many rows each view that isn't a folder holds across `accounts`, read together. Muted, waiting and
     /// Reply Later are Attention's, counted only where the thread still has mail.
     fn view_counts(&self, accounts: &[String]) -> Result<ViewCounts, Fault>;

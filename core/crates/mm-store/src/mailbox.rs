@@ -38,6 +38,16 @@ impl StoredMail for Database {
         })
     }
 
+    fn stored_folders(&self, account: &str) -> Result<Vec<String>, Fault> {
+        self.read(|c| {
+            c.prepare_cached(
+                "SELECT folder FROM messages WHERE account=?1 UNION SELECT folder FROM sync_state WHERE account=?1",
+            )?
+            .query_map([account], |r| r.get(0))?
+            .collect()
+        })
+    }
+
     fn view_counts(&self, accounts: &[String]) -> Result<ViewCounts, Fault> {
         self.read(|c| {
             let among = |alias: &str| format!("{alias}.account IN ({})", placeholders(accounts.len()));

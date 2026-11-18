@@ -13,9 +13,14 @@ use serde_json::{Value, json};
 
 use crate::inline_images;
 use crate::ports::{BodyFetch, NOT_YET, Opening, Row, Sanitizer, StoredBodies};
+use crate::session::NO_SUCH_FOLDER;
 
 /// What a frame says of a copy that isn't there.
 pub const GONE: &str = "This message isn\u{2019}t here any more.";
+/// What opening a message says when its folder has gone from the server, deleted or renamed elsewhere: the folder is
+/// forgotten as it is found gone, so the message leaves the lists.
+pub const FOLDER_GONE: &str =
+    "This message\u{2019}s folder isn\u{2019}t on the server any more: it was deleted or renamed somewhere else.";
 /// What a preview says of a part it can't show.
 pub const NO_PREVIEW: &str = "This file can\u{2019}t be previewed. Download it to see it.";
 /// What a frame says when its document failed.
@@ -64,6 +69,9 @@ fn as_number(text: &str) -> Option<i64> {
     }
     text.parse::<i64>().ok().filter(|n| *n <= 1 << 53)
 }
+
+/// A message's folder has gone from the server (`session::NO_SUCH_FOLDER`).
+struct FolderGone;
 
 fn not_found() -> Failure {
     Failure::Problem(Problem::not_found("not found"))
@@ -141,7 +149,18 @@ impl Bodies {
         Ok((Some(safe), clean.blocked.images, clean.blocked.css_urls))
     }
 
-    /// A message opened, or for a `prefetch` whether its body is stored or on its way.
+    /// The body as stored or fetched, None where the message has gone; or `FolderGone` where its folder has gone from
+    /// the server (`NO_SUCH_FOLDER`), and was forgotten as it was found.
+    fn fetched(&self, pk: i64) -> Result<Result<Option<Vec<u8>>, FolderGone>, Fault> {
+        match self.fetch.fetch(pk) {
+            Err(fault) if fault.class == NO_SUCH_FOLDER => Ok(Err(FolderGone)),
+            Err(fault) => Err(fault),
+            Ok(raw) => Ok(Ok(raw)),
+        }
+    }
+
+    /// A message opened, or for a `prefetch` whether its body is stored or on its way. One whose folder has gone from
+    /// the server is not found, and says so.
     pub fn message_body(&self, pk: i64, prefetch: bool) -> Result<Value, Failure> {
         let row = self.stored.message(pk)?.ok_or_else(not_found)?;
         if prefetch {
@@ -150,7 +169,10 @@ impl Bodies {
             }
             return Ok(json!({"ok": true, "prefetched": self.fetch.prefetch(pk)?}));
         }
-        let raw = self.fetch.fetch(pk)?.ok_or_else(not_found)?;
+        let raw = self
+            .fetched(pk)?
+            .map_err(|FolderGone| Failure::Problem(Problem::not_found(FOLDER_GONE)))?
+            .ok_or_else(not_found)?;
         let parsed = mime::parse(&raw);
         let (html, blocked_images, blocked_css_urls) = self.safe_html(pk, &parsed, false)?;
         let (invite, invite_part) = self.opening.invite_of(pk, &parsed.attachments, &raw)?;
@@ -209,7 +231,7 @@ impl Bodies {
                 if col(&row, "message_key").as_i64() == Some(key)
                     && uid.is_none_or(|uid| col(&row, "uid").as_i64() == Some(uid)) =>
             {
-                self.fetch.fetch(pk)?
+                self.fetched(pk)?.unwrap_or_default()
             }
             _ => None,
         };
@@ -266,7 +288,9 @@ impl Bodies {
             return Ok(Err("not found"));
         }
         // Its body and what is kept of its parts, fetched first where they aren't stored.
-        self.fetch.fetch(pk)?;
+        if self.fetched(pk)?.is_err() {
+            return Ok(Err("not found"));
+        }
         let (Some(kept), Some(raw)) = (self.stored.part(pk, part_id)?, self.stored.raw(pk)?) else {
             return Ok(Err("no such part"));
         };

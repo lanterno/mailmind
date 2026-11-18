@@ -546,6 +546,12 @@ impl Syncing {
                     gone = true;
                     break;
                 }
+                // Another client deleted or renamed it: forgotten, it isn't read again.
+                Err(SyncError::Server(error)) if error.is_gone() => {
+                    if let Err(fault) = self.folders.gone(account, folder) {
+                        log::warning(TAG, "a folder the server no longer has wasn't forgotten", &[], Some(fault.class));
+                    }
+                }
                 Err(error) => {
                     log::warning(TAG, "older mail wasn't read", &[], Some(error.class()));
                     if sync_health::may_pass(error.class(), error_kind(error)) {

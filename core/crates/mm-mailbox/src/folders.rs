@@ -4,9 +4,15 @@
 //! after every triage action, so that part is kept for each account for a few seconds; the counts from the database
 //! stay fresh. When a refresh fails, the last list kept serves, however old; with none kept, a server that can't be
 //! reached gives the folders the database holds mail in.
+//!
+//! A folder another client deleted or renamed is forgotten (`gone`) once MailMind is sure the server no longer has it:
+//! a LIST that worked doesn't name it, or a SELECT said so (`session::NO_SUCH_FOLDER`). Its mail leaves the lists, the
+//! syncs stop asking for it, and a change queued for it is given back. A server that can't be reached, or a refusal
+//! that says neither, never forgets a folder, and the Inbox is never forgotten.
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::collections::{BTreeSet, HashMap};
+use std::fmt;
+use std::sync::{Arc, Mutex, OnceLock};
 
 use mm_kernel::errors::{Failure, Fault, Problem};
 use mm_kernel::log;
@@ -18,6 +24,12 @@ use crate::roles::{self, RailFolder};
 
 const TAG: &str = "folders";
 const POISONED: Fault = Fault::new("PoisonedLock");
+
+/// What forgets a folder the server no longer has (`gone_folders::GoneFolders`): its stored mail and its sync state,
+/// with each change queued for it given back. How many stored copies went.
+pub trait ForgetsFolders: Send + Sync + fmt::Debug {
+    fn forget(&self, account: &str, folder: &str) -> Result<usize, Fault>;
+}
 
 /// One account's rail, as `GET /api/folders?account=` answers it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -47,6 +59,8 @@ pub struct Folders {
     /// When the last sync of each (account, folder) as it opened started, in the clock's seconds: what spaces its
     /// catch-ups (`_caught_up`), and what MailMind putting mail there takes away (`touched`).
     caught_up: Mutex<HashMap<(String, String), f64>>,
+    /// What forgets a folder found gone; until it is bound, nothing is forgotten.
+    forgets: OnceLock<Arc<dyn ForgetsFolders>>,
 }
 
 impl Folders {
@@ -67,7 +81,28 @@ impl Folders {
             listed: Mutex::new(HashMap::new()),
             refreshing: Mutex::new(HashMap::new()),
             caught_up: Mutex::new(HashMap::new()),
+            forgets: OnceLock::new(),
         }
+    }
+
+    /// Forget each folder found gone with `forgets`, bound once the store and the events it needs are: a later one
+    /// changes nothing.
+    pub fn forgetting_with(&self, forgets: Arc<dyn ForgetsFolders>) {
+        _ = self.forgets.set(forgets);
+    }
+
+    /// The server no longer has `folder`: another client deleted or renamed it. Forget it, so its mail leaves the
+    /// lists, no sync asks for it again and a change queued for it is given back, and let the rail kept for the
+    /// account go. How many stored copies went; never the Inbox, which a server always has.
+    pub fn gone(&self, account: &str, folder: &str) -> Result<usize, Fault> {
+        if folder.eq_ignore_ascii_case("INBOX") {
+            return Ok(0);
+        }
+        let Some(forgets) = self.forgets.get() else { return Ok(0) };
+        let forgotten = forgets.forget(account, folder)?;
+        self.caught_up.lock().map_err(|_| POISONED)?.remove(&(account.to_owned(), folder.to_owned()));
+        self.invalidate(Some(account))?;
+        Ok(forgotten)
     }
 
     /// MailMind put mail in `folder` (a draft saved there, a message moved there): its next open catches it up at
@@ -190,7 +225,14 @@ impl Folders {
         if let Some((hit, true)) = self.kept(account).map_err(failed)? {
             return Ok(hit.folders);
         }
-        let folders = self.live(account)?;
+        // What is stored before the LIST asks: a folder a sync stores into afterwards is none of this one's.
+        let stored = self.stored.stored_folders(account).map_err(failed)?;
+        let (folders, listed) = self.live(account)?;
+        for folder in stored.iter().filter(|name| !listed.contains(name.as_str())) {
+            if let Err(fault) = self.gone(account, folder) {
+                log::warning(TAG, "a folder the server no longer has wasn't forgotten", &[], Some(fault.class));
+            }
+        }
         let at = self.clock.now().seconds();
         self.listed
             .lock()
@@ -200,8 +242,8 @@ impl Folders {
     }
 
     /// The live LIST, with each selectable folder's STATUS (0 and 0 where it fails) and whether a person may change
-    /// it, over a session of its own, logged out after.
-    fn live(&self, account: &str) -> Result<Vec<RailFolder>, SessionError> {
+    /// it, over a session of its own, logged out after; and the name of every folder it listed, selectable or not.
+    fn live(&self, account: &str) -> Result<(Vec<RailFolder>, BTreeSet<String>), SessionError> {
         let trash = self.accounts.trash(account).map_err(SessionError::Failed)?;
         let mut session = self.sessions.open(account)?;
         let rail = session.folders().map(|folders| {
@@ -210,8 +252,9 @@ impl Folders {
             for folder in &mut rail {
                 folder.changeable = changeable.contains(&folder.name);
             }
-            rail
+            (rail, folders.into_iter().map(|f| f.name).collect())
         });
+
         session.logout();
         rail
     }

@@ -4,7 +4,7 @@
 use mm_kernel::errors::Fault;
 use mm_mailbox::folder_change::moved;
 use mm_mailbox::folder_changes::FolderStore;
-use rusqlite::params;
+use rusqlite::{Connection, params};
 
 use crate::db::Database;
 use crate::mailbox_sync::delete_message;
@@ -35,16 +35,20 @@ impl FolderStore for Database {
     }
 
     fn forget_folder(&self, account: &str, folder: &str, now: i64) -> Result<(), Fault> {
-        self.write(|c| {
-            let pks: Vec<i64> = c
-                .prepare("SELECT pk FROM messages WHERE account=? AND folder=?")?
-                .query_map(params![account, folder], |r| r.get(0))?
-                .collect::<Result<_, _>>()?;
-            for pk in pks {
-                delete_message(c, pk, now)?;
-            }
-            c.execute("DELETE FROM sync_state WHERE account=? AND folder=?", params![account, folder])?;
-            Ok(())
-        })
+        self.write(|c| forget(c, account, folder, now).map(|_| ()))
     }
+}
+
+/// Delete `folder`'s rows of `account`, whatever they wait for, and its sync state: a folder deleted, here or by another
+/// client. How many rows went.
+pub(crate) fn forget(c: &Connection, account: &str, folder: &str, now: i64) -> rusqlite::Result<usize> {
+    let pks: Vec<i64> = c
+        .prepare_cached("SELECT pk FROM messages WHERE account=? AND folder=?")?
+        .query_map(params![account, folder], |r| r.get(0))?
+        .collect::<Result<_, _>>()?;
+    for pk in &pks {
+        delete_message(c, *pk, now)?;
+    }
+    c.execute("DELETE FROM sync_state WHERE account=? AND folder=?", params![account, folder])?;
+    Ok(pks.len())
 }

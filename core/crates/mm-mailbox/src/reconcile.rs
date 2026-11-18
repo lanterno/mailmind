@@ -19,7 +19,7 @@ use serde_json::{Value, json};
 use crate::command_ports::{self, CommandStore, MoveAccounts};
 use crate::folders::Folders;
 use crate::gates::{Gates, Priority, Refused, Wait, on_gate};
-use crate::session::{MailServers, Search, ServerError};
+use crate::session::{MailServers, Search, ServerError, select_or_gone};
 use crate::stats::LiveStats;
 use crate::sync_ports::{Events, MailboxEvent};
 
@@ -117,7 +117,8 @@ impl Reconciler {
     /// The live UIDs of `folder` and its UIDVALIDITY, over a session of its own.
     fn live(&self, email: &str, folder: &str) -> Result<(Vec<u32>, Option<u32>), ServerError> {
         let mut s = self.servers.open(email, READ_TIMEOUT)?;
-        let read = s.select(folder, true).and_then(|selected| Ok((s.search(Search::All)?, selected.uidvalidity)));
+        let read = select_or_gone(&mut *s, folder, true)
+            .and_then(|selected| Ok((s.search(Search::All)?, selected.uidvalidity)));
         match read {
             Err(ServerError::Unreachable(_)) => s.shutdown(),
             _ => s.logout(),
@@ -132,6 +133,14 @@ impl Reconciler {
         let mut res = Pruned { account: email.to_owned(), stored: stored_uids.len(), ..Pruned::default() };
         let (live, uidvalidity) = match self.live(email, folder) {
             Ok(read) => read,
+            // Another client deleted or renamed it: every copy stored is a ghost, and the folder is forgotten.
+            Err(error) if error.is_gone() => {
+                res.ghosts = res.stored;
+                if !dry_run {
+                    res.pruned = self.folders.gone(email, folder)?;
+                }
+                return Ok(res);
+            }
             Err(error) => {
                 log::warning(TAG, "an account failed", &[], Some(error.class()));
                 res.error = Some(error.class().to_owned());

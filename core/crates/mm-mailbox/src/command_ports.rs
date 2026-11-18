@@ -158,6 +158,12 @@ pub trait Tx {
     ) -> Result<usize, Fault>;
     /// Add each of `records` to an audit trail, in the order given.
     fn audit(&self, trail: &str, records: &[Value]) -> Result<(), Fault>;
+
+    // ── a folder the server no longer has ──
+    /// The account's queued changes that the server doesn't hold, out of `folder` or into it: none a try holds now.
+    fn queued_for_folder(&self, account: &str, folder: &str) -> Result<Vec<Command>, Fault>;
+    /// Delete `folder`'s rows, whatever they wait for, and its sync state: how many rows went.
+    fn forget_folder(&self, account: &str, folder: &str, now: i64) -> Result<usize, Fault>;
 }
 
 /// The store, a block of work at a time.

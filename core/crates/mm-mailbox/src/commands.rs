@@ -460,7 +460,7 @@ impl MailCommands {
 
     /// The change `row` won't happen: a move's message is listed again, and a flag change's row gets back the
     /// flags it had when the change was asked for.
-    fn give_back(tx: &dyn Tx, row: &Command) -> Result<(), Fault> {
+    pub(crate) fn give_back(tx: &dyn Tx, row: &Command) -> Result<(), Fault> {
         tx.restore_pending(row.id)?;
         if row.kind == "flag" {
             let was = command::flags_of(row.param("was"));

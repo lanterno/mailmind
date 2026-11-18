@@ -17,6 +17,7 @@ pub mod folder_change;
 pub mod folder_changes;
 pub mod folders;
 pub mod gates;
+pub mod gone_folders;
 pub mod ingest;
 pub mod labels;
 pub mod ports;

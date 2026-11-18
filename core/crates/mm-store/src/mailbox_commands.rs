@@ -508,6 +508,22 @@ impl Tx for Block<'_> {
         }
         Ok(())
     }
+
+    fn queued_for_folder(&self, account: &str, folder: &str) -> Result<Vec<Command>, Fault> {
+        let mut statement = self
+            .0
+            .prepare_cached(&format!(
+                "SELECT {COMMAND} FROM mail_commands WHERE account=?1 AND applied=0 AND state='queued' \
+                 AND (src_folder=?2 OR dest=?2) ORDER BY id"
+            ))
+            .map_err(storage)?;
+        let rows = statement.query_map([account, folder], command).map_err(storage)?;
+        rows.collect::<Result<_, _>>().map_err(storage)
+    }
+
+    fn forget_folder(&self, account: &str, folder: &str, now: i64) -> Result<usize, Fault> {
+        crate::mailbox_folders::forget(self.0, account, folder, now).map_err(storage)
+    }
 }
 
 impl CommandStore for Database {

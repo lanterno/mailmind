@@ -23,9 +23,10 @@ use serde_json::Value;
 
 use crate::backfill_ports::{BackfillFetch, Tried};
 use crate::fetch_ports::{KeptBodies, KeptBody, KeptText};
+use crate::folders::Folders;
 use crate::gates::{Gates, Priority, Refused, Wait, on_gate};
 use crate::ports::{BodyFetch, Row, StoredBodies};
-use crate::session::{MailServer, MailServers, ServerError};
+use crate::session::{MailServer, MailServers, ServerError, select_or_gone};
 
 /// What a session waits for each answer (`pool.KEPT_TIMEOUT`, as a fetch opens one).
 const TIMEOUT_SECONDS: u64 = 60;
@@ -62,6 +63,8 @@ pub struct Fetching {
     servers: Arc<dyn MailServers>,
     gates: Arc<dyn Gates>,
     clock: Arc<dyn Clock>,
+    /// What forgets a folder the server no longer has, where a message a person opens finds it gone.
+    folders: Option<Arc<Folders>>,
 }
 
 /// What wires Fetching.
@@ -95,7 +98,15 @@ fn gate_fault(refused: Refused) -> Fault {
 impl Fetching {
     pub fn new(parts: FetchingParts) -> Fetching {
         let FetchingParts { stored, kept, servers, gates, clock } = parts;
-        Fetching { stored, kept, servers, gates, clock }
+        Fetching { stored, kept, servers, gates, clock, folders: None }
+    }
+
+    /// The same, forgetting a message's folder that its server no longer has as the message is opened: its body is
+    /// then the `NO_SUCH_FOLDER` fault.
+    #[must_use]
+    pub fn forgetting_gone(mut self, folders: Arc<Folders>) -> Fetching {
+        self.folders = Some(folders);
+        self
     }
 
     /// The body as stored, its parts kept again where a parsing change took them away; None when it isn't stored.
@@ -113,17 +124,24 @@ impl Fetching {
     }
 
     /// The message's whole body from its server, read-only and without marking it read; empty when the server has
-    /// none, or refuses to give it. A folder the server won't select fails, as a lost connection does.
+    /// none, or refuses to give it. A folder the server won't select fails, as a lost connection does; one it no
+    /// longer has is forgotten first, where this forgets them.
     fn read_server(&self, row: &Row) -> Result<Vec<u8>, ServerError> {
         let Some(uid) = row.get("uid").and_then(Value::as_i64).and_then(|uid| u32::try_from(uid).ok()) else {
             return Ok(Vec::new());
         };
-        let mut server = self.servers.open(text(row, "account"), TIMEOUT_SECONDS)?;
-        let read = server.select(text(row, "folder"), true).and_then(|_| match server.body(uid) {
+        let (account, folder) = (text(row, "account"), text(row, "folder"));
+        let mut server = self.servers.open(account, TIMEOUT_SECONDS)?;
+        let read = select_or_gone(&mut *server, folder, true).and_then(|_| match server.body(uid) {
             Err(ServerError::Refused(_)) => Ok(None),
             other => other,
         });
         server.logout();
+        if let (Err(error), Some(folders)) = (&read, &self.folders)
+            && error.is_gone()
+        {
+            folders.gone(account, folder).map_err(ServerError::Failed)?;
+        }
         Ok(read?.unwrap_or_default())
     }
 
