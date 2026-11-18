@@ -35,14 +35,15 @@ enum Lists {
     /// The row a folder lists for one message, by its UID and, where it is known, its key: the folder read a message
     /// a row, newest first, a page at a time, until a page holds it, the folder ends, or `lookingFor` rows are read.
     /// No route names one message's row by its copy or its UID (`/api/message/body` wants its key and says nothing of
-    /// its flags), so its folder is read for it. The row stands for that message alone.
-    static func row(_ wire: Wire, account: String, folder: String, uid: Int, key: Int? = nil) async -> API.FolderRow? {
+    /// its flags), so its folder is read for it. The row stands for that message alone. With no UID, the first copy
+    /// its key has in the folder: a move's Undo gives the copy it brings back a new one.
+    static func row(_ wire: Wire, account: String, folder: String, uid: Int?, key: Int? = nil) async -> API.FolderRow? {
         var offset = 0
         while offset < lookingFor {
             guard let page = try? await Self.folder(wire, account: account, folder: folder, grouped: false,
                                                     offset: offset, limit: pageSize) else { return nil }
             if var row = page.rows.first(where: {
-                $0.uid == uid && $0.folder == folder && (key == nil || $0.key == key)
+                (uid == nil || $0.uid == uid) && $0.folder == folder && (key == nil || $0.key == key)
             }) {
                 row.count = nil
                 row.threadCount = nil

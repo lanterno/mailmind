@@ -95,6 +95,10 @@ final class Mailbox {
     @ObservationIgnored private var digestSoon: Task<Void, Never>?
     /// What the mailbox last put on Edit ▸ Undo: while it is the next thing undone there, Undo goes through it.
     @ObservationIgnored var offered: String?
+    /// The message the last thing that can be undone moved the pane on from, which its Undo opens again
+    /// (`undoNow`), and whether what was said last offered an Undo, so a verb that can't be undone never sets it.
+    @ObservationIgnored var reopens: MailCopy?
+    @ObservationIgnored var reopenable = false
     /// The assistant's (area D): what `?words` in the search field asks, and what `!words` plans.
     @ObservationIgnored var asks: ((String) -> Void)?
     @ObservationIgnored var plans: ((String) -> Void)?
@@ -647,6 +651,9 @@ final class Mailbox {
     /// Say `text` in the window's toast for a moment. A refusal (`refused`: read only, nothing chosen, a server's
     /// no) shows the alert, never the tick that says something was done.
     func say(_ text: String, detail: String? = nil, undo: String? = nil, refused: Bool = false) {
+        // Something new to undo opens nothing again on its Undo, unless it moves the pane on next (`moveOn`).
+        if undo != nil { reopens = nil }
+        reopenable = undo != nil
         toastNumber += 1
         let number = toastNumber
         toast = Toast(text: text, detail: detail, undo: undo, refused: refused)
@@ -686,13 +693,18 @@ struct MoveAsk: Identifiable, Equatable {
 extension MailListModel {
     /// Where a copy is among the rows held.
     func position(of copy: MailCopy) -> Int? {
+        position { MailCopy($0) == copy }
+    }
+
+    /// Where the first row held that `matches` is.
+    func position(where matches: (API.FolderRow) -> Bool) -> Int? {
         var position = 0
         while position < total {
             guard let row = self.copy(at: position) else {
                 position = (position / MailListModel.pageSize + 1) * MailListModel.pageSize
                 continue
             }
-            if MailCopy(row) == copy { return position }
+            if matches(row) { return position }
             position += 1
         }
         return nil

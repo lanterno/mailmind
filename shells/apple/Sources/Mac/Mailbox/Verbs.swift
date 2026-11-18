@@ -276,19 +276,27 @@ extension Mailbox {
         }
     }
 
-    /// The server's undo: its last action reversed, said as the page says it.
+    /// The server's undo: its last action reversed, said as the page says it. What it brings back that the pane had
+    /// open before the action moved it on opens again (`reopen`).
     func undoNow() async {
         guard let calls else { return }
         dismissToast()
+        let back = reopens
+        reopens = nil
+        var undone = false
         do {
             let done = try await calls.post(API.Post.Undo.self, API.NoBody())
             if let failed = done.failed, failed > 0 {
                 say("\(failed) couldn’t be restored — press ⌘Z to try again")
+                undone = (done.reversed ?? 0) > 0
             } else {
                 say("\(done.label.flatMap { $0.isEmpty ? nil : $0 } ?? "Action") undone")
+                undone = true
             }
         } catch let problem as Problem where problem.isReadOnly {
             say(ReadOnlyWords.refused, refused: true)
+            // Taking it back would reach a server: it stays to be undone, and so does what it reopens.
+            reopens = back
         } catch let problem as Problem where problem.isRefusal {
             say(problem.more["empty"] == .bool(true) ? String(localized: "Nothing to undo")
                                                      : problem.detail ?? String(localized: "Couldn’t undo"),
@@ -297,6 +305,54 @@ extension Mailbox {
             say(String(localized: "Couldn’t undo"))
         }
         readAgain()
+        if undone, let back { reopen(back) }
+    }
+
+    /// Open again the message an undone verb moved the pane on from, as it is back: once the list or the lane has been
+    /// read again, chosen in its row there as a click chooses it, else opened from outside them, as `open` opens one.
+    /// A move's Undo gives the copy a new uid, so it is found by its key in the folder it left. A message opened or a
+    /// row chosen since the Undo stays.
+    private func reopen(_ copy: MailCopy) {
+        guard let app else { return }
+        let (turn, was) = (app.openings, app.selection.copy)
+        let still: @MainActor () -> Bool = { [weak app] in app?.openings == turn && app?.selection.copy == was }
+        let go: @MainActor () -> Void = { [weak self] in
+            guard let self, let app = self.app, still() else { return }
+            if let row = self.returned(copy) {
+                if app.place == app.listed { self.chose([row]) } else { self.open(MailCopy(row)) }
+                return
+            }
+            Task { [weak self] in
+                guard let calls = self?.calls else { return }
+                var row = await Lists.row(calls, account: copy.account, folder: copy.folder, uid: copy.uid,
+                                          key: copy.key)
+                if row == nil {
+                    row = await Lists.row(calls, account: copy.account, folder: copy.folder, uid: nil, key: copy.key)
+                }
+                guard still() else { return }
+                self?.open(row.map(MailCopy.init) ?? copy)
+            }
+        }
+        if let list = app.list {
+            let before = list.onceRead
+            list.onceRead = { before?(); go() }
+        } else if let lane {
+            let before = lane.onceLoaded
+            lane.onceLoaded = { before?(); go() }
+        } else {
+            go()
+        }
+    }
+
+    /// The row the window holds for `copy` back from an Undo: the same copy, else the copy its key has now in the
+    /// folder it left.
+    private func returned(_ copy: MailCopy) -> API.FolderRow? {
+        if let held = heldRow(of: copy) { return held }
+        let back: (API.FolderRow) -> Bool = {
+            $0.account == copy.account && $0.folder == copy.folder && $0.key == copy.key
+        }
+        if let list = app?.list, let at = list.position(where: back) { return list.copy(at: at) }
+        return lane?.hits.lazy.map(API.FolderRow.init).first(where: back)
     }
 
     /// Put the server's undo on the window's Edit ▸ Undo, named for what it reverses.
@@ -404,9 +460,11 @@ extension Mailbox {
         return { [weak self] in self?.moveOn(after) }
     }
 
-    /// Open what comes next, chosen as a click on its row chooses it, or close the message.
+    /// Open what comes next, chosen as a click on its row chooses it, or close the message. Where what moved it on
+    /// can be undone, its Undo opens the message that left again (`undoNow`).
     private func moveOn(_ after: MailCopy??) {
         guard let after else { return }
+        if reopenable, let left = app?.selection.copy { reopens = left }
         chose(after.flatMap(heldRow(of:)).map { [$0] } ?? [])
     }
 
