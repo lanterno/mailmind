@@ -2440,6 +2440,8 @@ export interface components {
             msg: string;
             /** Total */
             total?: number | null;
+            /** Trying Again */
+            trying_again?: boolean | null;
         };
         /** AiCosts */
         AiCosts: {
