@@ -716,8 +716,9 @@ fn a_connection_lost_while_openings_are_read_stores_nothing_of_the_step_and_the_
     imap.cut_at(2);
     let w = world(imap, &[ADA]);
     w.app.syncing.sync_once();
-    // A connection lost may pass: the account shows as it did, nothing yet, unless the next sync fails too.
-    assert_eq!(w.said(ADA), Value::Null);
+    // A connection lost may pass: the account says only that it is trying again, nothing louder unless the next sync
+    // fails too.
+    assert_eq!(w.said(ADA), json!({"health": "", "msg": "", "trying_again": true}));
     assert!(w.stored(ADA).is_empty(), "mail was stored with no text");
     w.app.syncing.sync_once();
     assert_eq!(w.said(ADA)["health"], "ok");
