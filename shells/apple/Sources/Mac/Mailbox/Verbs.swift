@@ -23,10 +23,15 @@ extension Mailbox {
         Task { await fileNow(verb, rows: given) }
     }
 
-    func fileNow(_ verb: API.FilingVerb, rows given: [API.FolderRow]? = nil) async {
+    /// Whether the server took them: what a message's own window closes on.
+    @discardableResult
+    func fileNow(_ verb: API.FilingVerb, rows given: [API.FolderRow]? = nil) async -> Bool {
         let rows = if let given { given } else { await targets(standing: false) }
-        guard let calls else { return }
-        guard !rows.isEmpty else { return saysNothingChosen() }
+        guard let calls else { return false }
+        guard !rows.isEmpty else {
+            saysNothingChosen()
+            return false
+        }
         let words = Self.words(verb)
         let after = nextOpen(leaving: rows)
         if rows.count > 1 {
@@ -36,11 +41,11 @@ extension Mailbox {
                     rows: chunk.map { API.BulkRow(folder: $0.folder, key: $0.key, uid: $0.uid, whole: $0.isConversation(grouped: self.grouped)) },
                     undoGroup: group, verb: verb))
             }
-            finish(said, rows: rows, after: after, said: { "\(words.done) \($0)" }, undoName: words.undo)
-            return
+            return finish(said, rows: rows, after: after, said: { "\(words.done) \($0)" }, undoName: words.undo)
         }
         let row = rows[0]
         let body = API.MoveBody(folder: row.folder, key: row.key, uid: row.uid)
+        var took = false
         do {
             let filed: Filing
             if row.isConversation(grouped: grouped) && verb != .junk {
@@ -60,12 +65,14 @@ extension Mailbox {
                 undo: filed.undoable ? (n > 1 ? "\(words.done) \(n)" : words.done) : nil)
             if filed.undoable { offerUndo(words.undo) }
             moveOn(after)
+            took = true
         } catch let refusal as Problem where refusal.isReadOnly {
             say(ReadOnlyWords.refused)
         } catch {
             say("Couldn’t \(words.act)", detail: (error as? Problem)?.detail)
         }
         readAgain()
+        return took
     }
 
     // MARK: Moving
@@ -111,13 +118,20 @@ extension Mailbox {
         return true
     }
 
-    /// Move `given`, else what is chosen or open, to `folder`.
-    func moveNow(to folder: String, label: String, rows given: [API.FolderRow]? = nil) async {
+    /// Move `given`, else what is chosen or open, to `folder`; whether the server took them.
+    @discardableResult
+    func moveNow(to folder: String, label: String, rows given: [API.FolderRow]? = nil) async -> Bool {
         let chosen = if let given { given } else { await targets(standing: false) }
         let rows = chosen.filter { $0.folder != folder }
-        guard let calls else { return }
-        guard !chosen.isEmpty else { return saysNothingChosen() }
-        guard !rows.isEmpty else { return say(String(localized: "Already in \(label)")) }
+        guard let calls else { return false }
+        guard !chosen.isEmpty else {
+            saysNothingChosen()
+            return false
+        }
+        guard !rows.isEmpty else {
+            say(String(localized: "Already in \(label)"))
+            return false
+        }
         let after = nextOpen(leaving: rows)
         if rows.count > 1 {
             let group = Self.undoGroup()
@@ -126,12 +140,12 @@ extension Mailbox {
                     rows: chunk.map { API.BulkRow(folder: $0.folder, key: $0.key, uid: $0.uid, whole: $0.isConversation(grouped: self.grouped)) },
                     to: folder, undoGroup: group))
             }
-            finish(said, rows: rows, after: after, said: { "Moved \($0) to \(label)" }, undoName: String(localized: "Move"),
-                   undoSaid: { "Moved \($0)" }, couldnt: "Couldn’t move")
-            return
+            return finish(said, rows: rows, after: after, said: { "Moved \($0) to \(label)" },
+                          undoName: String(localized: "Move"), undoSaid: { "Moved \($0)" }, couldnt: "Couldn’t move")
         }
         let row = rows[0]
         let body = API.MoveToBody(folder: row.folder, key: row.key, to: folder, uid: row.uid)
+        var took = false
         do {
             let filed: Filing
             if row.isConversation(grouped: grouped) {
@@ -146,6 +160,7 @@ extension Mailbox {
                 undo: filed.undoable ? (n > 1 ? "Moved \(n)" : "Moved") : nil)
             if filed.undoable { offerUndo(String(localized: "Move")) }
             moveOn(after)
+            took = true
         } catch let refusal as Problem where refusal.isReadOnly {
             say(ReadOnlyWords.refused)
         } catch {
@@ -153,6 +168,7 @@ extension Mailbox {
             say("Couldn’t move" + (why.map { ": \($0)" } ?? ""))
         }
         readAgain()
+        return took
     }
 
     // MARK: Read, unread and starred
@@ -324,14 +340,15 @@ extension Mailbox {
         return said
     }
 
+    /// Whether any of them went.
     private func finish(_ chunked: Chunked, rows: [API.FolderRow], after: MailCopy??, said: (Int) -> String,
-                        undoName: String, undoSaid: ((Int) -> String)? = nil, couldnt: String? = nil)
+                        undoName: String, undoSaid: ((Int) -> String)? = nil, couldnt: String? = nil) -> Bool
     {
         let n = chunked.total, done = n - chunked.failed
         if chunked.readOnly && done == 0 {
             say(ReadOnlyWords.refused)
             readAgain()
-            return
+            return false
         }
         let text = chunked.failed > 0 ? "\(said(done)), \(chunked.failed) failed"
             : chunked.partial ? "\(said(n)) — some messages stayed" : said(n)
@@ -339,6 +356,7 @@ extension Mailbox {
         if chunked.undoable { offerUndo(undoName) }
         if done > 0 { moveOn(after) }
         readAgain()
+        return done > 0
     }
 
     /// Where the reader goes once `rows` leave, when what is open is among them (`afterLeaving`): on to the next row,

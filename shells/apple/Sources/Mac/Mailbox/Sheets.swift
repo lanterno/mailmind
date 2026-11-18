@@ -285,15 +285,21 @@ enum PaletteIcons {
 struct MoveToSheet: View {
     let mailbox: Mailbox
     let ask: MoveAsk
+    /// What a folder picked moves: the mail window's choice, as the mailbox moves it, unless a message's own window
+    /// moves its message. Only the mail window makes a folder to move into, as its folder dialog asks the name.
+    var moves: (@MainActor (API.RailFolder) -> Void)?
     let close: @MainActor () -> Void
 
     var body: some View {
-        let ask = ask, mailbox = mailbox
-        Entries(entries: mailbox.destinations(ask).map { folder in
-            Entries.Entry(id: folder.name, label: Words.role(folder), icon: .folder) { mailbox.move(to: folder) }
-        } + [Entries.Entry(id: "\u{0}new", label: String(localized: "New Folder…"), icon: .plus) {
+        let ask = ask, mailbox = mailbox, moves = moves
+        let making = moves == nil ? [Entries.Entry(id: "\u{0}new", label: String(localized: "New Folder…"), icon: .plus) {
             mailbox.folderAsk = .create(ask, name: "")
-        }], typed: { words in
+        }] : []
+        Entries(entries: mailbox.destinations(ask).map { folder in
+            Entries.Entry(id: folder.name, label: Words.role(folder), icon: .folder) {
+                if let moves { moves(folder) } else { mailbox.move(to: folder) }
+            }
+        } + making, typed: moves != nil ? nil : { words in
             Entries.Entry(id: "\u{0}new-named", group: String(localized: "New folder"),
                           label: String(localized: "Make “\(words)” and move there"), icon: .plus) {
                 mailbox.folderAsk = .create(ask, name: words)

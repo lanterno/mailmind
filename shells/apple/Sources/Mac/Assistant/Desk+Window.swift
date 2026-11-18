@@ -525,15 +525,26 @@ extension Desk {
     }
 }
 
-/// The attention verbs and the AI's on the messages chosen, in the mailbox's Message menu.
+/// The attention verbs and the AI's on the messages chosen, in the mailbox's Message menu; in a message's own window,
+/// attention's on its message alone.
 struct DeskMessageItems: View {
     @FocusedValue(\.mailDesk) private var desk: Desk?
+    @FocusedValue(\.messageWindow) private var window: MessageWindowVerbs?
+
+    /// What attention's items act on in the window in front, and through which model: a message window's message,
+    /// in no stack, through its own; else the mail window's choice, in the stack its list is, through its desk's.
+    static func attending(window: MessageWindowVerbs?, desk: Desk?)
+        -> (copies: [MailCopy], stack: AttentionStack?, model: AttentionModel)?
+    {
+        if let window { return window.acting ? ([window.copy], nil, window.attention) : nil }
+        guard let desk, !desk.chosenCopies.isEmpty else { return nil }
+        return (desk.chosenCopies, desk.stack, desk.attention)
+    }
 
     var body: some View {
-        let copies = desk?.chosenCopies ?? []
-        if let desk, !copies.isEmpty {
-            AttentionMenuItems(copies: copies, stack: desk.stack, model: desk.attention, shortcuts: true)
-            if copies.count == 1, let copy = copies.first, !desk.aiTurnedOff {
+        if let on = Self.attending(window: window, desk: desk) {
+            AttentionMenuItems(copies: on.copies, stack: on.stack, model: on.model, shortcuts: true)
+            if window == nil, let desk, on.copies.count == 1, let copy = on.copies.first, !desk.aiTurnedOff {
                 Divider()
                 Button("Summarize", systemImage: "sparkles") { Task { await desk.summaries.summarize(copy) } }
                     .keyboardShortcut("i", modifiers: [.shift, .command])

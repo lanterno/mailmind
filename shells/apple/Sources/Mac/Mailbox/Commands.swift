@@ -11,35 +11,35 @@ extension FocusedValues {
 /// button in the pane's bar and its palette entry do. Edit ▸ Undo undoes what the mailbox did last.
 struct MailboxCommands: Commands {
     @FocusedValue(\.mailbox) private var mailbox
+    @FocusedValue(\.messageWindow) private var window
 
     var body: some Commands {
         CommandMenu("Message") {
             ComposeMessageItems()
             Divider()
-            let acting = mailbox.map { $0.hasTarget && !$0.asking } ?? false
-            Button("Archive") { mailbox?.file(.archive) }
+            let verbs = MessageMenuVerbs(window: window, mailbox: mailbox)
+            Button("Archive") { verbs.file(.archive) }
                 .keyboardShortcut("a", modifiers: [.control, .command])
-                .disabled(!acting)
-            // ⌘⌫ deletes text while a field is being typed in, so it deletes mail only from the list.
-            Button("Delete") { mailbox?.file(.trash) }
+                .disabled(!verbs.acting)
+            // ⌘⌫ deletes text while a field is being typed in, so it deletes mail only from the list or the message.
+            Button("Delete") { verbs.file(.trash) }
                 .keyboardShortcut(.delete, modifiers: .command)
-                .disabled(!acting || mailbox?.typing == true)
-            Button("Mark as Junk") { mailbox?.file(.junk) }
+                .disabled(!verbs.acting || verbs.typing)
+            Button("Mark as Junk") { verbs.file(.junk) }
                 .keyboardShortcut("j", modifiers: [.shift, .command])
-                .disabled(!acting)
-            Button("Move To…") { mailbox?.askMove() }
+                .disabled(!verbs.acting)
+            Button("Move To…") { verbs.askMove() }
                 .keyboardShortcut("m", modifiers: [.shift, .command])
-                .disabled(!acting)
+                .disabled(!verbs.acting)
             Divider()
             // Each says what it will do to the rows as they stand now, and does that.
-            let shown = mailbox?.shownRows ?? []
-            let marks = Marks(shown)
-            Button(marks.unread ? "Mark as Read" : "Mark as Unread") { mailbox?.setSeen(marks.unread) }
+            let marks = Marks(verbs.shown)
+            Button(marks.unread ? "Mark as Read" : "Mark as Unread") { verbs.setSeen(marks.unread) }
                 .keyboardShortcut("u", modifiers: [.shift, .command])
-                .disabled(!acting)
-            Button(marks.unstars ? "Unstar" : "Star") { mailbox?.star(on: !marks.unstars) }
+                .disabled(!verbs.acting)
+            Button(marks.unstars ? "Unstar" : "Star") { verbs.star(!marks.unstars) }
                 .keyboardShortcut("l", modifiers: [.shift, .command])
-                .disabled(!acting)
+                .disabled(!verbs.acting)
             Divider()
             DeskMessageItems()
             Divider()
@@ -50,6 +50,7 @@ struct MailboxCommands: Commands {
                 .keyboardShortcut(.upArrow, modifiers: [.option, .command])
                 .disabled(mailbox == nil)
             Divider()
+            let shown = mailbox?.shownRows ?? []
             let sender = shown.count == 1 ? shown[0].fromAddr : nil
             Button("About This Sender") { if let sender { mailbox?.contact = sender } }
                 .disabled(sender?.isEmpty ?? true)
@@ -106,6 +107,41 @@ struct MailboxCommands: Commands {
     private static let roles: [(role: String, title: String)] = [
         ("inbox", "Inbox"), ("sent", "Sent"), ("drafts", "Drafts"), ("archive", "Archive"), ("junk", "Junk"), ("trash", "Trash"),
     ]
+}
+
+/// What the Message menu's verbs act on in the window in front: a message's own window acts on its message alone, the
+/// mail window on its rows chosen or the message open, and a window with neither on nothing.
+@MainActor
+struct MessageMenuVerbs {
+    let acting: Bool
+    /// A field is being typed in, where ⌘⌫ deletes text.
+    let typing: Bool
+    /// What they act on, as the window knows it now: what Mark as Read and Star say they will do.
+    let shown: [API.FolderRow]
+    let file: @MainActor (API.FilingVerb) -> Void
+    let askMove: @MainActor () -> Void
+    let setSeen: @MainActor (Bool) -> Void
+    let star: @MainActor (_ on: Bool) -> Void
+
+    init(window: MessageWindowVerbs?, mailbox: Mailbox?) {
+        if let window {
+            acting = window.acting
+            typing = window.typing
+            shown = window.shown
+            file = { window.file($0) }
+            askMove = { window.askMove() }
+            setSeen = { window.setSeen($0) }
+            star = { window.star(on: $0) }
+        } else {
+            acting = mailbox.map { $0.hasTarget && !$0.asking } ?? false
+            typing = mailbox?.typing == true
+            shown = mailbox?.shownRows ?? []
+            file = { mailbox?.file($0) }
+            askMove = { mailbox?.askMove() }
+            setSeen = { mailbox?.setSeen($0) }
+            star = { mailbox?.star(on: $0) }
+        }
+    }
 }
 
 /// What the read and star verbs say they will do to the rows a verb acts on: mark read while any is unread, and
