@@ -79,6 +79,14 @@ impl Answer {
         out
     }
 
+    /// Whether the tagged response's text begins with the response code `code` (`[NONEXISTENT] ...`), in any case.
+    pub(crate) fn coded(&self, code: &str) -> bool {
+        self.text.strip_prefix('[').is_some_and(|text| {
+            let said = text.split([']', ' ']).next().unwrap_or_default();
+            said.eq_ignore_ascii_case(code)
+        })
+    }
+
     /// The server did it, or a refusal of `class`.
     pub(crate) fn done(self, class: &'static str) -> Result<Answer, Error> {
         if self.status == "OK" { Ok(self) } else { Err(Error::Refused(class)) }

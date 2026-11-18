@@ -9,7 +9,9 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use mm_kernel::when::civil;
-use mm_mailbox::session::{HEAD_BATCH, HEADER_BATCH, Headers, MailServer, Opening, Search, Selected, ServerError};
+use mm_mailbox::session::{
+    HEAD_BATCH, HEADER_BATCH, Headers, MailServer, NO_SUCH_FOLDER, Opening, Search, Selected, ServerError,
+};
 
 use crate::codec::{Code, Fetched, Said};
 use crate::list::mailbox_arg;
@@ -109,7 +111,12 @@ impl MailServer for Session {
 
     fn select(&mut self, name: &str, readonly: bool) -> Result<Selected, ServerError> {
         let verb = if readonly { "EXAMINE" } else { "SELECT" };
-        let answer = self.send(&format!("{verb} {}", folder(name)?))?;
+        let answer = self.connection.command(format!("{verb} {}", folder(name)?).as_bytes())?;
+        // A folder the server says doesn't exist is told apart from any other refusal: another client deleted it.
+        if answer.status != "OK" && answer.coded("NONEXISTENT") {
+            return Err(ServerError::Refused(NO_SUCH_FOLDER));
+        }
+        let answer = answer.done(REFUSED)?;
         let mut selected = Selected::default();
         for said in answer.said() {
             match said {

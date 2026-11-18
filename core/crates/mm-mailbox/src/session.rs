@@ -41,6 +41,32 @@ impl ServerError {
     pub fn is_unreachable(self) -> bool {
         matches!(self, ServerError::Unreachable(_))
     }
+
+    /// Whether the server said the folder asked for doesn't exist (`NO_SUCH_FOLDER`): another client deleted or
+    /// renamed it.
+    pub fn is_gone(self) -> bool {
+        self == ServerError::Refused(NO_SUCH_FOLDER)
+    }
+}
+
+/// The class of a SELECT or EXAMINE the server refused because the folder doesn't exist: its NO said so in a
+/// `[NONEXISTENT]` code (RFC 5530), or a LIST that worked doesn't name it. Never a refusal that says neither, and never
+/// a server that couldn't be reached: those leave the folder as it was.
+pub const NO_SUCH_FOLDER: &str = "NoSuchFolder";
+
+/// Select `folder` (`readonly` as `MailServer::select`), telling a folder the server no longer has apart from any
+/// other refusal: a NO without the `[NONEXISTENT]` code asks LIST, and a LIST that works but doesn't name the folder
+/// means it is gone. INBOX is never gone. A LIST that fails leaves the refusal as it was.
+pub fn select_or_gone(server: &mut dyn MailServer, folder: &str, readonly: bool) -> Result<Selected, ServerError> {
+    match server.select(folder, readonly) {
+        Err(ServerError::Refused(class)) if class != NO_SUCH_FOLDER && !folder.eq_ignore_ascii_case("INBOX") => {
+            match server.folders() {
+                Ok(listed) if !listed.iter().any(|f| f.name == folder) => Err(ServerError::Refused(NO_SUCH_FOLDER)),
+                _ => Err(ServerError::Refused(class)),
+            }
+        }
+        other => other,
+    }
 }
 
 impl From<SessionError> for ServerError {
