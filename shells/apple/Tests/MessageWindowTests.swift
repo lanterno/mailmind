@@ -85,6 +85,33 @@ final class MessageWindowTests: XCTestCase {
     /// Guards only this test's empty database.
     private static let key = "3d5f7a9c1e2b4d6f8a0c2e4b6d8f1a3c5e7b9d0f2a4c6e8b1d3f5a7c9e0b2d4f"
 
+    /// In a message's window, ⌘⌫ deletes text while text is typed (the reply box, Find's field), and the message only
+    /// from the message itself; and the Message menu waits while the window asks where to move it, or when to snooze.
+    func testAMessagesWindowKnowsWhenTextIsTyped() async throws {
+        let editable = NSTextView(), shown = NSTextView()
+        shown.isEditable = false
+        XCTAssertTrue(MessageWindowVerbs.types(editable))
+        XCTAssertFalse(MessageWindowVerbs.types(shown), "text shown, not typed")
+        XCTAssertFalse(MessageWindowVerbs.types(NSView()))
+        XCTAssertFalse(MessageWindowVerbs.types(nil))
+
+        let app = MailApp()
+        app.mailbox.wire = Fixture.server().wire
+        let copy = MailCopy(key: 3, folder: "INBOX", uid: 3, account: Fixture.ada)
+        let window = MessageWindowVerbs(copy: copy, mailbox: app.mailbox, reader: ReaderModel(), routes: nil)
+        XCTAssertFalse(MessageMenuVerbs(window: window, mailbox: app.mailbox).typing)
+        window.typing = true
+        XCTAssertTrue(MessageMenuVerbs(window: window, mailbox: app.mailbox).typing, "Delete waits")
+        XCTAssertTrue(MessageMenuVerbs(window: window, mailbox: app.mailbox).acting)
+        window.askMove()
+        XCTAssertEqual(window.moving, MoveAsk(account: Fixture.ada, from: "INBOX"))
+        XCTAssertFalse(MessageMenuVerbs(window: window, mailbox: app.mailbox).acting, "the menu waits on Move To")
+        XCTAssertNil(app.mailbox.moving, "the mail window asks nothing")
+        window.moving = nil
+        window.attention.choosingTime = [copy]
+        XCTAssertFalse(MessageMenuVerbs(window: window, mailbox: app.mailbox).acting, "and on a time of one's own")
+    }
+
     /// A window's value is kept as data: the copy comes back as it went.
     func testACopyIsKeptAsData() throws {
         let copy = MailCopy(key: 7, folder: "Receipts/2026", uid: 41, account: Fixture.work)

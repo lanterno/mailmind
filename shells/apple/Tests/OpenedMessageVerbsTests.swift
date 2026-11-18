@@ -114,16 +114,20 @@ final class OpenedMessageVerbsTests: XCTestCase {
 
     // MARK: The ways a message is opened
 
-    /// Every way a message reaches the reading pane.
+    /// Every way a message reaches the reading pane, and a window of its own: one over a message the Inbox lists
+    /// while the mail window has another open, and one over a message no list holds while the mail window has two
+    /// rows marked.
     enum Way: String, CaseIterable {
         case listRow, conversation, upNext, search, feed, paperTrail
         case briefCanWait, briefNeedsYou, todayInvite, documentHub, gate, answer, paletteAnswer
         case notification, notificationAway, senderCard, senderCardAway, sheetOverAChosenRow
+        case ownWindow, ownWindowAway
     }
 
     /// What a way opened: the message, whether the pane shows it as its whole conversation, whether the server has
     /// it starred and unread, what opens once it leaves (nil: it closes), and its row in the list on screen, where a
-    /// row's menu can be opened on it.
+    /// row's menu can be opened on it. In a window of its own: that window, and what the mail window had open and
+    /// chosen, which stays.
     struct Opened {
         let copy: MailCopy
         var whole = false
@@ -131,6 +135,19 @@ final class OpenedMessageVerbsTests: XCTestCase {
         var unread = false
         let next: MailCopy?
         var row: API.FolderRow?
+        var window: MessageWindowVerbs?
+        var mainOpen: MailCopy?
+        var mainChosen: [MailCopy] = []
+    }
+
+    /// A message in a window of its own over `world`'s mailbox, its reader open on `head`, once it knows how the
+    /// message stands, as the window reads it as it opens.
+    func window(on copy: MailCopy, head: API.MessageOpened, in world: World) async -> MessageWindowVerbs {
+        let reader = ReaderModel()
+        reader.hold(copy, head)
+        let window = MessageWindowVerbs(copy: copy, mailbox: world.mailbox, reader: reader, routes: world.server.wire)
+        await window.reread()
+        return window
     }
 
     func open(_ way: Way, in world: World) async throws -> Opened {
@@ -233,6 +250,23 @@ final class OpenedMessageVerbsTests: XCTestCase {
             desk.open(away)
             await reads()
             return Opened(copy: away, flagged: true, unread: true, next: nil)
+        case .ownWindow:
+            // A double-click on the conversation's row, with the first row open in the mail window: the window
+            // shows its newest message, and acts on that alone.
+            await inbox(app)
+            mailbox.chose([try XCTUnwrap(app.list?.copy(at: 0))])
+            let copy = MailCopy(Self.rows[1])
+            let window = await window(on: copy, head: Self.head(copy, thread: "t2"), in: world)
+            return Opened(copy: copy, next: nil, window: window, mainOpen: MailCopy(Self.rows[0]),
+                          mainChosen: [MailCopy(Self.rows[0])])
+        case .ownWindowAway:
+            // A sender's older mail in a window of its own, with two rows marked in the mail window.
+            await inbox(app)
+            let marked = [try XCTUnwrap(app.list?.copy(at: 0)), try XCTUnwrap(app.list?.copy(at: 3))]
+            mailbox.chose(marked)
+            let window = await window(on: away, head: Self.head(), in: world)
+            return Opened(copy: away, flagged: true, unread: true, next: nil, window: window,
+                          mainChosen: marked.map(MailCopy.init))
         }
     }
 
@@ -246,6 +280,7 @@ final class OpenedMessageVerbsTests: XCTestCase {
         case paletteArchive, paletteDelete, paletteJunk, paletteMoveTo, paletteStar, paletteUnread, paletteSnooze,
              paletteLater
         case rowArchive, rowDelete, rowJunk, rowMoveTo, rowUnread, rowStar, rowSnooze, rowLater
+        case windowArchive, windowDelete, windowJunk, windowMoveTo, windowUnread, windowStar, windowSnooze, windowLater
 
         enum Does: Equatable {
             case file(API.FilingVerb)
@@ -259,24 +294,28 @@ final class OpenedMessageVerbsTests: XCTestCase {
 
         var does: Does {
             switch self {
-            case .paneFile, .menuArchive, .keyE, .paletteArchive, .rowArchive: .file(.archive)
-            case .paneDelete, .menuDelete, .keyHash, .keyD, .keyDelete, .paletteDelete, .rowDelete: .file(.trash)
-            case .menuJunk, .keyB, .paletteJunk, .rowJunk: .file(.junk)
-            case .menuMoveTo, .keyM, .paletteMoveTo, .rowMoveTo: .move
-            case .keyS, .menuStar, .paletteStar, .rowStar: .star
-            case .menuUnread, .keyU, .paletteUnread, .rowUnread: .unread
-            case .paneSnooze, .keyH, .paletteSnooze, .rowSnooze: .snooze
-            case .paneLater, .keyL, .paletteLater, .rowLater: .later
+            case .paneFile, .menuArchive, .keyE, .paletteArchive, .rowArchive, .windowArchive: .file(.archive)
+            case .paneDelete, .menuDelete, .keyHash, .keyD, .keyDelete, .paletteDelete, .rowDelete, .windowDelete:
+                .file(.trash)
+            case .menuJunk, .keyB, .paletteJunk, .rowJunk, .windowJunk: .file(.junk)
+            case .menuMoveTo, .keyM, .paletteMoveTo, .rowMoveTo, .windowMoveTo: .move
+            case .keyS, .menuStar, .paletteStar, .rowStar, .windowStar: .star
+            case .menuUnread, .keyU, .paletteUnread, .rowUnread, .windowUnread: .unread
+            case .paneSnooze, .keyH, .paletteSnooze, .rowSnooze, .windowSnooze: .snooze
+            case .paneLater, .keyL, .paletteLater, .rowLater, .windowLater: .later
             }
         }
 
         /// A row's menu opens only on a row the list shows.
         var onARow: Bool { rawValue.hasPrefix("row") }
+        /// The Message menu, and its keys, in a message's own window, which has no list, bar or palette.
+        var inAWindow: Bool { rawValue.hasPrefix("window") }
     }
 
     /// Press `verb` on what `world` has open, as its surface does.
     func press(_ verb: Verb, in world: World, opened: Opened) async throws {
         let mailbox = world.mailbox, desk = world.desk
+        if let window = opened.window { return try await press(verb, in: window, world: world) }
         XCTAssertTrue(mailbox.hasTarget, "the pane's bar and the Message menu offer it")
         func palette(_ id: String) throws {
             try XCTUnwrap(mailbox.commands().first { $0.id == id }, "the palette offers \(id)").run()
@@ -321,6 +360,9 @@ final class OpenedMessageVerbsTests: XCTestCase {
         case .rowStar: try rowMenu("Star")
         case .rowSnooze: try rowMenu("Snooze…")
         case .rowLater: try rowMenu("Reply later")
+        case .windowArchive, .windowDelete, .windowJunk, .windowMoveTo, .windowUnread, .windowStar, .windowSnooze,
+             .windowLater:
+            XCTFail("\(verb) is a message window's")
         }
         // Move To asks where (the sheet, or m), then moves to the account's first folder offered.
         if verb.does == .move, !verb.onARow {
@@ -334,6 +376,38 @@ final class OpenedMessageVerbsTests: XCTestCase {
             guard case .snoozeUntil(let copies, _)? = desk.sheet else { return XCTFail("\(verb) asks when") }
             XCTAssertEqual(copies, [opened.copy], "\(verb) asks for the message open")
             await desk.attention.snooze(copies, .preset(.tomorrow))
+        }
+    }
+
+    /// Press `verb` in a message's own window, as its Message menu runs it: the mailbox's verbs as `MessageMenuVerbs`
+    /// gives them for that window, and attention's (Snooze's first choice, Reply Later) on what `DeskMessageItems`
+    /// gives them to there. The menu's keys are its items'.
+    func press(_ verb: Verb, in window: MessageWindowVerbs, world: World) async throws {
+        let menu = MessageMenuVerbs(window: window, mailbox: world.mailbox)
+        XCTAssertTrue(menu.acting, "the Message menu offers \(verb)")
+        let marks = Marks(menu.shown)
+        let attending = try XCTUnwrap(DeskMessageItems.attending(window: window, desk: world.desk),
+                                      "the Message menu offers Snooze and Reply Later")
+        XCTAssertEqual(attending.copies, [window.copy], "on the window's message")
+        XCTAssertNil(attending.stack)
+        switch verb {
+        case .windowArchive: menu.file(.archive)
+        case .windowDelete: menu.file(.trash)
+        case .windowJunk: menu.file(.junk)
+        case .windowMoveTo: menu.askMove()
+        case .windowUnread: menu.setSeen(marks.unread)
+        case .windowStar: menu.star(!marks.unstars)
+        case .windowSnooze: await attending.model.snooze(attending.copies, .preset(.tomorrow))
+        case .windowLater: await attending.model.replyLater(attending.copies)
+        default: XCTFail("\(verb) isn't in a message's window")
+        }
+        // Move To asks where, over the window, then moves to the account's first folder offered.
+        if verb.does == .move {
+            await waiting(for: "\(verb)'s sheet") { window.moving != nil }
+            let ask = try XCTUnwrap(window.moving)
+            XCTAssertEqual(ask, MoveAsk(account: window.copy.account, from: window.copy.folder))
+            XCTAssertTrue(world.mailbox.moving == nil, "the mail window asks nothing")
+            window.move(to: try XCTUnwrap(world.mailbox.destinations(ask).first))
         }
     }
 
@@ -387,7 +461,7 @@ final class OpenedMessageVerbsTests: XCTestCase {
         case .unread:
             let body = try JSONDecoder().decode(API.SeenBody.self, from: try await asked(API.Post.Seen.path))
             // The Message menu says what it will do as the message stands: Mark as Read while it is unread.
-            let seen = verb == .menuUnread && opened.unread
+            let seen = (verb == .menuUnread || verb == .windowUnread) && opened.unread
             XCTAssertEqual(body, API.SeenBody(folder: copy.folder, key: copy.key, seen: seen, uid: copy.uid), said)
         case .snooze:
             let body = try JSONDecoder().decode(API.SnoozeBody.self, from: try await asked(API.Post.Snooze.path))
@@ -398,6 +472,25 @@ final class OpenedMessageVerbsTests: XCTestCase {
             XCTAssertEqual([body.folder, body.key.map(String.init), body.uid.map(String.init)],
                            [copy.folder, String(copy.key), String(copy.uid)], said)
             XCTAssertEqual(body.on, true, said)
+        }
+        if let window = opened.window {
+            // In a window of its own, only its message was acted on: the mail window keeps what it had open and
+            // chosen. Once the message has left, its window closes, and the mail window says so with Undo.
+            switch verb.does {
+            case .file, .move, .snooze:
+                await waiting(for: said + " closes the window") { window.left }
+                XCTAssertFalse(MessageMenuVerbs(window: window, mailbox: nil).acting, said + ": nothing more to do")
+                await waiting(for: said + " offers Undo") { mailbox.toast?.undo != nil }
+                mailbox.undo()
+                await waiting(for: said + " undone") { !server.asked(API.Post.Undo.path).isEmpty }
+            default:
+                await waiting(for: said + " says so") { mailbox.toast != nil }
+                XCTAssertFalse(window.left, said + " keeps the window open")
+            }
+            XCTAssertEqual(app.selection.copy, opened.mainOpen, said + ": the mail window's message stays open")
+            XCTAssertEqual(mailbox.marked, opened.mainChosen, said + ": and its rows chosen")
+            XCTAssertEqual(server.asked.filter { Self.verbs.contains($0.path) }.count, 1, said + ": one request")
+            return
         }
         // Filed, moved or snoozed, it leaves: the list or the lane moves on, else the message closes to where it was
         // opened from. Undo is offered, and takes it back. Reply later keeps it where it is, and open.
@@ -433,9 +526,14 @@ final class OpenedMessageVerbsTests: XCTestCase {
             for verb in Verb.allCases {
                 // Each pair on a window of its own, and a pair that fails says so and lets the rest run.
                 do {
+                    guard verb.inAWindow == way.rawValue.hasPrefix("ownWindow") else { continue }
                     let world = await world()
                     let opened = try await open(way, in: world)
-                    XCTAssertEqual(world.app.selection.copy, opened.copy, "\(way): the reader opens it, and Reply answers it")
+                    if let window = opened.window {
+                        XCTAssertEqual(window.copy, opened.copy, "\(way): the window shows it")
+                    } else {
+                        XCTAssertEqual(world.app.selection.copy, opened.copy, "\(way): the reader opens it, and Reply answers it")
+                    }
                     guard !verb.onARow || opened.row != nil else { continue }
                     try await press(verb, in: world, opened: opened)
                     try await check(verb, way, in: world, opened: opened)
