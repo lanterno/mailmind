@@ -122,20 +122,26 @@ final class OpenedMessageVerbsTests: XCTestCase {
     }
 
     /// What a way opened: the message, whether the pane shows it as its whole conversation, whether the server has
-    /// it starred, what opens once it leaves (nil: it closes), and its row in the list on screen, where a row's
-    /// menu can be opened on it.
+    /// it starred and unread, what opens once it leaves (nil: it closes), and its row in the list on screen, where a
+    /// row's menu can be opened on it.
     struct Opened {
         let copy: MailCopy
         var whole = false
         var flagged = false
+        var unread = false
         let next: MailCopy?
         var row: API.FolderRow?
     }
 
     func open(_ way: Way, in world: World) async throws -> Opened {
         let app = world.app, mailbox = world.mailbox, desk = world.desk, away = Self.away
-        /// The reader opening the away message, as the core answers it.
-        func reads() { app.reader.hold(away, Self.head()) }
+        /// The reader opening the away message, as the core answers it, and the mailbox reading how it stands, as it
+        /// does as it opens one from outside the list: the menus then say Unstar and Mark as Read.
+        func reads() async {
+            app.reader.hold(away, Self.head())
+            await waiting(for: "how it stands") { Marks(mailbox.shownRows) == Marks([API.FolderRow(away, head: nil,
+                                                                                               member: Self.awayMember)]) }
+        }
         switch way {
         case .listRow:
             await inbox(app)
@@ -175,8 +181,8 @@ final class OpenedMessageVerbsTests: XCTestCase {
             app.place = .desk(.brief)
             desk.open(way == .briefCanWait ? away : .named(key: away.key, folder: away.folder, uid: away.uid,
                                                             account: away.account))
-            reads()
-            return Opened(copy: away, flagged: true, next: nil)
+            await reads()
+            return Opened(copy: away, flagged: true, unread: true, next: nil)
         case .briefNeedsYou:
             // The brief's "needs you" card, whose message the list beside it holds.
             await inbox(app, tab: .needs)
@@ -186,31 +192,31 @@ final class OpenedMessageVerbsTests: XCTestCase {
         case .documentHub:
             app.place = .documents
             mailbox.open(away)
-            reads()
-            return Opened(copy: away, flagged: true, next: nil)
+            await reads()
+            return Opened(copy: away, flagged: true, unread: true, next: nil)
         case .gate:
             app.place = .desk(.screener(account: Fixture.ada))
             desk.open(away)
-            reads()
-            return Opened(copy: away, flagged: true, next: nil)
+            await reads()
+            return Opened(copy: away, flagged: true, unread: true, next: nil)
         case .answer:
             app.place = .desk(.ask)
             desk.open(away)
-            reads()
-            return Opened(copy: away, flagged: true, next: nil)
+            await reads()
+            return Opened(copy: away, flagged: true, unread: true, next: nil)
         case .paletteAnswer:
             desk.openCited(away)
-            reads()
-            return Opened(copy: away, flagged: true, next: nil)
+            await reads()
+            return Opened(copy: away, flagged: true, unread: true, next: nil)
         case .notification:
             mailbox.openInItsFolder(MailCopy(Self.rows[0]))
             await waiting(for: "the folder's rows") { app.list?.copy(at: 0) != nil }
             return Opened(copy: MailCopy(Self.rows[0]), next: MailCopy(Self.rows[1]), row: app.list?.copy(at: 0))
         case .notificationAway:
             mailbox.openInItsFolder(away)
-            reads()
+            await reads()
             await waiting(for: "the folder's rows") { app.list?.copy(at: 0) != nil }
-            return Opened(copy: away, flagged: true, next: nil)
+            return Opened(copy: away, flagged: true, unread: true, next: nil)
         case .senderCard:
             await inbox(app)
             mailbox.open(MailCopy(Self.rows[2]))
@@ -218,15 +224,15 @@ final class OpenedMessageVerbsTests: XCTestCase {
         case .senderCardAway:
             await inbox(app)
             mailbox.open(away)
-            reads()
-            return Opened(copy: away, flagged: true, next: nil)
+            await reads()
+            return Opened(copy: away, flagged: true, unread: true, next: nil)
         case .sheetOverAChosenRow:
             // Your Week or Commitments, over the Inbox with a row chosen, opens another message.
             await inbox(app)
             mailbox.chose([try XCTUnwrap(app.list?.copy(at: 0))])
             desk.open(away)
-            reads()
-            return Opened(copy: away, flagged: true, next: nil)
+            await reads()
+            return Opened(copy: away, flagged: true, unread: true, next: nil)
         }
     }
 
@@ -244,8 +250,8 @@ final class OpenedMessageVerbsTests: XCTestCase {
         enum Does: Equatable {
             case file(API.FilingVerb)
             case move
-            /// Star, the key toggling it as the server has it.
-            case star(toggles: Bool)
+            /// Star, or Unstar where the server has it starred: the key toggles it, and the menus say which.
+            case star
             case unread
             case snooze
             case later
@@ -257,8 +263,7 @@ final class OpenedMessageVerbsTests: XCTestCase {
             case .paneDelete, .menuDelete, .keyHash, .keyD, .keyDelete, .paletteDelete, .rowDelete: .file(.trash)
             case .menuJunk, .keyB, .paletteJunk, .rowJunk: .file(.junk)
             case .menuMoveTo, .keyM, .paletteMoveTo, .rowMoveTo: .move
-            case .keyS: .star(toggles: true)
-            case .menuStar, .paletteStar, .rowStar: .star(toggles: false)
+            case .keyS, .menuStar, .paletteStar, .rowStar: .star
             case .menuUnread, .keyU, .paletteUnread, .rowUnread: .unread
             case .paneSnooze, .keyH, .paletteSnooze, .rowSnooze: .snooze
             case .paneLater, .keyL, .paletteLater, .rowLater: .later
@@ -373,15 +378,17 @@ final class OpenedMessageVerbsTests: XCTestCase {
             XCTAssertEqual([body.folder, String(body.key), String(body.uid ?? -1)],
                            [copy.folder, String(copy.key), String(copy.uid)], said)
             XCTAssertNotEqual(body.to, copy.folder, said)
-        case .star(let toggles):
+        case .star:
             let body = try JSONDecoder().decode(API.FlagBody.self, from: try await asked(API.Post.Flag.path))
             XCTAssertEqual([body.folder, String(body.key), String(body.uid ?? -1)],
                            [copy.folder, String(copy.key), String(copy.uid)], said)
             XCTAssertEqual(body.flag, .flagged, said)
-            if toggles { XCTAssertEqual(body.on, !opened.flagged, said + ": as the server has it starred or not") }
+            XCTAssertEqual(body.on, !opened.flagged, said + ": as the server has it starred or not")
         case .unread:
             let body = try JSONDecoder().decode(API.SeenBody.self, from: try await asked(API.Post.Seen.path))
-            XCTAssertEqual(body, API.SeenBody(folder: copy.folder, key: copy.key, seen: false, uid: copy.uid), said)
+            // The Message menu says what it will do as the message stands: Mark as Read while it is unread.
+            let seen = verb == .menuUnread && opened.unread
+            XCTAssertEqual(body, API.SeenBody(folder: copy.folder, key: copy.key, seen: seen, uid: copy.uid), said)
         case .snooze:
             let body = try JSONDecoder().decode(API.SnoozeBody.self, from: try await asked(API.Post.Snooze.path))
             XCTAssertEqual([body.folder, body.key.map(String.init), body.uid.map(String.init)],
@@ -599,6 +606,100 @@ final class OpenedMessageVerbsTests: XCTestCase {
         XCTAssertEqual(listed, !row.seen)
         let notOpen = await world.mailbox.opensUnread(Self.away)
         XCTAssertFalse(notOpen)
+    }
+
+    /// A message opened from outside the list reads as the server has it whether a verb comes before the reader has
+    /// opened it or after: before, the verb waits for the reader's head, which names its conversation. Starred and
+    /// unread there, s unstars it and the pane's dwell knows it unread. File names it by its copy alone, and never
+    /// waits.
+    func testAVerbBeforeOrAfterTheReaderOpensTheMessageReadsItAsItStands() async throws {
+        for before in [true, false] {
+            let said = before ? "before the reader opens it" : "after the reader opened it"
+            let world = await world()
+            world.app.place = .desk(.brief)
+            world.desk.open(Self.away)
+            let (body, comes) = AsyncStream<Void>.makeStream()
+            world.app.reader.hold(Self.away, until: {
+                for await _ in body {}
+                return Self.head()
+            })
+            if !before { comes.finish() }
+            key("s", world.mailbox)
+            let unread = Task { await world.mailbox.opensUnread(Self.away) }
+            if before {
+                XCTAssertFalse(Marks(world.mailbox.shownRows).unstars, said + ": nothing is known of it yet")
+                try await Task.sleep(for: .milliseconds(50))
+                XCTAssertTrue(world.server.asked(API.Post.Flag.path).isEmpty, said + ": s waits for the reader")
+                comes.finish()
+            }
+            await waiting(for: said + ": s stars or unstars") { !world.server.asked(API.Post.Flag.path).isEmpty }
+            let flag = try JSONDecoder().decode(API.FlagBody.self,
+                                                from: try XCTUnwrap(world.server.asked(API.Post.Flag.path).first).body)
+            XCTAssertEqual(flag.on, false, said + ": starred at the server, s unstars it")
+            let known = await unread.value
+            XCTAssertTrue(known, said + ": the dwell marks it read")
+        }
+
+        // File, pressed while the reader is still opening it, asks at once.
+        let world = await world()
+        world.app.place = .desk(.brief)
+        world.desk.open(Self.away)
+        let (body, comes) = AsyncStream<Void>.makeStream()
+        world.app.reader.hold(Self.away, until: {
+            for await _ in body {}
+            return Self.head()
+        })
+        world.mailbox.file(.archive)
+        await waiting(for: "File asks without waiting") { !world.server.asked(API.Post.Archive.path).isEmpty }
+        comes.finish()
+    }
+
+    /// The menus' words follow the server as soon as the reader has opened a message from outside the list, before
+    /// any verb asks.
+    func testTheMenusSayHowAMessageOpenedFromOutsideStandsOnceTheReaderOpensIt() async throws {
+        let world = await world()
+        world.app.place = .desk(.brief)
+        world.desk.open(Self.away)
+        world.app.reader.hold(Self.away, Self.head())
+        await waiting(for: "the Message menu says Unstar") { Marks(world.mailbox.shownRows).unstars }
+        XCTAssertTrue(Marks(world.mailbox.shownRows).unread, "and Mark as Read")
+    }
+
+    /// A message whose head names no conversation is read as its folder lists it: unread and starred there, so s
+    /// unstars it and the dwell marks it read. One its folder doesn't list either reads as read and not starred.
+    func testAMessageWithNoConversationIsReadAsItsFolderListsIt() async throws {
+        let receipt = MailCopy(key: 93, folder: "Receipts", uid: 93, account: Fixture.ada)
+        let server = Self.server()
+        let inbox = Self.rows, listed = Fixture.row(93, folder: "Receipts", seen: false, flagged: true, count: 2)
+        server.on("GET", API.Get.Messages.path) { asked in
+            let items = asked.query["folder"] == "Receipts" ? inbox + [listed] : inbox
+            return FakeServer.ok(API.MessagesAnswer.folderListing(API.FolderListing(
+                account: asked.query["account"], folder: asked.query["folder"] ?? "INBOX", grouped: false,
+                hasMore: false, items: items, offset: 0, ok: true, total: items.count)))
+        }
+        let world = await world(server)
+        world.app.place = .documents
+        world.mailbox.open(receipt)
+        world.app.reader.hold(receipt, Self.head(receipt, thread: nil))
+        let row = await world.mailbox.openRow(receipt)
+        XCTAssertTrue(row.flagged)
+        XCTAssertFalse(row.seen)
+        XCTAssertFalse(row.isConversation(grouped: true), "it stands for itself, as the pane shows it")
+        let unread = await world.mailbox.opensUnread(receipt)
+        XCTAssertTrue(unread, "the dwell marks it read")
+        let messages = try XCTUnwrap(server.asked(API.Get.Messages.path).last)
+        XCTAssertEqual([messages.query["account"], messages.query["folder"], messages.query["group"]],
+                       [Fixture.ada, "Receipts", nil], "its folder, a message a row")
+        await world.mailbox.starNow()
+        let flag = try JSONDecoder().decode(API.FlagBody.self,
+                                            from: try XCTUnwrap(server.asked(API.Post.Flag.path).first).body)
+        XCTAssertEqual([flag.key, flag.uid], [93, 93])
+        XCTAssertEqual(flag.on, false, "starred in its folder, s unstars it")
+
+        let gone = MailCopy(key: 94, folder: "Receipts", uid: 94, account: Fixture.ada)
+        let alone = await world.mailbox.standing(of: gone, head: Self.head(gone, thread: nil))
+        XCTAssertTrue(alone.seen)
+        XCTAssertFalse(alone.flagged)
     }
 }
 
