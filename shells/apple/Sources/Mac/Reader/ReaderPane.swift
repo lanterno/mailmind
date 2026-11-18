@@ -202,10 +202,15 @@ struct ReaderPane: View {
         }
         composing.viewing(replyTo ?? copy, wanted: thread == nil && (row?.replyWorthy ?? false),
                           skip: openMessage?.isDraft == true)
-        guard thread == nil, row?.seen == false, let core = app.core else { return }
+        guard thread == nil, row?.seen != true, let core = app.core else { return }
         try? await Task.sleep(for: .milliseconds(1200))
         guard !Task.isCancelled else { return }
+        // A message no list on screen holds (opened from the brief, an answer, the gate) is asked after, once the
+        // reader has opened it and so knows its conversation.
+        let unread = if let row { !row.seen } else { await app.mailbox.opensUnread(copy) }
+        guard unread, !Task.isCancelled else { return }
         await MarksOpened.mark(copy, routes: core, profile: composing.digest?.profile)
+        app.mailbox.rereadOutside()
     }
 }
 #endif

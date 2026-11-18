@@ -487,6 +487,13 @@ final class Mailbox {
         return await readOutside(open)
     }
 
+    /// Whether `copy`, the message open, is unread: as the window holds its row, else as the server says it stands.
+    /// One opened from the brief, an answer or the gate is marked read as it is read, as one opened from the list is.
+    func opensUnread(_ copy: MailCopy) async -> Bool {
+        guard app?.selection.copy == copy else { return false }
+        return await !openRow(copy).seen
+    }
+
     /// A message neither the list nor a lane holds, as the server says it stands: its head as the reader opened it,
     /// and whether it is read and starred as its conversation's members say. It stands for itself alone, as the pane
     /// shows it; one whose conversation isn't known is named by its copy alone.
