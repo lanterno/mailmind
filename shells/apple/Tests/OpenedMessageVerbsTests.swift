@@ -839,6 +839,81 @@ final class OpenedMessageVerbsTests: XCTestCase {
         XCTAssertEqual(world.app.selection.copy, Self.away, "a notification's message stays open in its folder")
     }
 
+    // MARK: The reader's row
+
+    /// A message opened from outside the list reads by the row the server has for it: its folder's listing says
+    /// when it came, whether it needs you and its summary, and its conversation how it stands now, read and starred.
+    func testAMessageOpenedFromOutsideTheListShowsItsTimeChipsAndSummary() async throws {
+        let filed = MailCopy(key: 95, folder: "Archive", uid: 95, account: Fixture.ada)
+        let listed = Fixture.row(95, folder: "Archive", seen: true, needs: true, action: "Pay by Friday",
+                                 summary: "The invoice for October.", subject: "Invoice", when: "2h ago")
+        let server = Self.server()
+        let inbox = Self.rows
+        server.on("GET", API.Get.Messages.path) { asked in
+            let items = asked.query["folder"] == "Archive" ? [listed] : inbox
+            return FakeServer.ok(API.MessagesAnswer.folderListing(API.FolderListing(
+                account: asked.query["account"], folder: asked.query["folder"] ?? "INBOX", grouped: false,
+                hasMore: false, items: items, offset: 0, ok: true, total: items.count)))
+        }
+        var member = Self.awayMember
+        (member.key, member.uid, member.folder) = (95, 95, "Archive")
+        server.on("GET", API.Get.Thread.path, API.Thread(account: Fixture.ada, count: 1, items: [member], ok: true,
+                                                         replyKey: 95, threadId: "t95"))
+        let world = await world(server)
+        world.app.place = .desk(.brief)
+        world.mailbox.open(filed)
+        world.app.reader.hold(filed, Self.head(filed, thread: "t95"))
+        await waiting(for: "its listing") { world.mailbox.shownRow(of: filed)?.summary.isEmpty == false }
+        let row = try XCTUnwrap(world.mailbox.shownRow(of: filed))
+        XCTAssertEqual(row.summary, "The invoice for October.")
+        XCTAssertEqual(row.action, "Pay by Friday")
+        XCTAssertTrue(row.needsYou, "the Needs you chip")
+        XCTAssertEqual(row.when, "2h ago", "when it came, as the list says it")
+        XCTAssertFalse(row.seen, "unread, as its conversation says now")
+        XCTAssertTrue(row.flagged, "and starred")
+        XCTAssertFalse(row.isConversation(grouped: true), "it stands for itself")
+
+        // Read again after mail changed, it keeps what its listing said, its marks as the server has them now.
+        member.seen = true
+        server.on("GET", API.Get.Thread.path, API.Thread(account: Fixture.ada, count: 1, items: [member], ok: true,
+                                                         replyKey: 95, threadId: "t95"))
+        world.mailbox.rereadOutside()
+        await waiting(for: "read again") { world.mailbox.shownRow(of: filed)?.seen == true }
+        XCTAssertEqual(world.mailbox.shownRow(of: filed)?.summary, "The invoice for October.")
+        XCTAssertEqual(server.asked(API.Get.Messages.path).filter { $0.query["folder"] == "Archive" }.count, 1,
+                       "its folder is read once as it opens")
+    }
+
+    /// The document names the account and the folder as the mail window's rail does, in a message's own window
+    /// too: "Ada" and "In Archive", not the address's "ada" and a folder of the person's own.
+    func testAMessagesOwnWindowNamesItsAccountAndFolderAsTheMailWindowDoes() async throws {
+        let world = await world()
+        let filed = MailCopy(key: 95, folder: "Archive", uid: 95, account: Fixture.ada)
+        let place = DocumentPlace.of(app: nil, mailbox: world.mailbox, copy: filed, needsYou: false, replied: false)
+        XCTAssertEqual(place.me, "Ada")
+        XCTAssertEqual(place.chips.map(\.text), ["Ada", "In Archive"])
+        XCTAssertEqual(DocumentPlace.of(app: world.app, copy: filed, needsYou: false, replied: false).chips.map(\.text),
+                       ["Ada", "In Archive"], "as the mail window's pane says them")
+    }
+
+    /// Where no row says when a message came, its header's date is said as the list says a time.
+    func testAHeadersDateIsSaidAsTheListSaysATime() throws {
+        let header = "Sat, 14 Nov 2026 10:24:01 +0000"
+        let sent = try XCTUnwrap(MessageWhen.date(header))
+        let day: TimeInterval = 86_400
+        let times: [(after: TimeInterval, said: String)] = [
+            (0, "just now"), (2.5 * 3600, "2h ago"), (26 * 3600, "yesterday"), (3 * day, "3d ago"), (10 * day, "1w ago"),
+            (40 * day, "Nov 14"),
+        ]
+        for (after, said) in times {
+            XCTAssertEqual(MessageWhen.said(header, now: sent.addingTimeInterval(after)), said, "\(after)")
+        }
+        XCTAssertEqual(MessageWhen.said("2 Nov 2026 09:00 +0100 (CET)", now: sent.addingTimeInterval(86_400 * 60)),
+                       "Nov 02", "no weekday, no seconds, a comment after the zone")
+        XCTAssertNotNil(MessageWhen.date("Mon, 2 Nov 2026 09:00:00 GMT"), "a zone by its name")
+        XCTAssertEqual(MessageWhen.said("sometime"), "sometime", "a date that won't read is said as written")
+    }
+
     // MARK: Read for its moment
 
     /// After its moment on an unread message the reader marks it read (`ReaderPane.dwell`, a view's task, asks this),
