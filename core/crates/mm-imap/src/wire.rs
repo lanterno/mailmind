@@ -46,8 +46,13 @@ impl Wire {
     }
 
     fn line(&mut self) -> io::Result<Vec<u8>> {
+        // Where the search for the line's end goes on from. What came before it holds no CRLF, so each byte is looked
+        // at once however many reads a long line takes: starting again from the front at every read made a line of 8
+        // MiB take about 40 seconds.
+        let mut from = 0;
         loop {
-            if let Some(end) = self.buffer.windows(2).position(|w| w == b"\r\n") {
+            if let Some(at) = self.buffer[from..].windows(2).position(|w| w == b"\r\n") {
+                let end = from + at;
                 let line = self.buffer[..end].to_vec();
                 self.buffer.drain(..end + 2);
                 return Ok(line);
@@ -55,6 +60,8 @@ impl Wire {
             if self.buffer.len() > MOST {
                 return Err(io::Error::new(io::ErrorKind::InvalidData, "a response line too long"));
             }
+            // A CR last may be the start of the CRLF the next read ends.
+            from = self.buffer.len().saturating_sub(1);
             self.fill()?;
         }
     }
