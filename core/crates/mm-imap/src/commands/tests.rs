@@ -9,7 +9,7 @@ use std::net::{TcpListener, TcpStream};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use mm_mailbox::session::{MailServer, ServerError};
+use mm_mailbox::session::{MailServer, NO_SUCH_FOLDER, ServerError};
 
 use crate::session::{Connection, Session};
 use crate::wire::Stream;
@@ -203,11 +203,30 @@ fn a_no_or_bad_is_a_refusal_and_the_session_takes_the_next_command() {
         assert_eq!(peer.heard(), "MM4 UID MOVE 3 \"Archive\"");
         peer.say("MM4 NO [TRYCREATE] no such mailbox");
     });
-    assert_eq!(s.select("Plans", false).err(), Some(ServerError::Refused("error")));
+    assert_eq!(s.select("Plans", false).err(), Some(ServerError::Refused(NO_SUCH_FOLDER)), "the folder is gone");
     assert_eq!(s.store_flags(&[3], true, &["\\Seen"]), Err(ServerError::Refused("error")));
     let selected = s.select("INBOX", false).unwrap();
     assert_eq!((selected.exists, selected.uidvalidity), (2, Some(9)));
     assert_eq!(s.uid_move(&[3], "Archive"), Err(ServerError::Refused("error")));
+    server.join().unwrap();
+}
+
+#[test]
+fn only_a_select_whose_no_says_nonexistent_says_the_folder_is_gone() {
+    let (mut s, server) = session(|mut peer| {
+        assert_eq!(peer.heard(), "MM1 EXAMINE \"Plans\"");
+        peer.say("MM1 NO [UNAVAILABLE] try again later");
+        assert_eq!(peer.heard(), "MM2 EXAMINE \"Plans\"");
+        peer.say("MM2 NO no such mailbox, or so it seems");
+        assert_eq!(peer.heard(), "MM3 EXAMINE \"Plans\"");
+        peer.say("MM3 NO [nonexistent] Unknown Mailbox");
+        assert_eq!(peer.heard(), "MM4 EXAMINE \"Plans\"");
+        peer.say("MM4 BAD [NONEXISTENTISH] not a code of RFC 5530's");
+    });
+    assert_eq!(s.select("Plans", true).err(), Some(ServerError::Refused("error")), "a NO for now");
+    assert_eq!(s.select("Plans", true).err(), Some(ServerError::Refused("error")), "words alone say nothing");
+    assert_eq!(s.select("Plans", true).err(), Some(ServerError::Refused(NO_SUCH_FOLDER)), "its code, in any case");
+    assert_eq!(s.select("Plans", true).err(), Some(ServerError::Refused("error")), "another code");
     server.join().unwrap();
 }
 
