@@ -260,3 +260,66 @@ final class ListKeysTests: XCTestCase {
         window.contentView = nil
     }
 }
+
+/// A message's own window: it has the keyboard as it opens, and Space, the arrows, Page Up and Down, Home and End
+/// scroll its message.
+@MainActor
+final class MessageWindowKeysTests: XCTestCase {
+    private final class Flipped: NSView {
+        override var isFlipped: Bool { true }
+    }
+
+    private func key(_ typed: String, code: UInt16 = 0, held: NSEvent.ModifierFlags = []) -> NSEvent {
+        NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: held, timestamp: 0, windowNumber: 0,
+                         context: nil, characters: typed, charactersIgnoringModifiers: typed, isARepeat: false,
+                         keyCode: code)!
+    }
+
+    private func function(_ key: Int) -> String {
+        String(Character(UnicodeScalar(UInt32(key))!))
+    }
+
+    func testAMessagesWindowScrollsItsMessageByTheKeyboard() throws {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled],
+                              backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+        let document = Flipped(frame: NSRect(x: 0, y: 0, width: 400, height: 2000))
+        document.addSubview(FrameWebView(frame: document.bounds, configuration: WKWebViewConfiguration()))
+        scroll.documentView = document
+        window.contentView?.addSubview(scroll)
+        let keys = MessageWindowKeys.Keys(frame: .zero)
+        window.contentView?.addSubview(keys)
+        XCTAssertTrue(window.initialFirstResponder === keys, "the message, as the window opens")
+        keys.takeIfNowhere()
+        XCTAssertTrue(window.firstResponder === keys)
+        var top: CGFloat { scroll.contentView.bounds.minY }
+
+        keys.keyDown(with: key(" ", code: 49))
+        XCTAssertEqual(top, 260, "Space pages down")
+        keys.keyDown(with: key(" ", code: 49, held: .shift))
+        XCTAssertEqual(top, 0, "⇧Space back up")
+        keys.keyDown(with: key(function(NSDownArrowFunctionKey), code: 125, held: [.function, .numericPad]))
+        XCTAssertEqual(top, ReaderPage.line, "an arrow, a line")
+        keys.keyDown(with: key(function(NSEndFunctionKey), code: 119, held: .function))
+        XCTAssertEqual(top, 2000 - 300, "End, the foot")
+        keys.keyDown(with: key(function(NSPageUpFunctionKey), code: 116, held: .function))
+        XCTAssertEqual(top, 1700 - 260)
+        keys.keyDown(with: key(function(NSHomeFunctionKey), code: 115, held: .function))
+        XCTAssertEqual(top, 0, "Home, the top")
+
+        XCTAssertFalse(ReaderPage.scrolls(key("r", code: 15), in: window), "r goes on, to the Message menu")
+        XCTAssertFalse(ReaderPage.scrolls(key(function(NSDownArrowFunctionKey), code: 125, held: .command), in: window))
+
+        // A field takes the keyboard (Find in Message's); the message takes it back once the field lets it go.
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 100, height: 22))
+        window.contentView?.addSubview(field)
+        XCTAssertTrue(window.makeFirstResponder(field))
+        keys.takeIfNowhere()
+        XCTAssertFalse(window.firstResponder === keys)
+        field.removeFromSuperview()
+        keys.takeIfNowhere()
+        XCTAssertTrue(window.firstResponder === keys)
+        window.contentView = nil
+    }
+}
