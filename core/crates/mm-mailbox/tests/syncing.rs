@@ -238,7 +238,13 @@ fn standing(syncing: &Syncing, account: &str) -> Option<AccountSync> {
 }
 
 fn error(class: &'static str) -> Option<AccountSync> {
-    Some(AccountSync { health: "error", msg: class.to_owned(), reading: None })
+    Some(AccountSync { health: "error", msg: class.to_owned(), reading: None, trying_again: false })
+}
+
+/// An account no sync has reached, whose last sync failed by trouble that doesn't show yet: nothing says how it stands
+/// but that the next sync tries again, so nothing says it synced.
+fn trying_again() -> Option<AccountSync> {
+    Some(AccountSync { health: "", msg: String::new(), reading: None, trying_again: true })
 }
 
 #[test]
@@ -283,7 +289,7 @@ fn a_connection_lost_once_shows_nothing_and_keeps_no_error_until_the_next_sync_f
     let world = World::with(&[ADA]);
     let syncing = syncing(&world);
     syncing.sync_guarded(None);
-    assert_eq!(standing(&syncing, ADA), None, "it shows as it did before");
+    assert_eq!(standing(&syncing, ADA), trying_again(), "it shows as it did before, trying again");
     assert_eq!(world.recorded.load(Ordering::SeqCst), 0, "nor does its record keep an error");
     syncing.sync_guarded(None);
     assert_eq!(standing(&syncing, ADA), error("ConnectionRefused"));
@@ -320,7 +326,7 @@ fn a_failure_that_may_pass_shows_three_minutes_on_though_no_sync_has_run_since()
     let syncing = syncing(&world);
     syncing.sync_guarded(None);
     pass(&world, 179);
-    assert_eq!(standing(&syncing, ADA), None);
+    assert_eq!(standing(&syncing, ADA), trying_again());
     pass(&world, 1);
     assert_eq!(standing(&syncing, ADA), error("Timeout"));
 }
@@ -332,7 +338,7 @@ fn a_login_the_server_cant_take_for_now_may_pass_and_one_it_refused_shows_at_onc
     fail(&world, BEA, ServerError::Unreachable("LoginRefused"));
     let syncing = syncing(&world);
     syncing.sync_guarded(None);
-    assert_eq!(standing(&syncing, ADA), None);
+    assert_eq!(standing(&syncing, ADA), trying_again());
     assert_eq!(standing(&syncing, BEA), error("LoginRefused"));
 }
 
@@ -346,11 +352,12 @@ fn a_wake_starts_trouble_that_may_pass_afresh_so_a_failure_from_before_the_sleep
     pass(&world, 3600);
     assert_eq!(standing(&syncing, ADA), error("ConnectionRefused"), "an hour on, it would show by its age");
     syncing.woke();
-    assert_eq!(standing(&syncing, ADA), None);
-    // The sync on waking fails while the network comes back: the first of a new run, so still nothing shows.
+    assert_eq!(standing(&syncing, ADA), None, "nor is the failure from before the sleep trying again");
+    // The sync on waking fails while the network comes back: the first of a new run, so still nothing shows as
+    // failing, and the next tries again.
     let recorded = world.recorded.load(Ordering::SeqCst);
     syncing.sync_guarded(None);
-    assert_eq!(standing(&syncing, ADA), None);
+    assert_eq!(standing(&syncing, ADA), trying_again());
     assert_eq!(world.recorded.load(Ordering::SeqCst), recorded + 1, "only the refused login's record keeps an error");
     // A run that lasts shows, as before the sleep.
     syncing.sync_guarded(None);
@@ -414,9 +421,9 @@ fn a_removed_accounts_run_of_failures_goes_with_it_so_added_again_it_starts_afre
     assert_eq!(standing(&syncing, ADA), error("ConnectionRefused"), "it shows by its age");
     syncing.removed(ADA);
     assert_eq!(standing(&syncing, ADA), None);
-    // Added again, its first failure is the first of a new run: nothing shows, an hour on or not.
+    // Added again, its first failure is the first of a new run: nothing shows as failing, an hour on or not.
     syncing.sync_guarded(None);
-    assert_eq!(standing(&syncing, ADA), None);
+    assert_eq!(standing(&syncing, ADA), trying_again());
 }
 
 #[test]
