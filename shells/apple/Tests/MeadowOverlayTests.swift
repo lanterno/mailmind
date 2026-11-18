@@ -524,6 +524,53 @@ final class MeadowOverlayTests: XCTestCase {
         XCTAssertTrue(DialogFocus.owner(of: window.firstResponder) === search)
     }
 
+    func testAKeyboardLeftNowhereGoesToTheList() {
+        let (window, table, focus) = listWindow()
+        // Esc in the top search: SwiftUI lets the field go, and the window is left holding the keyboard.
+        let search = field(in: window)
+        search.removeFromSuperview()
+        XCTAssertTrue(DialogFocus.nowhere(window.firstResponder, in: window))
+        focus.settle()
+        XCTAssertTrue(window.firstResponder === table, "j works again at once")
+
+        let other = field(in: window)
+        focus.settle()
+        XCTAssertTrue(DialogFocus.owner(of: window.firstResponder) === other, "a field keeps what it has")
+        other.removeFromSuperview()
+
+        focus.opened()
+        window.makeFirstResponder(nil)
+        focus.settle()
+        XCTAssertFalse(window.firstResponder === table, "a dialog up hands the keyboard on itself")
+        focus.closing()
+        focus.settle()
+        XCTAssertFalse(window.firstResponder === table, "and as it goes")
+        focus.gone()
+        XCTAssertTrue(window.firstResponder === table)
+
+        focus.waits = { true }
+        window.makeFirstResponder(nil)
+        focus.settle()
+        XCTAssertFalse(window.firstResponder === table, "nor under the first run's welcome")
+    }
+
+    func testTheWindowsProbeHearsTheKeyboardGoNowhereAndKeepsItsWindow() async {
+        let (window, table, focus) = listWindow()
+        focus.window = nil
+        let first = DialogFocusWindow.Probe(focus)
+        window.contentView?.addSubview(first)
+        XCTAssertTrue(focus.window === window)
+        // SwiftUI makes the probe again and takes the old one out after the new one is in.
+        let second = DialogFocusWindow.Probe(focus)
+        window.contentView?.addSubview(second)
+        first.removeFromSuperview()
+        XCTAssertTrue(focus.window === window, "the one leaving leaves the window known")
+
+        window.makeFirstResponder(nil)
+        await until { window.firstResponder === table }
+        second.removeFromSuperview()
+    }
+
     // MARK: Toasts
 
     func testAToastsIconFollowsItsVerb() {
