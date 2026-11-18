@@ -554,6 +554,33 @@ final class OpenedMessageVerbsTests: XCTestCase {
         XCTAssertEqual(alone.subject, "Whenever suits")
     }
 
+    /// A message opened from outside the list is marked read as it is read, as one from the list is: the reader's
+    /// pane asks whether it is unread as its conversation says (`ReaderPane.dwell`, a view's task, asks this after its
+    /// moment on the message). Marked, it is read again, and isn't marked twice.
+    func testAMessageOpenedFromOutsideTheListIsKnownUnreadSoItIsMarkedRead() async throws {
+        let world = await world()
+        _ = try await open(.briefCanWait, in: world)
+        let unread = await world.mailbox.opensUnread(Self.away)
+        XCTAssertTrue(unread)
+
+        var read = Self.awayMember
+        read.seen = true
+        world.server.on("GET", API.Get.Thread.path, API.Thread(account: Fixture.ada, count: 1, items: [read], ok: true,
+                                                               replyKey: 90, threadId: "t90"))
+        world.mailbox.rereadOutside()
+        await waiting(for: "the message read again") { !Marks(world.mailbox.shownRows).unread }
+        let unreadNow = await world.mailbox.opensUnread(Self.away)
+        XCTAssertFalse(unreadNow, "read, it isn't marked again")
+
+        // A row the list holds is as the list has it, and a message not open is never asked after.
+        await inbox(world.app)
+        let row = try XCTUnwrap(world.app.list?.copy(at: 0))
+        world.mailbox.chose([row])
+        let listed = await world.mailbox.opensUnread(MailCopy(row))
+        XCTAssertEqual(listed, !row.seen)
+        let notOpen = await world.mailbox.opensUnread(Self.away)
+        XCTAssertFalse(notOpen)
+    }
 }
 
 /// Wait on the main actor until `done`, or fail after five seconds saying what was waited for.
