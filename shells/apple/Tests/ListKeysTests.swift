@@ -161,4 +161,28 @@ final class ListKeysTests: XCTestCase {
         press("j", table)
         XCTAssertEqual(app.selection.copy?.key, 5, "and j goes on from it, not from the top")
     }
+
+    // MARK: A row's clock
+
+    func testARowsClockIsWhereItsSnoozeChooserHangs() async throws {
+        let (app, controller) = try await table()
+        let window = window()
+        window.contentView?.addSubview(controller.scrollView)
+        let anchors = MeadowAnchors()
+        controller.anchors = anchors
+        var asked: [Int] = []
+        app.mailbox.snoozes = { rows in asked += rows.map(\.key) }
+        let table = controller.table
+        let cell = try XCTUnwrap(table.view(atColumn: 0, row: 2, makeIfNecessary: true) as? MailRowCell)
+        let clock = try XCTUnwrap(cell.frame(of: .snooze))
+        controller.press(.act(.snooze), row: 2)
+        XCTAssertEqual(asked, [3])
+        let hung = try XCTUnwrap(anchors.frames[MailboxTableController.rowSnooze], "the row's clock, not the pane's")
+        // In the window, its top left first, as SwiftUI's global space has it.
+        let inWindow = cell.convert(clock, to: nil)
+        XCTAssertEqual(hung.minX, inWindow.minX, accuracy: 0.5)
+        XCTAssertEqual(hung.minY, window.contentView!.bounds.height - inWindow.maxY, accuracy: 0.5)
+        XCTAssertEqual(hung.size, clock.size)
+        window.contentView = nil
+    }
 }
