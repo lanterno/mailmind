@@ -67,7 +67,7 @@ extension Mailbox {
             moveOn(after)
             took = true
         } catch let refusal as Problem where refusal.isReadOnly {
-            say(ReadOnlyWords.refused)
+            say(ReadOnlyWords.refused, refused: true)
         } catch {
             say("Couldn’t \(words.act)", detail: (error as? Problem)?.detail)
         }
@@ -83,7 +83,7 @@ extension Mailbox {
             let rows = await targets(standing: false)
             guard let first = rows.first else { return saysNothingChosen() }
             if Set(rows.map(\.account)).count > 1 {
-                say(String(localized: "Those are in different accounts — mark one account’s mail to move it"))
+                say(String(localized: "Those are in different accounts — mark one account’s mail to move it"), refused: true)
                 return
             }
             let from = Set(rows.map(\.folder))
@@ -129,7 +129,7 @@ extension Mailbox {
             return false
         }
         guard !rows.isEmpty else {
-            say(String(localized: "Already in \(label)"))
+            say(String(localized: "Already in \(label)"), refused: true)
             return false
         }
         let after = nextOpen(leaving: rows)
@@ -162,7 +162,7 @@ extension Mailbox {
             moveOn(after)
             took = true
         } catch let refusal as Problem where refusal.isReadOnly {
-            say(ReadOnlyWords.refused)
+            say(ReadOnlyWords.refused, refused: true)
         } catch {
             let why = (error as? Problem)?.description
             say("Couldn’t move" + (why.map { ": \($0)" } ?? ""))
@@ -200,7 +200,7 @@ extension Mailbox {
             }
             say(seen ? String(localized: "Marked read") : String(localized: "Marked unread"))
         } catch let refusal as Problem where refusal.isReadOnly {
-            say(ReadOnlyWords.refused)
+            say(ReadOnlyWords.refused, refused: true)
         } catch {
             say(String(localized: "Couldn’t update"), detail: (error as? Problem)?.detail)
         }
@@ -234,7 +234,7 @@ extension Mailbox {
             }
             say(on ? String(localized: "Starred") : String(localized: "Unstarred"))
         } catch let refusal as Problem where refusal.isReadOnly {
-            say(ReadOnlyWords.refused)
+            say(ReadOnlyWords.refused, refused: true)
         } catch {
             say(String(localized: "Couldn’t star"), detail: (error as? Problem)?.detail)
         }
@@ -254,7 +254,7 @@ extension Mailbox {
             do {
                 try await send(row)
             } catch let refusal as Problem where refusal.isReadOnly {
-                say(ReadOnlyWords.refused)
+                say(ReadOnlyWords.refused, refused: true)
                 readAgain()
                 return
             } catch {
@@ -288,10 +288,11 @@ extension Mailbox {
                 say("\(done.label.flatMap { $0.isEmpty ? nil : $0 } ?? "Action") undone")
             }
         } catch let problem as Problem where problem.isReadOnly {
-            say(ReadOnlyWords.refused)
+            say(ReadOnlyWords.refused, refused: true)
         } catch let problem as Problem where problem.isRefusal {
             say(problem.more["empty"] == .bool(true) ? String(localized: "Nothing to undo")
-                                                     : problem.detail ?? String(localized: "Couldn’t undo"))
+                                                     : problem.detail ?? String(localized: "Couldn’t undo"),
+                refused: true)
         } catch {
             say(String(localized: "Couldn’t undo"))
         }
@@ -346,7 +347,7 @@ extension Mailbox {
     {
         let n = chunked.total, done = n - chunked.failed
         if chunked.readOnly && done == 0 {
-            say(ReadOnlyWords.refused)
+            say(ReadOnlyWords.refused, refused: true)
             readAgain()
             return false
         }
@@ -411,7 +412,7 @@ extension Mailbox {
 
     /// A verb with nothing chosen or open: said, so a key or a command never does nothing without a word.
     func saysNothingChosen() {
-        say(String(localized: "Choose a message first"))
+        say(String(localized: "Choose a message first"), refused: true)
     }
 
     /// Read again what a verb changed: the list in place, the lane, the message open from outside them, and the

@@ -33,7 +33,7 @@ extension Mailbox {
     func go(role: String) {
         guard let account = goingAccount else { return }
         guard let found = folder(playing: role, on: account) else {
-            say("No \(role) folder on this account")
+            say("No \(role) folder on this account", refused: true)
             return
         }
         app?.place = .folder(account: account, folder: found.name)
@@ -92,7 +92,7 @@ extension Mailbox {
             }
             position += by
         }
-        say(by > 0 ? String(localized: "No more unread below") : String(localized: "No more unread above"))
+        say(by > 0 ? String(localized: "No more unread below") : String(localized: "No more unread above"), refused: true)
         return false
     }
 
@@ -175,7 +175,7 @@ extension Mailbox {
                 views = try await calls.post(API.Post.Views.self, API.ViewChange(name: name, q: q, verb: .create)).views
                 say("Saved view · \(name)")
             } catch let problem as Problem where problem.isRefusal {
-                say(problem.detail ?? String(localized: "Couldn’t save"))
+                say(problem.detail ?? String(localized: "Couldn’t save"), refused: true)
             } catch {
                 say(String(localized: "Couldn’t save view"))
             }

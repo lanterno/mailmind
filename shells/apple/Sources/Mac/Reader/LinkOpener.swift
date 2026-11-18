@@ -27,7 +27,7 @@ enum LinkOpener {
     static func open(_ link: FrameLink, senderDomain: String?, in window: NSWindow?) {
         switch LinkOpening.of(href: link.href, text: link.text, senderDomain: senderDomain) {
         case .refuse:
-            Composing.shared.say("This link can’t be opened")
+            Composing.shared.say("This link can’t be opened", refused: true)
         case .compose(let to, let subject):
             Composing.shared.newMessage(to: to, subject: subject)
         case .browse(let url, nil):

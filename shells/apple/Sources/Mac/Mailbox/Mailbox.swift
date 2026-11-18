@@ -565,10 +565,12 @@ final class Mailbox {
     // MARK: Telling a person
 
     /// Tell a person what happened, with an Undo when `undo` names one: said for a moment, or longer with an Undo.
-    func say(_ text: String, detail: String? = nil, undo: String? = nil) {
+    /// Say `text` in the window's toast for a moment. A refusal (`refused`: read only, nothing chosen, a server's
+    /// no) shows the alert, never the tick that says something was done.
+    func say(_ text: String, detail: String? = nil, undo: String? = nil, refused: Bool = false) {
         toastNumber += 1
         let number = toastNumber
-        toast = Toast(text: text, detail: detail, undo: undo)
+        toast = Toast(text: text, detail: detail, undo: undo, refused: refused)
         Task {
             try? await Task.sleep(for: .milliseconds(undo == nil ? Toast.saysMs : Toast.offersMs))
             if toastNumber == number { toast = nil }
@@ -587,6 +589,8 @@ struct Toast: Identifiable, Equatable {
     var text: String
     var detail: String?
     var undo: String?
+    /// Something asked was turned down, or nothing was done.
+    var refused = false
 
     /// How long words stay, and an Undo offer.
     static let saysMs = 2600

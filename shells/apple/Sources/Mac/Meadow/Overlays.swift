@@ -779,6 +779,22 @@ extension MeadowToast where Actions == EmptyView {
     init(icon: MeadowIcon = .check, _ text: String, detail: String? = nil) {
         self.init(icon: icon, text: Text(text), detail: detail) { EmptyView() }
     }
+
+    /// Words said for a moment, with the alert for a refusal or a failure and the tick for the rest.
+    init(_ words: ToastWords) {
+        self.init(icon: words.icon, words.text)
+    }
+}
+
+/// A few words a toast says, and whether they turn something down: a refusal or a failure never shows the tick that
+/// says something was done.
+struct ToastWords: Equatable {
+    let text: String
+    var refused = false
+
+    var icon: MeadowIcon {
+        refused || MailboxToast.icon(text) == .alert ? .alert : .check
+    }
 }
 
 /// A toast's colours: ink and paper the other way about, and what its buttons lie on.

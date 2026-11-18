@@ -298,7 +298,7 @@ struct MailboxToast: View {
     let toast: Toast
 
     var body: some View {
-        MeadowToast(icon: Self.icon(toast.text), text: Text(toast.text), detail: toast.detail) {
+        MeadowToast(icon: Self.icon(toast.text, refused: toast.refused), text: Text(toast.text), detail: toast.detail) {
             if toast.undo != nil {
                 MeadowToastButton(title: String(localized: "Undo"), icon: .undo,
                                   key: mailbox.singleKeys ? "Z" : "⌘Z") { mailbox.undo() }
@@ -307,12 +307,14 @@ struct MailboxToast: View {
         .onAppear { AccessibilityNotification.Announcement(toast.text).post() }
     }
 
-    /// The icon for what was said, by the word the mailbox starts it with (`Words.filed`, the marks, Undo): a
-    /// refusal's alert, a verb's own icon, else a tick. Words it doesn't know, a translation's among them, take the
-    /// tick.
-    static func icon(_ text: String) -> MeadowIcon {
+    /// The icon for what was said: a refusal's alert, never the tick, for words said as one (`refused`) or that say
+    /// one (read only's sentence, "Couldn’t…", "Too late…"); else by the word the mailbox starts it with
+    /// (`Words.filed`, the marks, Undo), a verb's own icon, else a tick. Words it doesn't know, a translation's among
+    /// them, take the tick.
+    static func icon(_ text: String, refused: Bool = false) -> MeadowIcon {
+        if refused || text == ReadOnlyWords.refused { return .alert }
         let starts: [(String, MeadowIcon)] = [
-            ("Couldn’t", .alert), ("Archived", .archive), ("Trashed", .trash), ("Marked junk", .ban),
+            ("Couldn’t", .alert), ("Too late", .alert), ("Nothing to", .alert), ("Archived", .archive), ("Trashed", .trash), ("Marked junk", .ban),
             ("Moved", .folder), ("Starred", .star), ("Unstarred", .star), ("Marked read", .mailOpen),
             ("Marked unread", .mail), ("Saved view", .bookmark), ("Snoozed", .clock), ("Muted", .bellOff),
             ("Saved to Reply later", .bookmark), ("Go to folder", .arrowRight), ("Saved ", .download),

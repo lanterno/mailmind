@@ -38,7 +38,7 @@ final class Composing: ComposeHost {
     private(set) var composers: [UUID: Composer] = [:]
     private(set) var float: SendFloat?
     /// What the main window says for a moment, as the page's toasts.
-    private(set) var notice: String?
+    private(set) var notice: ToastWords?
     /// The replies written ahead, by the message's key.
     private(set) var chips: [Int: DraftChip] = [:]
     /// Opens a composer's window: the main window's scene gives it.
@@ -165,9 +165,9 @@ final class Composing: ComposeHost {
         }
     }
 
-    /// Say something in the main window for a moment, and to a screen reader.
-    func say(_ text: String, for seconds: Double = 2.6) {
-        notice = text
+    /// Say something in the main window for a moment, and to a screen reader: a refusal (`refused`) with the alert.
+    func say(_ text: String, for seconds: Double = 2.6, refused: Bool = false) {
+        notice = ToastWords(text: text, refused: refused)
         announce(text)
         noticeTimer?.cancel()
         noticeTimer = Task { [weak self] in
@@ -296,7 +296,7 @@ final class Composing: ComposeHost {
                 // Read only turned it down before anything was queued: the message comes back as it was, to keep.
                 showFloat(nil)
                 open(snapshot, edited: true)
-                say(ReadOnlyWords.refused, for: 5)
+                say(ReadOnlyWords.refused, for: 5, refused: true)
             } catch {
                 failedSend = snapshot
                 showFloat(.failed("Send failed — \(said(error))"))
@@ -409,7 +409,7 @@ final class Composing: ComposeHost {
     @discardableResult
     func open(_ seed: ComposeSeed, current: String? = nil, edited: Bool = false) -> Composer? {
         guard !senders.isEmpty else {
-            say("No sending account configured — add one in Settings")
+            say("No sending account configured — add one in Settings", refused: true)
             return nil
         }
         let composer = Composer(seed, host: self, current: current, edited: edited)
@@ -454,7 +454,7 @@ final class Composing: ComposeHost {
     /// window.
     private func openInline(_ seed: ComposeSeed, for copy: MailCopy) -> Composer? {
         guard !senders.isEmpty else {
-            say("No sending account configured — add one in Settings")
+            say("No sending account configured — add one in Settings", refused: true)
             return nil
         }
         if let open = inline {
@@ -491,7 +491,7 @@ final class Composing: ComposeHost {
             let note = Seeds.resumeNotice(reopened.notes)
             if !note.isEmpty { announce(note) }
         } catch {
-            say(said(error).isEmpty ? "Couldn’t open this draft." : said(error))
+            say(said(error).isEmpty ? "Couldn’t open this draft." : said(error), refused: true)
             if copy != nil && gone(error) { mailChanged?() }   // that copy is gone: don't keep showing it
         }
     }
