@@ -206,6 +206,19 @@ final class ListKeysTests: XCTestCase {
         XCTAssertEqual(app.selection.copy?.key, 5, "and j goes on from it, not from the top")
     }
 
+    // MARK: The ends of the list
+
+    func testKFromTheInboxsFirstRowGoesToTheBrief() async throws {
+        let (app, controller) = try await table(brief: true)
+        app.mailbox.chose([try XCTUnwrap(app.list?.copy(at: 0))])
+        press("k", controller.table)
+        XCTAssertEqual(app.place, .desk(.brief), "k reaches the brief, as the up arrow does")
+        press("k", controller.table)
+        XCTAssertEqual(app.place, .desk(.brief), "nothing is above it, and nothing is said")
+        XCTAssertNil(app.mailbox.toast)
+        XCTAssertTrue(routes.sent.filter { $0.method == "POST" }.isEmpty, "the brief opens; nothing is written")
+    }
+
     // MARK: A row's clock
 
     func testARowsClockIsWhereItsSnoozeChooserHangs() async throws {
