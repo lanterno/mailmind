@@ -78,11 +78,12 @@ final class AttentionModel {
         }
     }
 
+    /// Brought back now: off the Snoozed stack, the one place it is offered, so it leaves the list shown.
     func unsnooze(_ copies: [MailCopy]) async {
         let body = copies.count == 1
             ? API.NamesThreadOrMessages(folder: copies[0].folder, key: copies[0].key, uid: copies[0].uid)
             : API.NamesThreadOrMessages(copies: copies.map(\.aCopy))
-        await act(copies, fail: { _ in String(localized: "Couldn’t unsnooze") }) { routes in
+        await act(copies, left: leaving(copies), fail: { _ in String(localized: "Couldn’t unsnooze") }) { routes in
             _ = try await routes.post(API.Post.Unsnooze.self, body)
             return (String(localized: "Unsnoozed"), false)
         }
@@ -115,8 +116,10 @@ final class AttentionModel {
         }
     }
 
+    /// Off the Muted stack, the one place it is offered, so it leaves the list shown.
     func unmute(_ copies: [MailCopy]) async {
-        await each(copies, said: String(localized: "Unmuted"), fail: { _ in String(localized: "Couldn’t unmute") }) {
+        await each(copies, said: String(localized: "Unmuted"), left: leaving(copies),
+                   fail: { _ in String(localized: "Couldn’t unmute") }) {
             _ = try await $0.post(API.Post.Unmute.self, API.NamesAThread(folder: $1.folder, key: $1.key, uid: $1.uid))
         }
     }
@@ -139,9 +142,11 @@ final class AttentionModel {
         }
     }
 
-    /// No longer waiting on a reply to it.
+    /// No longer waiting on a reply to it: off the Waiting stack, the one place it is offered, so it leaves the list
+    /// shown.
     func dismissFollowup(_ copies: [MailCopy]) async {
-        await each(copies, said: String(localized: "Dismissed"), fail: { _ in String(localized: "Couldn’t dismiss") }) {
+        await each(copies, said: String(localized: "Dismissed"), left: leaving(copies),
+                   fail: { _ in String(localized: "Couldn’t dismiss") }) {
             _ = try await $0.post(API.Post.FollowupsDismiss.self,
                                   API.NamesAThread(folder: $1.folder, key: $1.key, uid: $1.uid))
         }
