@@ -20,8 +20,9 @@
 //!
 //! An account shows as failing only as `sync_health` says: trouble that may pass (a lost connection, a timeout, a
 //! server that can't take a login for now) once a second sync in a row has failed too, or three minutes on; until
-//! then it shows as it did before, and its record keeps no error. A wake, or a change of network, starts each such
-//! run again (`woke`).
+//! then it shows as it did before, and its record keeps no error, but its status says it is trying again
+//! (`trying_again`), so nothing says it synced when its last sync didn't. A wake, or a change of network, starts each
+//! such run again (`woke`).
 //!
 //! An account removed (`removed`) stops each sync and read of older mail reading its mail at its next step, as its
 //! flights (`flights`) were told, and nothing is kept of how its syncs went: its status, how far its first scan had
@@ -56,13 +57,15 @@ pub const OLDER_EVERY: i64 = 600;
 /// Seconds after the start before the first, which goes on with what a quit or a crash left unread.
 pub const OLDER_FIRST: i64 = 15;
 
-/// How one account's sync stands now: its health (ok, syncing or error), what it last said, and while the Inbox's
-/// first scan still has older mail to read, how far it has got.
+/// How one account's sync stands now: its health (ok, syncing or error, or none before its first sync), what it last
+/// said, while the Inbox's first scan still has older mail to read how far it has got, and whether its last sync
+/// failed by trouble that may pass, which doesn't show as failing yet: the next sync tries again.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AccountSync {
     pub health: &'static str,
     pub msg: String,
     pub reading: Option<Progress>,
+    pub trying_again: bool,
 }
 
 /// How the sync as a whole stands now.
@@ -200,7 +203,8 @@ impl Syncing {
         self.held.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// How each account's sync stands now: one whose failures in a row now show, three minutes on, as failing.
+    /// How each account's sync stands now: one whose failures in a row now show, three minutes on, as failing; one
+    /// whose don't show yet as it did before, trying again. One syncing now says that alone.
     pub fn status(&self) -> Result<BTreeMap<String, AccountSync>, Fault> {
         let now = self.seconds();
         let held = self.held();
@@ -209,8 +213,17 @@ impl Syncing {
             let said = status.get(account);
             let (syncing, reading) =
                 (said.is_some_and(|now| now.health == "syncing"), said.and_then(|now| now.reading));
-            if run.shows(now) && !syncing {
-                status.insert(account.clone(), AccountSync { health: "error", msg: run.class.to_owned(), reading });
+            if syncing {
+                continue;
+            }
+            if run.shows(now) {
+                let msg = run.class.to_owned();
+                status.insert(account.clone(), AccountSync { health: "error", msg, reading, trying_again: false });
+            } else {
+                // As it was, health and all, but its last sync failed: nothing may say it synced. An account no sync
+                // has reached has no health to show.
+                let none = AccountSync { health: "", msg: String::new(), reading, trying_again: false };
+                status.entry(account.clone()).or_insert(none).trying_again = true;
             }
         }
         Ok(status)
@@ -238,7 +251,7 @@ impl Syncing {
     fn set_status(&self, account: &str, health: &'static str, msg: String) {
         let mut held = self.held();
         let reading = held.status.get(account).and_then(|now| now.reading);
-        held.status.insert(account.to_owned(), AccountSync { health, msg, reading });
+        held.status.insert(account.to_owned(), AccountSync { health, msg, reading, trying_again: false });
     }
 
     /// An account shows as it did before a sync whose failure may pass, keeping how far its Inbox's first scan has
@@ -248,9 +261,10 @@ impl Syncing {
         let reading = held.status.get(account).and_then(|now| now.reading);
         match before {
             Some(before) => held.status.insert(account.to_owned(), AccountSync { reading, ..before }),
-            None if reading.is_some() => {
-                held.status.insert(account.to_owned(), AccountSync { health: "ok", msg: String::new(), reading })
-            }
+            None if reading.is_some() => held.status.insert(
+                account.to_owned(),
+                AccountSync { health: "ok", msg: String::new(), reading, trying_again: false },
+            ),
             None => held.status.remove(account),
         };
     }
@@ -259,8 +273,8 @@ impl Syncing {
     /// reached yet in this process reads as connected: its server just answered.
     fn set_reading(&self, account: &str, reading: Option<Progress>) {
         let mut held = self.held();
-        let now =
-            held.status.entry(account.to_owned()).or_insert(AccountSync { health: "ok", msg: String::new(), reading });
+        let connected = AccountSync { health: "ok", msg: String::new(), reading, trying_again: false };
+        let now = held.status.entry(account.to_owned()).or_insert(connected);
         now.reading = reading;
     }
 

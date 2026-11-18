@@ -161,13 +161,17 @@ impl InboxSync for LiveSync {
     }
 }
 
-/// An account's sync as the status says it: its health and what it said, and while its Inbox's first scan is still
-/// reading older mail, how many of the Inbox's messages it has read (`done`) of how many (`total`).
+/// An account's sync as the status says it: its health and what it said, while its Inbox's first scan is still
+/// reading older mail how many of the Inbox's messages it has read (`done`) of how many (`total`), and when its last
+/// sync failed by trouble that doesn't show yet, that the next tries again (`trying_again`).
 fn said(a: &AccountSync) -> Value {
     let mut said = json!({"health": a.health, "msg": a.msg});
     if let Some(reading) = a.reading {
         said["done"] = json!(reading.done);
         said["total"] = json!(reading.total);
+    }
+    if a.trying_again {
+        said["trying_again"] = json!(true);
     }
     said
 }
