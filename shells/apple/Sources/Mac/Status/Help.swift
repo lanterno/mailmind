@@ -204,12 +204,25 @@ enum Guide {
 }
 
 /// The guide as a sheet drawn as Meadow's dialog, on its paper in the light's ink: a step at a time, Back, Skip and
-/// Next, Done at the end.
+/// Next, Done at the end. The arrow keys go back and on as its buttons do.
 struct GuideSheet: View {
     let steps: [Guide.Step]
     let end: () -> Void
     @State private var at = 0
+    /// The sheet has the keyboard as it opens, so its arrows are its own.
+    @FocusState private var focused: Bool
     @Environment(\.meadow) private var meadow
+
+    /// Where an arrow key takes the guide from step `at` of `count`: back a step or on one, staying at either end;
+    /// Done, or Return, ends it.
+    static func step(from at: Int, of count: Int, forward: Bool) -> Int {
+        max(0, min(count - 1, at + (forward ? 1 : -1)))
+    }
+
+    private func arrow(forward: Bool) -> KeyPress.Result {
+        at = Self.step(from: at, of: steps.count, forward: forward)
+        return .handled
+    }
 
     var body: some View {
         let step = steps[min(at, steps.count - 1)]
@@ -247,6 +260,16 @@ struct GuideSheet: View {
         }
         .padding(22)
         .frame(width: 440, height: 250)
+        .background {
+            DialogKeys(focused: $focused) { press in
+                switch press.key {
+                case .leftArrow: arrow(forward: false)
+                case .rightArrow: arrow(forward: true)
+                default: .ignored
+                }
+            }
+        }
+        .onAppear { focused = true }
         .background { ComposePaper() }
         .presentationBackground { ComposePaper() }
     }
