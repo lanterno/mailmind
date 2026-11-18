@@ -24,6 +24,9 @@
 //! (`trying_again`), so nothing says it synced when its last sync didn't. A wake, or a change of network, starts each
 //! such run again (`woke`).
 //!
+//! A sync that works after one of the account's failed, a wake between them or not, and a person's Retry, let go of
+//! the waits of the changes queued for its server (`AroundSync::server_back`): they go now, not minutes on.
+//!
 //! An account removed (`removed`) stops each sync and read of older mail reading its mail at its next step, as its
 //! flights (`flights`) were told, and nothing is kept of how its syncs went: its status, how far its first scan had
 //! got, its run of failures, an ask to sync it again; now, and again as the last of them lands.
@@ -92,6 +95,9 @@ struct Held {
     failing: BTreeMap<String, Failing>,
     /// Each account whose last read of older mail met trouble that may pass: its next sync that works reads on.
     older_failed: BTreeSet<String>,
+    /// Each account whose last sync failed, kept through a wake: its next sync that works lets the changes queued for
+    /// its server go.
+    unreached: BTreeSet<String>,
 }
 
 /// The coarse, scrubbed kind of a sync's failure, from its class alone (`accounts.domain.health.error_kind`).
@@ -286,6 +292,7 @@ impl Syncing {
         held.failing.remove(account);
         held.again.remove(account);
         held.older_failed.remove(account);
+        held.unreached.remove(account);
     }
 
     /// The account was removed: each sync reading its mail stops at its next step (its flights were told), and nothing
@@ -321,6 +328,10 @@ impl Syncing {
             }
             Ok(synced) => {
                 self.held().failing.remove(email);
+                if self.held().unreached.remove(email) {
+                    // The server answers again: what was queued for it while it didn't goes now.
+                    self.around.server_back(email);
+                }
                 if self.held().older_failed.remove(email) {
                     // The server answers again: the older mail its last read couldn't reach is read on now, not at
                     // the background's next round, minutes on.
@@ -353,6 +364,7 @@ impl Syncing {
                 let (class, kind, now) = (error.class(), error_kind(error), self.seconds());
                 let run = {
                     let mut held = self.held();
+                    held.unreached.insert(email.to_owned());
                     let run = Failing::and(held.failing.get(email), class, sync_health::may_pass(class, kind), now);
                     held.failing.insert(email.to_owned(), run.clone());
                     run
@@ -553,6 +565,8 @@ impl Syncing {
             return Err(Problem::refused("unknown account").into());
         }
         command_ports::write(&*self.store, |tx| tx.clear_sync_error(account))?;
+        // A person asked: what waits for the account's server goes with its sync, whatever the last one came to.
+        self.around.server_back(account);
         Ok(account.to_owned())
     }
 }

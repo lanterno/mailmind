@@ -359,6 +359,13 @@ impl Tx for Block<'_> {
             .map_err(storage)
     }
 
+    fn release(&self, account: &str, now: i64) -> Result<usize, Fault> {
+        self.run(
+            "UPDATE mail_commands SET next_attempt_at=? WHERE account=? AND state='queued' AND next_attempt_at>?",
+            params![now, account, now],
+        )
+    }
+
     fn counts(&self) -> Result<BTreeMap<String, i64>, Fault> {
         let mut statement =
             self.0.prepare_cached("SELECT state, COUNT(*) FROM mail_commands GROUP BY state").map_err(storage)?;

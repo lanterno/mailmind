@@ -118,6 +118,8 @@ pub trait Tx {
     fn cancel_unapplied(&self, id: i64) -> Result<bool, Fault>;
     /// The soonest a queued row comes due after `after`.
     fn next_due(&self, after: i64) -> Result<Option<i64>, Fault>;
+    /// Each of `account`'s queued rows waiting out a backoff due at `now`: how many.
+    fn release(&self, account: &str, now: i64) -> Result<usize, Fault>;
     /// How many rows stand in each state, done ones too (`DurableQueue.counts`).
     fn counts(&self) -> Result<BTreeMap<String, i64>, Fault>;
 

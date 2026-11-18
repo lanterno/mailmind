@@ -386,7 +386,11 @@ impl App {
             folders: folders.clone(),
             events: mailbox_events.clone(),
             clock: seams.clock.clone(),
-            around: Arc::new(AroundRounds { snoozing: attention.snoozing.clone(), jobs: jobs.clone() }),
+            around: Arc::new(AroundRounds {
+                snoozing: attention.snoozing.clone(),
+                jobs: jobs.clone(),
+                commands: commands.clone(),
+            }),
             warm: warming.clone(),
         }));
         live_sync.bind(syncing.clone());

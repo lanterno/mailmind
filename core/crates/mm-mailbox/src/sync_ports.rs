@@ -195,4 +195,7 @@ pub trait AroundSync: Send + Sync + fmt::Debug {
     fn older_to_read(&self) -> bool {
         false
     }
+    /// The account's server answers again after a sync of it failed, or a person asked to try it again: the changes
+    /// waiting out a backoff for it go now.
+    fn server_back(&self, _account: &str) {}
 }

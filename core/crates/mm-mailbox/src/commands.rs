@@ -9,6 +9,8 @@
 //! The queue is the Python app's DurableQueue over the mail_commands table: an atomic claim, the `applied` flag as
 //! the exactly-once gate, backoff doubling from 20 seconds to 15 minutes, and rows a crash left running put back. Its
 //! worker (`workers::run_forever`) drains it whenever kicked, when the next row comes due, and at least every `POLL`.
+//! An account's server that answers again (`release`) lets go of the waits of its changes backing off, so they go
+//! now rather than minutes on.
 //! A try that panics is an attempt that failed (`Panic`), as one that lost its connection is: it backs off, and its
 //! message is listed again at the last; the rest of the pass goes on.
 
@@ -654,6 +656,21 @@ impl MailCommands {
     /// At boot: rows a crash left running go back to the queue.
     pub fn recover(&self) -> Result<(), Fault> {
         command_ports::write(&*self.store, |tx| tx.reset_running())
+    }
+
+    /// The account's server answers again, or a person asked to try it again: its changes waiting out a backoff go now,
+    /// rather than when their waits run out, minutes on. Their attempts stand, so one that keeps failing still gives
+    /// up. How many were waiting; a read-only process, which queued none, lets none go.
+    pub fn release(&self, account: &str) -> Result<usize, Fault> {
+        if self.read_only {
+            return Ok(0);
+        }
+        let now = self.now();
+        let released = command_ports::write(&*self.store, |tx| tx.release(account, now))?;
+        if released > 0 {
+            self.kick();
+        }
+        Ok(released)
     }
 
     /// Wake the worker now rather than at its next poll: something was queued for it.

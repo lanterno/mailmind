@@ -12,6 +12,7 @@ use mm_curation::screener::Screener;
 use mm_kernel::errors::{Failure, Fault};
 use mm_kernel::events::Topic;
 use mm_kernel::log;
+use mm_mailbox::commands::MailCommands;
 use mm_mailbox::filing::Filing;
 use mm_mailbox::folders::Folders;
 use mm_mailbox::stats::LiveStats;
@@ -142,11 +143,13 @@ impl Reverser for UnblockReverser {
 }
 
 /// What a sync round asks of the others (`Syncing`'s Attention, and its kick): what is snoozed and due wakes first,
-/// and new mail kicks the job that triages it, where this process runs one.
+/// new mail kicks the job that triages it, where this process runs one, and a server that answers again lets the
+/// changes queued for it go.
 #[derive(Debug)]
 pub(crate) struct AroundRounds {
     pub(crate) snoozing: Arc<Snoozing>,
     pub(crate) jobs: Arc<Jobs>,
+    pub(crate) commands: Arc<MailCommands>,
 }
 
 impl AroundSync for AroundRounds {
@@ -167,5 +170,11 @@ impl AroundSync for AroundRounds {
     fn older_to_read(&self) -> bool {
         self.jobs.kick(crate::workers::OLDER_MAIL);
         self.jobs.names().contains(&crate::workers::OLDER_MAIL)
+    }
+
+    fn server_back(&self, account: &str) {
+        if let Err(fault) = self.commands.release(account) {
+            log::warning("commands", "the changes waiting for a server weren't let go", &[], Some(fault.class));
+        }
     }
 }
