@@ -27,6 +27,9 @@ pub const GMAIL_WEB_SIGN_IN: &str =
     "Google wants you to sign in on the web first: sign in to Gmail in your browser, then test again.";
 pub const GMAIL_IMAP_OFF: &str =
     "IMAP is switched off for this account: turn it on in Gmail's settings, or ask your Workspace admin to.";
+/// MailMind has no password for the account (`NoCredential`): none in the Keychain, or wherever the account says it
+/// is, so nothing was sent and no server refused anything (`conn_error.NO_PASSWORD`).
+pub const NO_PASSWORD: &str = "no password";
 
 /// A connection's trouble in words that are safe to show (`conn_error.quiet`): what went wrong, never what the server
 /// or the error said. Each class is named as the Python app names the same trouble, and each of Gmail's refusals
@@ -38,7 +41,8 @@ pub fn quiet(trouble: LoginTrouble) -> &'static str {
         "LoginImapOff" => GMAIL_IMAP_OFF,
         "TLSPinMismatch" => "certificate changed",
         // A 1Password read that failed: Python's words say so of one whose reference names its `password` field.
-        "LoginRefused" | "LoginUnavailable" | "Unsendable" | "NoCredential" | "OpReadFailed" => "AUTHENTICATIONFAILED",
+        "LoginRefused" | "LoginUnavailable" | "Unsendable" | "OpReadFailed" => "AUTHENTICATIONFAILED",
+        "NoCredential" => NO_PASSWORD,
         "ConnectionRefused" => "connection refused",
         "Timeout" => "timeout",
         "NameNotResolved" => "host not found",

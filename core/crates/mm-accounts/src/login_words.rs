@@ -7,7 +7,7 @@
 //! certificate not trusted, Proton Bridge not running. A trouble at the outgoing (SMTP) server, met only once the
 //! incoming one let MailMind in, says reading mail works.
 
-use crate::connections::{GMAIL_APP_PASSWORD, GMAIL_IMAP_OFF, GMAIL_REFUSED, GMAIL_WEB_SIGN_IN};
+use crate::connections::{GMAIL_APP_PASSWORD, GMAIL_IMAP_OFF, GMAIL_REFUSED, GMAIL_WEB_SIGN_IN, NO_PASSWORD};
 use crate::draft::{BAD_PORT, BAD_SMTP_PORT};
 use crate::presets::{self, Link, Provider};
 
@@ -59,6 +59,21 @@ pub fn said_of(error: &str, whose: Whose<'_>, outgoing: bool) -> Said {
         "certificate changed" => said(
             "The mail server on this Mac showed a different certificate, so MailMind didn't send your password. If \
              you reinstalled or reset Proton Bridge, trust the new one in Settings.",
+            None,
+        ),
+        NO_PASSWORD if proton => said(
+            "MailMind has no Proton Bridge password: this Mac's Keychain doesn't hold one. Keep the password Bridge \
+             shows for this address under Proton Bridge password, then test again.",
+            Some(presets::PROTON_BRIDGE),
+        ),
+        NO_PASSWORD if outgoing => said(
+            "Reading mail works, but MailMind has no password for the outgoing server. Type it again, then test \
+             again.",
+            None,
+        ),
+        NO_PASSWORD => said(
+            "MailMind has no password for this account: this Mac's Keychain doesn't hold one. Type the password \
+             again, then test again.",
             None,
         ),
         "AUTHENTICATIONFAILED" if outgoing => said(

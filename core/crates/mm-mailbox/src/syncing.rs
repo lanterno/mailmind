@@ -100,11 +100,15 @@ struct Held {
     unreached: BTreeSet<String>,
 }
 
-/// The coarse, scrubbed kind of a sync's failure, from its class alone (`accounts.domain.health.error_kind`).
+/// The coarse, scrubbed kind of a sync's failure, from its class alone (`accounts.domain.health.error_kind`). MailMind
+/// having no password for the account (`NoCredential`: none in the Keychain, or wherever the account says it is) is a
+/// kind of its own, `NO_PASSWORD`: nothing was sent, and only a password typed again helps.
 pub fn error_kind(error: SyncError) -> &'static str {
     let name = error.class().to_lowercase();
     let has = |words: &[&str]| words.iter().any(|w| name.contains(w));
-    if has(&["tlspinmismatch"]) {
+    if has(&["nocredential"]) {
+        "NO_PASSWORD"
+    } else if has(&["tlspinmismatch"]) {
         "TLS_PIN"
     } else if has(&["timeout"]) {
         "TIMEOUT"
