@@ -5,6 +5,7 @@ import pytest
 
 from mailmind.accounts.domain import conn_error
 from mailmind.accounts.domain.account import PORT_SAID
+from mailmind.accounts.domain.credential import NoCredential
 from mailmind.accounts.domain.login_words import Said, said_of
 from mailmind.accounts.domain.preset import GOOGLE_APP_PASSWORDS, PROTON_BRIDGE
 
@@ -47,6 +48,18 @@ def test_a_bridge_that_refuses_a_connection_isnt_running():
     said = said_of(conn_error.quiet(ConnectionRefusedError(61, "Connection refused")), **proton)
     assert said.says.startswith("Proton Bridge isn't running.") and said.link == PROTON_BRIDGE
     assert "the password Bridge shows" in said_of("AUTHENTICATIONFAILED", **proton).says
+
+
+def test_no_password_kept_says_the_keychain_holds_none_and_to_type_it_again():
+    error = conn_error.quiet(NoCredential("the Keychain holds no item account:ada@icloud.com for ada@icloud.com"))
+    assert error == conn_error.NO_PASSWORD == "no password"
+    said = said_of(error, **imap("ada@icloud.com"))
+    assert "this Mac's Keychain doesn't hold one" in said.says and "Type the password again" in said.says
+    assert "didn't accept" not in said.says and said.link is None
+    said = said_of(error, kind="proton", host="127.0.0.1", email="pia@proton.me")
+    assert "no Proton Bridge password" in said.says and said.link == PROTON_BRIDGE
+    said = said_of(error, **imap("ada@example.test"), outgoing=True)
+    assert said.says.startswith("Reading mail works, but MailMind has no password")
 
 
 @pytest.mark.parametrize("error", [ConnectionRefusedError(61, "Connection refused"), TimeoutError("timed out"),

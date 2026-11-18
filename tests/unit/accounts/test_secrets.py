@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from mailmind.accounts.adapters import secrets
+from mailmind.accounts.domain.credential import NoCredential
 from mailmind.platform import keychain
 
 REF = "op://Private/Ada/password"
@@ -153,7 +154,7 @@ def test_a_keychain_item_is_what_it_holds_as_kept_and_is_read_once_a_process(fak
 
 
 def test_an_item_the_keychain_doesnt_hold_is_refused_naming_it_and_who_asked_and_nothing_is_kept(fake_keychain, counted):
-    with pytest.raises(RuntimeError, match=f"the Keychain holds no item {ADA} for ada"):
+    with pytest.raises(NoCredential, match=f"the Keychain holds no item {ADA} for ada"):
         secrets.resolve({"keychain": ADA}, who="ada")
     fake_keychain.add(ADA, "app-password", replace=False)
     assert secrets.resolve({"keychain": ADA}, who="ada") == "app-password"
@@ -162,14 +163,14 @@ def test_an_item_the_keychain_doesnt_hold_is_refused_naming_it_and_who_asked_and
 
 @pytest.mark.parametrize("named", ["", "  ", None, 7])
 def test_a_keychain_credential_naming_no_item_is_no_credential(named, counted):
-    with pytest.raises(RuntimeError, match="no credential configured for ada"):
+    with pytest.raises(NoCredential, match="no credential configured for ada"):
         secrets.resolve({"keychain": named}, who="ada")
     assert counted.asked == []
 
 
 def test_the_database_key_is_no_credential(fake_keychain, counted):
     fake_keychain.add("database-key", "5e" * 32, replace=False)
-    with pytest.raises(RuntimeError, match="no credential configured for ada"):
+    with pytest.raises(NoCredential, match="no credential configured for ada"):
         secrets.resolve({"keychain": "database-key"}, who="ada")
     assert counted.asked == []
 
@@ -233,7 +234,7 @@ def test_each_assembly_starts_with_no_secret_read(fake_keychain, counted):
 
 def test_a_variable_that_isnt_set_is_refused_naming_it_and_who_asked(op, monkeypatch):
     monkeypatch.delenv("ADA_PASSWORD", raising=False)
-    with pytest.raises(RuntimeError, match="env var ADA_PASSWORD not set for ada"):
+    with pytest.raises(NoCredential, match="env var ADA_PASSWORD not set for ada"):
         secrets.resolve({"env": "ADA_PASSWORD"}, who="ada")
 
 

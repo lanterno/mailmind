@@ -8,6 +8,7 @@ import pytest
 from mailmind.accounts.adapters.imap_connection import login_failed
 from mailmind.accounts.application.connections import Connections
 from mailmind.accounts.domain.conn_error import APP_PASSWORD, GMAIL_REFUSED, IMAP_OFF, SAID, WEB_SIGN_IN, quiet, refusal
+from mailmind.accounts.domain.credential import NoCredential
 
 # Gmail's answers, as it gives them.
 NEEDS_APP_PASSWORD = "[ALERT] Application-specific password required: https://support.google.com/accounts/answer/185833 (Failure)"
@@ -52,7 +53,8 @@ def test_another_accounts_refusal_says_what_it_always_said(account):
 
 def test_what_isnt_a_refusal_at_a_gmail_account_isnt_said_as_one():
     assert quiet(refused("[UNAVAILABLE] try again later"), "gmail") == "AUTHENTICATIONFAILED"
-    assert quiet(RuntimeError("no credential configured for cy@example.test"), "gmail") == "AUTHENTICATIONFAILED"
+    assert quiet(RuntimeError("op read failed for op://Private/cy/password"), "gmail") == "AUTHENTICATIONFAILED"
+    assert quiet(NoCredential("no credential configured for cy@example.test"), "gmail") == "no password"
     assert quiet(TimeoutError("timed out"), "gmail") == "timeout"
 
 

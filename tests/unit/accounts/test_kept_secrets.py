@@ -10,6 +10,7 @@ import pytest
 from mailmind.accounts.adapters import config_file, secrets
 from mailmind.accounts.application.directory import Directory
 from mailmind.accounts.domain import events
+from mailmind.accounts.domain.credential import NoCredential
 from mailmind.kernel.errors import Unreachable
 from mailmind.platform import bus, keychain
 
@@ -187,7 +188,7 @@ def test_a_new_password_takes_the_place_of_the_one_a_login_found_and_one_taken_o
     directory.set_bridge_password("bridge-second")
     assert directory.resolve_credential(bea) == "bridge-second"
     directory.clear_bridge_password()
-    with pytest.raises(RuntimeError, match="Proton Bridge password not configured"):
+    with pytest.raises(NoCredential, match="Proton Bridge password not configured"):
         directory.resolve_credential(bea)
 
 

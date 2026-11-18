@@ -7,6 +7,7 @@ import pytest
 
 from mailmind.accounts.adapters.imap_connection import LoginUnreachable, may_pass
 from mailmind.accounts.domain import health, tls_pin
+from mailmind.accounts.domain.credential import NoCredential
 from mailmind.mailbox.adapters.imap.imap_names import BadMailbox
 
 
@@ -29,6 +30,7 @@ class ImapTrouble(Exception):
     (ssl.SSLError(), "NETWORK"),
     (tls_pin.TLSPinMismatch(), "TLS_PIN"),
     (ImapTrouble(), "IMAP"),
+    (NoCredential("the Keychain holds no item account:ada@example.test for ada@example.test"), "NO_PASSWORD"),
     (ValueError(), "UNKNOWN"),
 ], ids=lambda v: v if isinstance(v, str) else type(v).__name__)
 def test_an_error_kind_comes_from_the_class(error, kind):
@@ -59,6 +61,7 @@ def test_what_an_error_says_counts_for_nothing():
     (LoginUnreachable("NO [UNAVAILABLE] busy"), True),
     (LoginUnreachable("NO [AUTHENTICATIONFAILED] no", refused=True), False),
     (tls_pin.TLSPinMismatch(), False),
+    (NoCredential("no credential configured for ada@example.test"), False),
     (ssl.SSLCertVerificationError(), False),
     (ImapTrouble(), False),
     (ValueError(), False),

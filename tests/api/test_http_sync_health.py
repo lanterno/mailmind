@@ -124,3 +124,18 @@ def test_a_certificate_that_isnt_trusted_shows_at_once(roots_of_its_own, app, wo
     shown = health(app)
     assert (shown["live"], shown["healthy"]) == ("error", False) and shown["last_error"]
     assert status(app, w.BEA)["health"] == "ok"
+
+
+def test_an_account_whose_password_the_keychain_lost_is_told_so_at_once(app, world, fake_keychain):
+    """No password to send: no login is tried, the sync fails at once as a kind of its own, which the account's card says
+    and offers Change Password for, and a Test says MailMind has none, never that a server refused it."""
+    with app.stopped():
+        fake_keychain.delete(f"account:{w.ADA}")
+    sync(app)
+    lost = health(app)
+    assert (lost["healthy"], lost["last_error"], lost["last_error_kind"]) == (False, "NoCredential", "NO_PASSWORD")
+    assert status(app)["health"] == "error"
+    assert status(app, w.BEA)["health"] == "ok"
+    tested = app.post("/api/accounts/test", {"email": w.ADA}).json
+    assert (tested["connect"], tested["error"]) == (False, "no password")
+    assert "this Mac's Keychain doesn't hold one" in tested["says"]
