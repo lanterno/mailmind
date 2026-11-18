@@ -202,8 +202,10 @@ private struct MessageWindowContent: View {
         case .failed(_, let why):
             PaneNote(title: String(localized: "This message couldn’t be opened"), line: why)
         case .open(let copy, let opened):
-            MessageReader(core: core, copy: copy, opened: opened, row: nil, prefs: ReadingPrefs(status.preferences),
-                          mine: Composing.shared.mine)
+            // How it stands says when it came as the list says it, and the mailbox names its account and folder.
+            MessageReader(core: core, copy: copy, opened: opened, row: verbs?.standing,
+                          prefs: ReadingPrefs(status.preferences), mine: Composing.shared.mine,
+                          mailbox: verbs?.mailbox)
         }
     }
 }

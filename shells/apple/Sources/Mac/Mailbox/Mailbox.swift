@@ -53,10 +53,15 @@ final class Mailbox {
     /// Positions chosen whose rows weren't held when chosen (Select All in a long list): read before a verb acts.
     @ObservationIgnored private(set) var unheld = IndexSet()
     /// The row of the message open when neither the list nor a lane holds it (one opened from the brief, an answer,
-    /// the gate, the Document Hub, a sender's card or a notification), as the server last said it stands.
+    /// the gate, the Document Hub, a sender's card or a notification), as the server last said it stands, and as its
+    /// folder lists it once that has been read (`shown`).
     private(set) var outside: API.FolderRow?
     /// Each read of how the message open from outside stands, counted, so one answered late never overwrites a later.
     @ObservationIgnored private var outsideReads = 0
+    /// The message open from outside as its folder lists it, and the message whose listing was last asked for: read
+    /// once as it opens (`readListing`).
+    @ObservationIgnored private var outsideListed: API.FolderRow?
+    @ObservationIgnored private var listing: MailCopy?
 
     /// What a person was last told, with the Undo it offers.
     private(set) var toast: Toast?
@@ -505,8 +510,13 @@ final class Mailbox {
     /// The open message's row as the window knows it without asking: the one it holds, else as the server last said
     /// it stands, else its copy and what the reader says of it.
     private func knownRow(_ open: MailCopy) -> API.FolderRow {
-        heldRow(of: open) ?? outside.flatMap { MailCopy($0) == open ? $0 : nil }
-            ?? API.FolderRow(open, head: app?.reader.opened(open), member: nil)
+        shownRow(of: open) ?? API.FolderRow(open, head: app?.reader.opened(open), member: nil)
+    }
+
+    /// The row the reader shows `copy` by, for its time, its chips and its summary: the one the window holds, else, for
+    /// a message opened from outside the list, as the server last said it stands. None while that is still being read.
+    func shownRow(of copy: MailCopy) -> API.FolderRow? {
+        heldRow(of: copy) ?? outside.flatMap { MailCopy($0) == copy ? $0 : nil }
     }
 
     /// The open message's row: the one the window holds, else what the server says of it.
@@ -548,20 +558,54 @@ final class Mailbox {
 
     /// A message neither the list nor a lane holds, as the server says it stands (`standing`), its head as the reader
     /// opened it: once the reader has, when it is still opening it. It stands for itself alone, as the pane shows it.
-    /// The last read asked is the one kept.
+    /// The last read asked is the one kept, with what its folder's listing said of it (`readListing`).
     private func readOutside(_ copy: MailCopy) async -> API.FolderRow {
         outsideReads += 1
         let read = outsideReads
-        let row = await standing(of: copy, head: await app?.reader.head(of: copy))
-        if app?.selection.copy == copy, read == outsideReads { outside = row }
+        let (row, listed) = await standingRead(of: copy, head: await app?.reader.head(of: copy))
+        guard app?.selection.copy == copy, read == outsideReads else { return row }
+        if listed { outsideListed = row }
+        outside = Self.shown(row, listed: outsideListed)
+        if !listed { readListing(copy) }
         return row
+    }
+
+    /// The row the reader shows for a message opened from outside the list: its listing's, for its summary, its next
+    /// step, whether it needs you and when it came, with its read and starred marks as the server last said them.
+    static func shown(_ standing: API.FolderRow, listed: API.FolderRow?) -> API.FolderRow {
+        guard var listed, MailCopy(listed) == MailCopy(standing) else { return standing }
+        listed.seen = standing.seen
+        listed.flagged = standing.flagged
+        return listed
+    }
+
+    /// What only a folder's listing says of a message (the summary ingest stored, its next step, whether it needs you,
+    /// when it came, its bucket), read once as it opens from outside the list, apart from how it stands: a verb that
+    /// waits on how it stands never waits on its folder being read.
+    private func readListing(_ copy: MailCopy) {
+        guard let calls, listing != copy else { return }
+        listing = copy
+        Task {
+            guard let listed = await Lists.row(calls, account: copy.account, folder: copy.folder, uid: copy.uid,
+                                               key: copy.key),
+                  listing == copy else { return }
+            outsideListed = listed
+            if let now = outside, MailCopy(now) == copy, app?.selection.copy == copy {
+                outside = Self.shown(now, listed: listed)
+            }
+        }
     }
 
     /// A message as the server says it stands, for itself alone: read and starred as its conversation's member says,
     /// the conversation named by its head; else, its conversation not known or the message not in it, as its folder
     /// lists it. Neither found, it is named by its copy and its head alone, read and not starred.
     func standing(of copy: MailCopy, head: API.MessageOpened?) async -> API.FolderRow {
-        guard let calls else { return API.FolderRow(copy, head: head, member: nil) }
+        await standingRead(of: copy, head: head).row
+    }
+
+    /// `standing`, and whether it is the folder's listing that said so.
+    private func standingRead(of copy: MailCopy, head: API.MessageOpened?) async -> (row: API.FolderRow, listed: Bool) {
+        guard let calls else { return (API.FolderRow(copy, head: head, member: nil), false) }
         if let thread = head?.threadId, !thread.isEmpty,
            let items = try? await calls.get(API.Get.Thread.self, ["account": copy.account, "thread_id": thread]).items,
            // A Gmail message shows once among them, as whichever of its copies came first: the same message all the
@@ -569,13 +613,13 @@ final class Mailbox {
            let member = items.first(where: { MailCopy($0, account: copy.account) == copy })
                ?? items.first(where: { $0.key == copy.key })
         {
-            return API.FolderRow(copy, head: head, member: member)
+            return (API.FolderRow(copy, head: head, member: member), false)
         }
         if let listed = await Lists.row(calls, account: copy.account, folder: copy.folder, uid: copy.uid,
                                         key: copy.key) {
-            return listed
+            return (listed, true)
         }
-        return API.FolderRow(copy, head: head, member: nil)
+        return (API.FolderRow(copy, head: head, member: nil), false)
     }
 
     /// Read again how the message open from outside the list stands, after mail changed.

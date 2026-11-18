@@ -12,12 +12,14 @@ struct MessageReader: View {
     let prefs: ReadingPrefs
     let mine: Set<String>
     /// The window, for the account's name and colour, the folder's chips and what is up next: none in a test that
-    /// draws a reader alone.
+    /// draws a reader alone, nor in a message's own window, which names them by `mailbox`.
     var app: MailApp?
+    var mailbox: Mailbox?
 
     var body: some View {
         let context = ReaderContext(core: core, copy: copy, opened: opened, row: row, conversation: nil)
-        let place = DocumentPlace.of(app: app, copy: copy, needsYou: row?.needsYou ?? false, replied: false)
+        let place = DocumentPlace.of(app: app, mailbox: mailbox, copy: copy, needsYou: row?.needsYou ?? false,
+                                     replied: false)
         PaneDocument(chips: place.chips, subject: opened.subject.flatMap { $0.isEmpty ? nil : $0 } ?? "(no subject)",
                      measure: prefs.measure) {
             DocumentAside(context: context, opened: opened, filed: place.filed, lane: place.lane, write: place.write,
@@ -41,7 +43,7 @@ struct MessageReader: View {
     @Environment(\.meadow) private var meadow
 
     private func account(_ place: DocumentPlace) -> Color? {
-        app.map { _ in meadow.account(place.accountIndex) }
+        app == nil && mailbox == nil ? nil : meadow.account(place.accountIndex)
     }
 }
 

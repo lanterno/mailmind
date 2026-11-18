@@ -13,10 +13,10 @@ struct ReaderPane: View {
     private var composing: Composing { .shared }
     private var prefs: ReadingPrefs { ReadingPrefs(composing.preferences) }
 
-    /// The chosen copy's row in the list, when the list holds it.
+    /// The open message's row: as the list or a lane holds it, else, opened from outside them, as the server says it
+    /// stands, so its time, its chips and its summary show wherever it was opened from.
     private var row: API.FolderRow? {
-        guard let list = app.list, let at = list.chosenPosition else { return nil }
-        return list.copy(at: at)
+        app.selection.copy.flatMap(app.mailbox.shownRow(of:))
     }
 
     /// Writing in the mailbox: a sender's card writes to them, the list's r, a, f and c reply, reply to all, forward

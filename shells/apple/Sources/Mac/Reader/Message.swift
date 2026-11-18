@@ -50,6 +50,56 @@ enum MessageWords {
     }
 }
 
+/// When a message came, said as the list says it (the server's `rel_time`), for a message no row speaks for: its
+/// header's date read, then "just now", "3h ago", "yesterday", "4d ago", "2w ago", else its month and day as the header
+/// wrote them. A date that won't read is said as it is written.
+@MainActor
+enum MessageWhen {
+    static func said(_ header: String, now: Date = .now) -> String {
+        guard let date = date(header) else { return header }
+        let seconds = Int(now.timeIntervalSince(date).rounded(.down))
+        let days = Int((Double(seconds) / 86_400).rounded(.down)), rest = seconds - days * 86_400
+        switch days {
+        case 0 where rest < 3600: return String(localized: "just now")
+        case 0: return String(localized: "\(rest / 3600)h ago")
+        case 1: return String(localized: "yesterday")
+        case 2..<7: return String(localized: "\(days)d ago")
+        case 7..<30: return String(localized: "\(days / 7)w ago")
+        default: return day(header) ?? header
+        }
+    }
+
+    /// A header's date (RFC 5322), with or without its weekday and seconds, its zone as an offset or a name, and any
+    /// comment after it.
+    static func date(_ header: String) -> Date? {
+        var text = header.trimmingCharacters(in: .whitespaces)
+        if let comment = text.range(of: " (") { text = String(text[..<comment.lowerBound]) }
+        for format in ["EEE, d MMM yyyy HH:mm:ss Z", "d MMM yyyy HH:mm:ss Z", "EEE, d MMM yyyy HH:mm Z",
+                       "d MMM yyyy HH:mm Z", "EEE, d MMM yyyy HH:mm:ss zzz", "d MMM yyyy HH:mm:ss zzz"] {
+            reader.dateFormat = format
+            if let date = reader.date(from: text) { return date }
+        }
+        return nil
+    }
+
+    /// Its month and day as the header wrote them, in the sender's own day: "Nov 04".
+    private static func day(_ header: String) -> String? {
+        let words = header.split(separator: " ").map(String.init)
+        guard let at = words.firstIndex(where: { months.contains($0) }), at > 0,
+              let day = Int(words[at - 1]) else { return nil }
+        return "\(words[at]) " + (day < 10 ? "0\(day)" : "\(day)")
+    }
+
+    private static let months: Set = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+    private static let reader: DateFormatter = {
+        let reader = DateFormatter()
+        reader.locale = Locale(identifier: "en_US_POSIX")
+        reader.timeZone = TimeZone(secondsFromGMT: 0)
+        return reader
+    }()
+}
+
 /// The message's head (`.msg-h`): the sender's avatar with the account's dot, their name, their address and to whom,
 /// and when.
 struct MessageHead: View {
@@ -90,7 +140,7 @@ struct MessageHead: View {
             }
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
-            Text(verbatim: when.flatMap { $0.isEmpty ? nil : $0 } ?? opened.date)
+            Text(verbatim: when.flatMap { $0.isEmpty ? nil : $0 } ?? MessageWhen.said(opened.date))
                 .font(.meadow(.ui, 13))
                 .foregroundStyle(meadow.ink3)
                 .lineLimit(1)

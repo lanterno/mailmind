@@ -122,8 +122,11 @@ struct DocumentPlace {
     /// own folders, not where mail is put away or thrown out.
     var offersReply: Bool { !["trash", "junk", "drafts", "archive", "all"].contains(role) }
 
-    static func of(app: MailApp?, copy: MailCopy, needsYou: Bool, replied: Bool) -> DocumentPlace {
-        let mailbox = app?.mailbox
+    /// `mailbox` names the accounts and folders where there is no window around the document (a message's own
+    /// window), so it says them as the mail window does.
+    static func of(app: MailApp?, mailbox: Mailbox? = nil, copy: MailCopy, needsYou: Bool,
+                   replied: Bool) -> DocumentPlace {
+        let mailbox = mailbox ?? app?.mailbox
         let rail = mailbox?.folders(of: copy.account) ?? []
         let me = mailbox?.name(of: copy.account) ?? Words.short(copy.account)
         let index = mailbox?.accounts.firstIndex(of: copy.account) ?? 0
