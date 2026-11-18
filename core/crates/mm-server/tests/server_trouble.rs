@@ -146,3 +146,30 @@ fn a_message_another_client_expunged_while_open_still_reads_and_filing_it_moves_
     later(&w);
     assert!(changes_heard(&w, mark).is_empty());
 }
+
+/// A known bug: a folder another client deleted while the older-mail lane read its first scan is asked for at every
+/// round of the lane, a login each time, for good; its list still shows the mail it held, saying nothing; and a message
+/// of it fails to open as a fault. Once the server's folders say it is gone, it should be forgotten as a folder MailMind
+/// deleted is (`FolderStore::forget_folder`). Fixing it fails this test until the marker goes.
+#[test]
+#[should_panic(expected = "the lane stopped asking for a folder the server no longer has")]
+fn a_folder_another_client_deleted_is_no_longer_read() {
+    let imap = Imap::start();
+    imap.add(ADA, "INBOX", (1..=2).map(|uid| (uid, note(uid))));
+    imap.add(ADA, "Plans", (1..=1200).map(|uid| (uid, note(uid))));
+    let w = world(imap, &[ADA], &[]);
+    w.app.syncing.sync_once();
+    let page = Paging { offset: 0, limit: 50, grouped: false };
+    assert_eq!(w.app.reading.lists.messages_in(Some(ADA), "Plans", page).unwrap()["total"], 500);
+    w.imap.delete_folder(ADA, "Plans");
+    w.app.folders.invalidate(None).unwrap();
+    let rail = w.app.folders.of_account(ADA).unwrap();
+    assert!(rail.folders.iter().all(|(folder, _)| folder.name != "Plans"), "the rail has heard it is gone");
+    w.app.syncing.read_older().unwrap();
+    let mark = w.imap.mark();
+    w.app.syncing.read_older().unwrap();
+    assert!(
+        !w.imap.since(mark, ADA).iter().any(|c| c.contains("Plans")),
+        "the lane stopped asking for a folder the server no longer has"
+    );
+}
