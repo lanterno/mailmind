@@ -75,5 +75,19 @@ final class ReaderTests: XCTestCase {
         XCTAssertEqual(AttachmentsRow.safeName("  "), "attachment")
         XCTAssertEqual(AttachmentsRow.safeName("C:\\Users\\bo\\report.pdf"), "report.pdf")
     }
+
+    /// A conversation is asked for by the names its route reads, `account` and `thread_id`. Asked by `id`, the route
+    /// answered "missing account/thread", and the pane showed that in place of the conversation.
+    func testAConversationIsAskedForByItsAccountAndThreadID() async throws {
+        let member = API.ThreadMessage(answered: false, flagged: false, folder: "INBOX", hasAttach: false, isJunk: false,
+                                       key: 21, seen: true, snippet: "See you then", subject: "Plans", uid: 21, when: "Mon")
+        let thread = API.Thread(account: Fixture.work, count: 1, items: [member], ok: true, replyKey: 21, threadId: "t1")
+        let routes = FakeRoutes()
+        routes.answer(API.Get.Thread.path, String(decoding: try JSONEncoder().encode(thread), as: UTF8.self))
+        let conversation = ConversationModel(routes: routes, account: Fixture.work, id: "t1", profile: { nil })
+        await conversation.load()
+        XCTAssertEqual(routes.calls(to: API.Get.Thread.path).map(\.query), [["account": Fixture.work, "thread_id": "t1"]])
+        XCTAssertEqual(conversation.stage, .open(thread))
+    }
 }
 
