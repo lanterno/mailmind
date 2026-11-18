@@ -154,6 +154,40 @@ final class OneCoreTests: XCTestCase {
         await app.core?.close()
     }
 
+    /// What the core says while the window first reads the rail is heard: the core syncs as it opens and keeps no
+    /// event for a listener that comes later, so a first sync that ended then would leave the rail as it was. Here an
+    /// account goes just as the first digest is read, which makes that answer stale.
+    func testWhatTheCoreSaysWhileTheRailIsFirstReadReachesTheRail() async throws {
+        _ = NSApplication.shared
+        let (ada, bea) = ("ada@example.test", "bea@example.test")
+        let accounts = [ada, bea].map { email in
+            ["email": email, "type": "imap", "host": "127.0.0.1", "port": 1, "starttls": false,
+             "credential": ["keychain": "account:\(email)"]] as [String: Any]
+        }
+        try JSONSerialization.data(withJSONObject: ["accounts": accounts])
+            .write(to: folder.appending(path: "mailmind.config.json"))
+        let home = home
+        let opened = OpenedCore()
+        let app = MailApp(home: { home }, open: { home in
+            let core = try await Core.open(home)
+            await opened.keep(core)
+            return core
+        })
+        app.mailbox.wire = Wire(send: { method, target, body in
+            let core = await opened.core!
+            let answer = await core.send(method, target, body)
+            if target.hasPrefix(API.Get.Digest.path), await opened.first() {
+                let gone = try! JSONEncoder().encode(API.RemoveBody(email: bea))
+                _ = await core.send("POST", API.Post.AccountsDelete.path, gone)
+            }
+            return answer
+        })
+        await app.start()
+        XCTAssertEqual(app.mailbox.accounts, [ada, bea], "the first digest was read before Bea went")
+        await until { app.mailbox.accounts == [ada] }
+        await app.core?.close()
+    }
+
     func testACoreThatDidntOpenSaysTheCoresOwnWords() async {
         let app = MailApp(home: { self.home }, open: { _ in
             throw HostProblem.NotOpened(why: "the database key doesn't open the database")
@@ -169,5 +203,21 @@ private actor Opened {
 
     func add() {
         count += 1
+    }
+}
+
+/// The core a test's app opened, for the wire it reads the rail through.
+private actor OpenedCore {
+    private(set) var core: Core?
+    private var asked = false
+
+    func keep(_ core: Core) {
+        self.core = core
+    }
+
+    /// Whether this is the first time it is asked.
+    func first() -> Bool {
+        defer { asked = true }
+        return !asked
     }
 }
