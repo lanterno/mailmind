@@ -24,6 +24,8 @@ enum Step {
     Say(Vec<u8>),
     /// The server closes the connection: reads end, and writes fail.
     Close,
+    /// The server says nothing: a read waits out the connection's time limit and fails as timed out.
+    Quiet,
 }
 
 impl std::fmt::Debug for Step {
@@ -32,6 +34,7 @@ impl std::fmt::Debug for Step {
             Step::Hear(bytes) => write!(f, "Hear({:?})", String::from_utf8_lossy(bytes)),
             Step::Say(bytes) => write!(f, "Say({:?})", String::from_utf8_lossy(bytes)),
             Step::Close => f.write_str("Close"),
+            Step::Quiet => f.write_str("Quiet"),
         }
     }
 }
@@ -100,6 +103,7 @@ impl Read for Script {
                 (n, bytes.is_empty())
             }
             Some(Step::Close) | None => (0, false),
+            Some(Step::Quiet) => return Err(io::ErrorKind::WouldBlock.into()),
             Some(Step::Hear(expected)) => {
                 panic!("the client read while the server waited to hear {:?}", String::from_utf8_lossy(expected))
             }
@@ -473,6 +477,30 @@ fn no_answer_after_the_whole_message_went_is_unanswered() {
     assert!(e.unanswered() && !e.permanent() && !e.unreachable());
     assert_eq!(e.said(), "connection lost after the message went out");
     assert_eq!(script.events().iter().filter(|e| **e == Event::BeforeDot).count(), 1);
+}
+
+#[test]
+fn a_server_quiet_after_the_whole_message_went_is_unanswered_and_one_quiet_before_is_only_lost() {
+    let to_data = || {
+        vec![
+            hear("mail from:<ada@example.test> size=4\r\n"),
+            say("250 ok\r\n"),
+            hear("rcpt to:<lin@example.test>\r\n"),
+            say("250 ok\r\n"),
+            hear("data\r\n"),
+        ]
+    };
+    // Its time limit run out after the dot, it may have been delivered: only a person sends it again.
+    let script = scripted(to_data().into_iter().chain([say("354 go\r\n"), hear("Hi\r\n.\r\n"), Step::Quiet]));
+    let e = sent(&script, &["lin@example.test"], b"Hi\r\n").unwrap_err();
+    assert_eq!(e, Error::Unanswered);
+    assert!(e.unanswered() && !e.permanent() && !e.unreachable());
+    // Run out before DATA was taken, nothing of the message went: it is tried again later, as a lost connection is.
+    let script = scripted(to_data().into_iter().chain([Step::Quiet]));
+    let e = sent(&script, &["lin@example.test"], b"Hi\r\n").unwrap_err();
+    assert_eq!(e, Error::Disconnected);
+    assert!(!e.unanswered() && !e.permanent() && e.unreachable());
+    assert!(script.events().iter().all(|e| *e != Event::BeforeDot));
 }
 
 #[test]
