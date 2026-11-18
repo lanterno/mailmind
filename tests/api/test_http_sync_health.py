@@ -1,8 +1,8 @@
 """An account whose sync fails, over HTTP, as the status pill and Settings read it (the digest's `status`, and each
 account's `live` and record in /api/account-health). Trouble that may pass, a connection lost or a server that can't take
 a login for now, as a sleep or a change of network leaves for a moment, shows only once the next sync of the account has
-failed too, or three minutes on, and its record keeps no error until then. A refusal shows at once
-(test_http_login_hold.py). A sync that works ends the run.
+failed too, or three minutes on, and its record keeps no error until then; meanwhile its status says it is trying again,
+so nothing says it synced. A refusal shows at once (test_http_login_hold.py). A sync that works ends the run.
 """
 import json
 from datetime import timedelta
@@ -42,18 +42,18 @@ def test_trouble_once_shows_nothing_and_twice_in_a_row_shows(app, world, trouble
     trouble(world.server, 2)
 
     sync(app)
-    assert status(app) == synced
+    assert status(app) == {**synced, "trying_again": True}
     once = health(app)
     assert (once["live"], once["healthy"], once["last_error"], once["last_error_kind"]) == ("ok", True, None, None)
-    assert status(app, w.BEA)["health"] == "ok"
+    assert status(app, w.BEA)["health"] == "ok" and "trying_again" not in status(app, w.BEA)
 
     sync(app)
-    assert status(app)["health"] == "error"
+    assert status(app)["health"] == "error" and "trying_again" not in status(app)
     twice = health(app)
     assert (twice["live"], twice["healthy"]) == ("error", False) and twice["last_error"]
 
     sync(app)
-    assert status(app)["health"] == "ok"
+    assert status(app)["health"] == "ok" and "trying_again" not in status(app)
     again = health(app)
     assert (again["live"], again["healthy"], again["last_error"]) == ("ok", True, None)
 
@@ -64,24 +64,27 @@ def test_trouble_shows_three_minutes_on_though_no_sync_has_run_since(app, world,
     trouble(world.server, 1)
     sync(app)
     app.clock.shift(timedelta(seconds=THREE_MINUTES - 1))
-    assert status(app)["health"] == "ok"
+    assert (status(app)["health"], status(app)["trying_again"]) == ("ok", True)
     app.clock.shift(timedelta(seconds=1))
     shown = status(app)
-    assert shown["health"] == "error" and shown["msg"]
+    assert shown["health"] == "error" and shown["msg"] and "trying_again" not in shown
     assert health(app)["live"] == "error"
     # A sync that works ends the run.
     sync(app)
-    assert status(app)["health"] == "ok"
+    assert status(app)["health"] == "ok" and "trying_again" not in status(app)
     assert health(app)["live"] == "ok"
 
 
 def test_the_first_sync_that_fails_shows_nothing_until_it_shows(app, world):
-    """With no sync before it, the account says nothing of how it stands, as before any sync."""
+    """With no sync before it, the account says no more of how it stands than before any sync, but that it is trying
+    again; the next sync that works says it is synced."""
     world.server.drop("LOGIN", user=w.ADA)
     sync(app)
-    assert status(app) is None
+    assert status(app) == {"health": "", "msg": "", "trying_again": True}
     assert health(app)["live"] == ""
     assert status(app, w.BEA)["health"] == "ok"
+    sync(app)
+    assert status(app)["health"] == "ok" and "trying_again" not in status(app)
 
 
 def test_a_removed_accounts_trouble_goes_with_it(app, world):
