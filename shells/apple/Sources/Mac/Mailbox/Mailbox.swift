@@ -256,7 +256,6 @@ final class Mailbox {
         if MailApp.mailChanged.contains(event.name) || event.name == "folder-synced" {
             lane?.refresh()
             rereadOutside()
-            digestSoon?.cancel()
             if let account = Self.account(of: event), !accounts.contains(account) {
                 Task {
                     await readDigest()
@@ -264,16 +263,7 @@ final class Mailbox {
                 }
             } else {
                 Task { await readCounts() }
-                digestSoon = Task {
-                    try? await Task.sleep(for: .milliseconds(400))
-                    guard !Task.isCancelled else { return }
-                    let was = accounts
-                    await readDigest()
-                    if accounts != was {
-                        await readCounts()
-                        await readLabels()
-                    }
-                }
+                digestAgain()
             }
         }
         if event.name == "sync-done" {
@@ -281,6 +271,23 @@ final class Mailbox {
             Task {
                 await readLabels()
                 await readViews()
+            }
+        }
+    }
+
+    /// The digest a moment after an event, read once for a burst of them. Events that come while a read waits join it
+    /// rather than put it off: the older-mail lane says folder-synced at each step for minutes after a first sync, and
+    /// a wait begun afresh at each would leave the rail as it was until the steps stopped.
+    private func digestAgain() {
+        guard digestSoon == nil else { return }
+        digestSoon = Task {
+            try? await Task.sleep(for: .milliseconds(400))
+            digestSoon = nil
+            let was = accounts
+            await readDigest()
+            if accounts != was {
+                await readCounts()
+                await readLabels()
             }
         }
     }
