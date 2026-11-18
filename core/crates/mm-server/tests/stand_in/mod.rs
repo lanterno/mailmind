@@ -92,6 +92,32 @@ pub struct State {
     pub no_sizes: bool,
     /// The next NOOPs are answered three seconds late, this many.
     pub slow_noops: usize,
+    /// Each (account, folder, UID)'s flags, where it has any.
+    pub flags: BTreeMap<(String, String, u32), BTreeSet<String>>,
+    /// Each (account, folder)'s next UID, past every one it has held.
+    uid_next: BTreeMap<(String, String), u32>,
+    /// The server is away: each connection hears BYE as it opens, and nothing more.
+    pub away: bool,
+}
+
+impl State {
+    /// The UID a message added to `account`'s `folder` takes: one no message there has had.
+    fn next_uid(&mut self, account: &str, folder: &str) -> u32 {
+        let key = (account.to_owned(), folder.to_owned());
+        let held = self.folders.get(&key).and_then(|m| m.keys().max().copied()).unwrap_or(0);
+        let next = self.uid_next.get(&key).copied().unwrap_or(1).max(held + 1);
+        self.uid_next.insert(key, next + 1);
+        next
+    }
+}
+
+/// The Message-ID a message's headers give, without its angle brackets' spaces.
+fn message_id(raw: &[u8]) -> Option<String> {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.split("\r\n\r\n").next().unwrap_or_default();
+    head.lines()
+        .find_map(|line| line.split_once(':').filter(|(name, _)| name.eq_ignore_ascii_case("message-id")))
+        .map(|(_, value)| value.trim().to_owned())
 }
 
 #[derive(Clone, Debug)]
@@ -193,6 +219,46 @@ impl Imap {
         self.held().open.len()
     }
 
+    /// The server goes away, or comes back: away, each connection hears BYE as it opens, and those open now end.
+    pub fn away(&self, away: bool) {
+        self.held().away = away;
+        if away {
+            self.end_every_connection();
+        }
+    }
+
+    /// The Message-IDs `email`'s `folder` holds, in UID order.
+    pub fn ids_in(&self, email: &str, folder: &str) -> Vec<String> {
+        let state = self.held();
+        let held = state.folders.get(&(email.to_owned(), folder.to_owned()));
+        held.map(|m| m.values().filter_map(|raw| message_id(raw)).collect()).unwrap_or_default()
+    }
+
+    /// The flags of the message with Message-ID `id` in `email`'s `folder`.
+    pub fn flags_of(&self, email: &str, folder: &str, id: &str) -> BTreeSet<String> {
+        let state = self.held();
+        let key = (email.to_owned(), folder.to_owned());
+        let uid =
+            state.folders.get(&key).and_then(|m| m.iter().find(|(_, raw)| message_id(raw).as_deref() == Some(id)));
+        uid.and_then(|(uid, _)| state.flags.get(&(key.0.clone(), key.1.clone(), *uid)).cloned()).unwrap_or_default()
+    }
+
+    /// Another client removes message `uid` from `email`'s `folder` for good.
+    pub fn expunge(&self, email: &str, folder: &str, uid: u32) {
+        let mut state = self.held();
+        if let Some(held) = state.folders.get_mut(&(email.to_owned(), folder.to_owned())) {
+            held.remove(&uid);
+        }
+        state.flags.remove(&(email.to_owned(), folder.to_owned(), uid));
+    }
+
+    /// Another client deletes `email`'s `folder` and all it held.
+    pub fn delete_folder(&self, email: &str, folder: &str) {
+        let mut state = self.held();
+        state.folders.remove(&(email.to_owned(), folder.to_owned()));
+        state.flags.retain(|(account, name, _), _| !(account == email && name == folder));
+    }
+
     /// Every connection ends now, unannounced: a server's idle timeout, or a network gone.
     pub fn end_every_connection(&self) {
         let open: Vec<TcpStream> = std::mem::take(&mut self.held().open).into_values().collect();
@@ -237,6 +303,9 @@ impl Connection {
     }
 
     fn serve(&mut self) -> std::io::Result<()> {
+        if self.held().away {
+            return self.say(b"* BYE the server is away\r\n");
+        }
         self.say(b"* OK [CAPABILITY IMAP4rev1] ready\r\n")?;
         let mut line = String::new();
         loop {
@@ -351,21 +420,59 @@ impl Connection {
                 self.say(format!("{tag} OK\r\n").as_bytes())?;
             }
             "UID" if upper.starts_with("UID SEARCH") => {
-                let held = messages(&self.held());
-                let criteria = &command["UID SEARCH ".len()..];
-                let found = match criteria.strip_prefix("UID ") {
-                    Some(set) => named(set, &held),
-                    None => held.keys().copied().collect(),
+                let (held, deleted) = {
+                    let state = self.held();
+                    let held = messages(&state);
+                    let folder = selected.clone().unwrap_or_default();
+                    let deleted: BTreeSet<u32> = held
+                        .keys()
+                        .copied()
+                        .filter(|uid| {
+                            state
+                                .flags
+                                .get(&(user.clone(), folder.clone(), *uid))
+                                .is_some_and(|f| f.contains("\\Deleted"))
+                        })
+                        .collect();
+                    (held, deleted)
                 };
+                let criteria = &command["UID SEARCH ".len()..];
+                let (undeleted, criteria) = match criteria.strip_prefix("UNDELETED") {
+                    Some(rest) => (true, rest.trim_start()),
+                    None => (false, criteria),
+                };
+                let mut found: Vec<u32> = match criteria.strip_prefix("UID ") {
+                    Some(set) => named(set, &held),
+                    None => match criteria.split_once("HEADER Message-ID ") {
+                        Some((_, id)) => {
+                            let id = id.trim_matches('"');
+                            held.iter()
+                                .filter(|(_, raw)| message_id(raw).as_deref() == Some(id))
+                                .map(|(u, _)| *u)
+                                .collect()
+                        }
+                        None => held.keys().copied().collect(),
+                    },
+                };
+                if undeleted {
+                    found.retain(|uid| !deleted.contains(uid));
+                }
                 let found: Vec<String> = found.iter().map(u32::to_string).collect();
                 self.say(format!("* SEARCH {}\r\n{tag} OK\r\n", found.join(" ")).as_bytes())?;
             }
             "UID" if upper.starts_with("UID FETCH") => {
-                let (drop, no_sizes, held) = {
+                let (drop, no_sizes, held, flags) = {
                     let mut state = self.held();
                     let drop = state.fetches_dropped > 0;
                     state.fetches_dropped = state.fetches_dropped.saturating_sub(1);
-                    (drop, state.no_sizes, messages(&state))
+                    let folder = selected.clone().unwrap_or_default();
+                    let flags: BTreeMap<u32, String> = state
+                        .flags
+                        .iter()
+                        .filter(|((account, name, _), _)| *account == user && *name == folder)
+                        .map(|((_, _, uid), flags)| (*uid, flags.iter().cloned().collect::<Vec<_>>().join(" ")))
+                        .collect();
+                    (drop, state.no_sizes, messages(&state), flags)
                 };
                 if drop {
                     return Ok(false);
@@ -374,7 +481,8 @@ impl Connection {
                 for uid in named(set, &held) {
                     let raw = &held[&uid];
                     let seq = held.keys().position(|u| *u == uid).unwrap() + 1;
-                    let mut head = format!("* {seq} FETCH (UID {uid} FLAGS ()");
+                    let flags = flags.get(&uid).map_or("", String::as_str);
+                    let mut head = format!("* {seq} FETCH (UID {uid} FLAGS ({flags})");
                     if items.contains("RFC822.SIZE") && !no_sizes {
                         head.push_str(&format!(" RFC822.SIZE {}", raw.len()));
                     }
@@ -401,6 +509,88 @@ impl Connection {
                 }
                 self.say(format!("{tag} OK done\r\n").as_bytes())?;
             }
+            // A copy or a move: each message takes the next UID there, its flags with it.
+            "UID" if upper.starts_with("UID COPY ") || upper.starts_with("UID MOVE ") => {
+                let moving = upper.starts_with("UID MOVE ");
+                let set = command["UID COPY ".len()..].split(' ').next().unwrap_or_default().to_owned();
+                let dest = command.split('"').nth(1).unwrap_or_default().to_owned();
+                let folder = selected.clone().unwrap_or_default();
+                let said = {
+                    let mut state = self.held();
+                    if !state.folders.contains_key(&(user.clone(), dest.clone())) {
+                        format!("{tag} NO [TRYCREATE] no such mailbox\r\n")
+                    } else {
+                        let held = messages(&state);
+                        let (mut from, mut to) = (Vec::new(), Vec::new());
+                        for uid in named(&set, &held) {
+                            let next = state.next_uid(&user, &dest);
+                            let flags = state.flags.get(&(user.clone(), folder.clone(), uid)).cloned();
+                            state
+                                .folders
+                                .get_mut(&(user.clone(), dest.clone()))
+                                .unwrap()
+                                .insert(next, held[&uid].clone());
+                            if let Some(flags) = flags {
+                                state.flags.insert((user.clone(), dest.clone(), next), flags);
+                            }
+                            if moving {
+                                state.folders.get_mut(&(user.clone(), folder.clone())).unwrap().remove(&uid);
+                                state.flags.remove(&(user.clone(), folder.clone(), uid));
+                            }
+                            from.push(uid.to_string());
+                            to.push(next.to_string());
+                        }
+                        if from.is_empty() {
+                            format!("{tag} OK nothing to copy\r\n")
+                        } else {
+                            format!("* OK [COPYUID 7 {} {}] done\r\n{tag} OK done\r\n", from.join(","), to.join(","))
+                        }
+                    }
+                };
+                self.say(said.as_bytes())?;
+            }
+            "UID" if upper.starts_with("UID STORE ") => {
+                let rest = &command["UID STORE ".len()..];
+                let (set, rest) = rest.split_once(' ').unwrap_or((rest, ""));
+                let adding = !rest.trim_start().starts_with('-');
+                let named_flags: Vec<String> = rest
+                    .split_once('(')
+                    .map(|(_, list)| list.trim_end_matches(')').split_whitespace().map(str::to_owned).collect())
+                    .unwrap_or_default();
+                let folder = selected.clone().unwrap_or_default();
+                {
+                    let mut state = self.held();
+                    let held = messages(&state);
+                    for uid in named(set, &held) {
+                        let flags = state.flags.entry((user.clone(), folder.clone(), uid)).or_default();
+                        for flag in &named_flags {
+                            if adding {
+                                flags.insert(flag.clone());
+                            } else {
+                                flags.remove(flag);
+                            }
+                        }
+                    }
+                }
+                self.say(format!("{tag} OK\r\n").as_bytes())?;
+            }
+            // Only the UIDs named, and only those marked deleted.
+            "UID" if upper.starts_with("UID EXPUNGE ") => {
+                let set = command["UID EXPUNGE ".len()..].trim().to_owned();
+                let folder = selected.clone().unwrap_or_default();
+                {
+                    let mut state = self.held();
+                    let held = messages(&state);
+                    for uid in named(&set, &held) {
+                        let key = (user.clone(), folder.clone(), uid);
+                        if state.flags.get(&key).is_some_and(|f| f.contains("\\Deleted")) {
+                            state.flags.remove(&key);
+                            state.folders.get_mut(&(user.clone(), folder.clone())).unwrap().remove(&uid);
+                        }
+                    }
+                }
+                self.say(format!("{tag} OK\r\n").as_bytes())?;
+            }
             _ => self.say(format!("{tag} OK\r\n").as_bytes())?,
         }
         Ok(true)
@@ -413,6 +603,22 @@ pub struct Frozen;
 impl Clock for Frozen {
     fn now(&self) -> Moment {
         Moment::from_micros(NOW * 1_000_000)
+    }
+}
+
+/// `NOW` until a test moves it on, as it would a while passing: a try backed off comes due.
+#[derive(Debug, Default)]
+pub struct Moving(std::sync::atomic::AtomicI64);
+
+impl Moving {
+    pub fn shift(&self, seconds: i64) {
+        self.0.fetch_add(seconds, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+impl Clock for Moving {
+    fn now(&self) -> Moment {
+        Moment::from_micros((NOW + self.0.load(std::sync::atomic::Ordering::SeqCst)) * 1_000_000)
     }
 }
 
@@ -456,6 +662,8 @@ pub struct World {
     pub app: Arc<App>,
     pub imap: Imap,
     pub home: tempfile::TempDir,
+    /// The app's clock, at `NOW` until a test moves it.
+    pub clock: Arc<Moving>,
 }
 
 /// The app over a data directory of a database at the newest schema, its accounts on `imap`, with `more` of the
@@ -480,8 +688,9 @@ pub fn world(imap: Imap, emails: &[&str], more: &[(&str, &str)]) -> World {
     pairs.extend_from_slice(more);
     let environment = Environment::from_pairs(pairs);
     let settings = Settings { home: home.path().to_path_buf() };
+    let clock = Arc::new(Moving::default());
     let seams = Seams {
-        clock: Arc::new(Frozen),
+        clock: clock.clone(),
         outside: Arc::new(Loopback),
         keychain,
         sanitizer: Arc::new(mm_server::real::Sanitizing),
@@ -490,7 +699,7 @@ pub fn world(imap: Imap, emails: &[&str], more: &[(&str, &str)]) -> World {
     };
     let dist: PathBuf = home.path().join("dist");
     let app = Arc::new(App::assemble(&environment, &settings, dist, 1, &seams).unwrap());
-    World { app, imap, home }
+    World { app, imap, home, clock }
 }
 
 pub fn database(home: &Path) -> mm_store::Database {
