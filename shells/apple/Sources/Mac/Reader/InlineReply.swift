@@ -359,12 +359,11 @@ private struct OpenReply: View {
                 MeadowKey("⌘↵")
             }, moreLabel: String(localized: "Send later"), more: {
                 composer.laterOpen.toggle()
-            })
+            }, help: String(localized: "Send · ⌘Return while you write"))
             .popover(isPresented: Binding(get: { composer.laterOpen }, set: { composer.laterOpen = $0 }),
                      arrowEdge: .top) {
                 LaterChoices(composer: composer)
             }
-            .help("Send · ⌘Return while you write")
             Button(action: attach) { MeadowIconView(.clip, size: 16) }
                 .meadowButton(.quiet, icon: true)
                 .accessibilityLabel("Attach a file")

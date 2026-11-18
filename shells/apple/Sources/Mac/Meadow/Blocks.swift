@@ -549,6 +549,8 @@ struct MeadowSplitButton<Label: View>: View {
     /// What the second part says to VoiceOver, and what it does.
     let moreLabel: String
     let more: () -> Void
+    /// What the first part's tooltip says. The second part's is its own (`moreLabel`), never the first's key.
+    var help: String?
     @Environment(\.meadow) private var meadow
 
     var body: some View {
@@ -556,6 +558,7 @@ struct MeadowSplitButton<Label: View>: View {
             Button(action: action, label: label)
                 .buttonStyle(MeadowButtonStyle(kind: kind, joined: .trailing))
                 .focusEffectDisabled()
+                .help(Text(verbatim: help ?? ""))
             Button(action: more) { MeadowIconView(.down) }
                 .buttonStyle(MeadowButtonStyle(kind: kind, icon: true, width: 32, joined: .leading))
                 .focusEffectDisabled()
@@ -563,6 +566,7 @@ struct MeadowSplitButton<Label: View>: View {
                     Rectangle().fill(meadow.onPrimary.opacity(0.25)).frame(width: 1)
                 }
                 .accessibilityLabel(Text(moreLabel))
+                .help(Text(moreLabel))
         }
         .fixedSize()
     }

@@ -573,8 +573,7 @@ struct ComposerForm: View {
                 MeadowIconView(.send)
                 Text(sendLabel)
                 MeadowKey("⌘↵")
-            }, moreLabel: String(localized: "Send later"), more: { composer.laterOpen.toggle() })
-                .help(sendHelp)
+            }, moreLabel: String(localized: "Send later"), more: { composer.laterOpen.toggle() }, help: sendHelp)
                 .popover(isPresented: Binding(get: { composer.laterOpen }, set: { composer.laterOpen = $0 }),
                          arrowEdge: .top) {
                     LaterChoices(composer: composer)
