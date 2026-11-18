@@ -79,7 +79,10 @@ class ImaplibSession:
         return found.get(b"UNSEEN", 0), found.get(b"MESSAGES", 0)
 
     def select(self, folder, *, readonly=True):
-        data = _ok("SELECT", *self._M.select(mailbox_arg(folder), readonly=readonly))
+        typ, data = self._M.select(mailbox_arg(folder), readonly=readonly)
+        if typ != "OK" and data and port.says_nonexistent(data[0]):
+            raise port.FolderGone("SELECT refused: [NONEXISTENT]")
+        data = _ok("SELECT", typ, data)
         exists = int(data[0]) if data and data[0] else 0
         return Selected(exists, _number(self._M, "UIDVALIDITY"), _number(self._M, "UIDNEXT"),
                         _number(self._M, "HIGHESTMODSEQ"))

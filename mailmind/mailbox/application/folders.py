@@ -3,16 +3,24 @@
 The live IMAP LIST and each folder's STATUS take a fresh round-trip, and the rail loads on load, on every account switch
 and after every triage action, so doing it live each time both lagged the page and churned connections (rapid connect
 and logout makes providers drop IDLE). So that part is cached per account for a few seconds over the connection pool;
-the counts from the database stay fresh."""
+the counts from the database stay fresh.
+
+A folder another client deleted or renamed is forgotten (`gone`) once the server is known not to have it: a LIST that
+worked (the rail's) leaves out a folder stored before it asked, or a SELECT is refused as `FolderGone` (a folder's sync
+as it opens, reconcile, a message opened). A server away, a NO that says nothing of the folder and the Inbox never
+forget one."""
 import threading
 import time
 from typing import Any, TypedDict
 
 from mailmind.kernel.errors import Refused
 from mailmind.kernel.ids import AccountId, FolderName
+from mailmind.mailbox.application.commands import MailCommands
 from mailmind.mailbox.application.server_ops import UNREACHABLE
 from mailmind.mailbox.application.pool import Pool
 from mailmind.mailbox.application.ports import Account, Accounts, Attention, StoredMail
+from mailmind.mailbox.application.session import FolderGone
+from mailmind.mailbox.application.stats import LiveStats
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.domain import destination, folder_change, sync_plan
 from mailmind.mailbox.domain import roles as folder_roles
@@ -38,13 +46,16 @@ class Folders:
     MOVE_CHECK_WAIT = 2.5      # seconds a move to a folder neither the last LIST nor the database knows waits for a LIST
     _FOLDER_LIST_TTL = 25.0    # folder unread/total badges may be this stale (ambient counts)
 
-    def __init__(self, uow: UnitOfWork, store: StoredMail, accounts: Accounts, pool: Pool, ingest: Ingest, attention: Attention):
+    def __init__(self, uow: UnitOfWork, store: StoredMail, accounts: Accounts, pool: Pool, ingest: Ingest, attention: Attention,
+                 commands: MailCommands | None = None, stats: LiveStats | None = None):
         self._uow = uow
         self._store = store
         self._accounts = accounts
         self._pool = pool
         self._ingest = ingest
         self._attention = attention
+        self._commands = commands
+        self._stats = stats
         self._folder_list_cache: dict[str, _Listed] = {}
         self._folder_list_lock = threading.Lock()
         self._folder_syncs: dict[tuple[str, str], threading.Event] = {}    # set when that folder's sync ends
@@ -77,7 +88,12 @@ class Folders:
 
     def _live_folder_list(self, acct: Account) -> list[RailFolder]:
         """The expensive part: live IMAP LIST + per-folder UNSEEN/MESSAGES status,
-        over a POOLED connection (reused — no per-call login/logout churn)."""
+        over a POOLED connection (reused — no per-call login/logout churn). A folder stored before the LIST asked that the
+        LIST doesn't name is gone from the server, and is forgotten; it runs on the account's gate, so no rename of
+        MailMind's own comes between."""
+        account = acct["email"]
+        with self._uow.read() as c:
+            stored = self._store.stored_folder_names(c, account)
         out: list[RailFolder] = []
         with self._pool.borrow(acct) as s:
             listed = s.folders()
@@ -92,7 +108,39 @@ class Folders:
                     unseen = total = 0
                 out.append({"name": name, "role": role, "unseen": unseen, "total": total,
                             "own_name": folder_roles.own_name(name, f.delimiter), "changeable": name in changeable})
+        named = {f.name for f in listed}
+        for folder in stored:
+            if folder not in named:
+                self.gone(account, folder)
         return folder_roles.rail_order(out)
+
+
+    def gone(self, account: str, folder: str) -> int:
+        """The server no longer has `folder`: another client deleted or renamed it. Forget it, as a folder MailMind deleted
+        is: its rows and its sync's record go in one transaction with each change queued for it, given back as refused, so
+        its mail leaves the lists, no sync asks for it again and the tray says why. Lists on screen load again. The Inbox
+        is never gone. Returns how many rows went; a failure is logged, and the folder is left to the next time."""
+        if folder.upper() == "INBOX":
+            return 0
+        try:
+            with self._uow.write() as c:
+                given_back = self._commands.give_back_for_folder(c, account, folder) if self._commands else []
+                forgotten = self._store.forget_folder(c, account, folder)
+        except Exception as e:
+            log.warning("a folder the server no longer has wasn't forgotten", exc_info=e)
+            return 0
+        self.invalidate(account)
+        with self._folder_syncs_lock:
+            self._caught_up.pop((account, folder), None)
+            self._first_sync_failed.pop((account, folder), None)
+        if self._stats is not None:
+            self._stats.invalidate()
+        if self._commands is not None:
+            self._commands.restored(given_back)
+        if forgotten or given_back:
+            sse.publish("reconcile", {"account": account, "folder": folder, "pruned": forgotten})
+        log.info("a folder the server no longer has was forgotten: %(count)s copies", {"count": forgotten})
+        return forgotten
 
 
     def _stored_folder_list(self, account: str) -> list[RailFolder]:
@@ -216,6 +264,8 @@ class Folders:
                 ok, new = True, kept + junk
                 self._first_sync_failed.pop(key, None)
             except Exception as e:
+                if isinstance(e, FolderGone):     # another client deleted or renamed it: forgotten, the rail leaves it out
+                    self.gone(account, folder)
                 if full:
                     self._first_sync_failed[key] = self._accounts.error_kind(e)
                 sync_log.warning("%(account)s/%(folder)s", {"account": account, "folder": repr(folder)},   # a name a request gave us

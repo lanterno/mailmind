@@ -19,7 +19,7 @@ from mailmind.mailbox.application.flights import AccountGone, Flight, Flights
 from mailmind.mailbox.application.pool import Pool
 from mailmind.mailbox.application.ports import (Account, Accounts, Attention, Classifier, Index, OpenSession, Stored,
                                                 StoredMail)
-from mailmind.mailbox.application.session import MailSession
+from mailmind.mailbox.application.session import MailSession, select_or_gone
 from mailmind.mailbox.domain import flags as mail_flags
 from mailmind.mailbox.domain import ingested, sync_plan
 from mailmind.mailbox.domain.events import FlagsChanged
@@ -267,7 +267,7 @@ class Ingest:
         The folder's scan_state says what the scans so far have read: a whole scan makes it
         'synced', one cut to the newest N 'recent', and an incremental sync keeps it as it was.
         A scan that fails leaves it as it was too, so a first open that failed scans again.
-        Its account removed before or while it reads, it raises AccountGone."""
+        Its account removed before or while it reads, it raises AccountGone; the folder gone from the server, FolderGone."""
         with self.flights.fly(acct["email"]) as flight:
             self._still_held(acct)
             return self._sync_folder(acct, folder, full, recent, flight)
@@ -277,7 +277,7 @@ class Ingest:
         s = self._open_session(acct)
         try:
             condstore = s.enable_condstore()
-            selected = s.select(folder)
+            selected = select_or_gone(s, folder)
             uidv = selected.uidvalidity
             modseq = selected.highest_modseq if condstore else None
             with self._uow.read() as c:
@@ -398,7 +398,7 @@ class Ingest:
     def fetch_body(self, pk: int) -> Parsed | None:
         """Lazily fetch + store the raw RFC822 for one message (read-only PEEK), record
         attachment metadata, and return the parsed body. Idempotent. Returns parsed dict
-        or None if the message/row is gone."""
+        or None if the message/row is gone. Its folder gone from the server, it raises FolderGone."""
         with self._uow.read() as c:
             row = self._store.get_message(c, pk)
             fetched = row and row["body_fetched"]
@@ -410,7 +410,7 @@ class Ingest:
             # READ-ONLY borrow: pooled when this account is asked for (pool.py), else a fresh session,
             # logged out after. Mutations never use the pool.
             with self._pool.borrow(acct) as s:
-                s.select(row["folder"])
+                select_or_gone(s, row["folder"])
                 try:
                     raw = s.body(row["uid"]) or b""
                 except imaplib.IMAP4.abort:

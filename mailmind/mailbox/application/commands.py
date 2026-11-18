@@ -297,6 +297,23 @@ class MailCommands:
         self._give_back(c, row)
 
 
+    def give_back_for_folder(self, c: Connection, account: str, folder: str) -> list[Row]:
+        """The server no longer has `folder`: each change queued out of it or into it is given back as one the server
+        refused, in the caller's transaction, a move's message listed where it was and the tray saying why. One a try holds
+        now is left to that try, which the server refuses too. Returns them, for the caller to tell of once committed
+        (`restored`)."""
+        rows = self._store.command_queued_for_folder(c, account, folder)
+        for row in rows:
+            self._restore(c, row, command.why_given_up(command.REFUSED))
+        return rows
+
+    @staticmethod
+    def restored(rows: list[Row]) -> None:
+        """Tell of each change `give_back_for_folder` gave back, as the worker tells of one it gave up on."""
+        for row in rows:
+            bus.publish(Restored(row["id"], row["account"]))
+
+
     def _take_up(self, c: Connection, row: Row) -> None:
         """The given-up change `row` is asked for again: as when it was accepted, a move's message leaves the lists and
         a flag change shows, its `was` now the flags it replaces this time."""

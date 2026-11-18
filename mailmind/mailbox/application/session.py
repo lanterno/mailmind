@@ -7,13 +7,15 @@ runs every case through each.
   stores and accounts.mailbox_arg sends back. A UID is an int.
 - A server that refuses a command raises imaplib.IMAP4.error, and a connection that's lost raises
   imaplib.IMAP4.abort or an OSError, through either adapter (IMAPClient's own errors are those
-  classes), so every caller's catch, commands.UNREACHABLE among them, holds.
+  classes), so every caller's catch, commands.UNREACHABLE among them, holds. A SELECT or EXAMINE
+  refused with RFC 5530's [NONEXISTENT] code raises FolderGone, one of those refusals.
 - A read-only process's session (ReadOnlySession) opens every folder read-only and raises
   profile.ReadOnlyError on any write before it is sent.
 
 Standard library only.
 """
 import imaplib
+import re
 from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from datetime import datetime
@@ -42,6 +44,24 @@ class Headers:
     gmail_thread: str | None = None     # Gmail's X-GM-THRID, when asked for: fetch data, not a header
     internaldate: datetime | None = None   # when the server took it in (INTERNALDATE), when asked for
     gmail_labels: frozenset[str] | None = None   # Gmail's X-GM-LABELS when asked for: fetch data, a system one as \\Inbox
+
+
+class FolderGone(imaplib.IMAP4.error):
+    """The server doesn't have the folder asked for: another client deleted or renamed it. Its NO said so with the
+    [NONEXISTENT] code (RFC 5530), or a LIST that worked doesn't name it (`select_or_gone`). Never a refusal that says
+    neither, and never a server that couldn't be reached. A refusal still, so every catch of one holds; its words name
+    no folder."""
+
+
+_NONEXISTENT = re.compile(rb"\s*\[NONEXISTENT[\] ]", re.IGNORECASE)
+
+
+def says_nonexistent(said: bytes | str | None) -> bool:
+    """Whether the words of a server's NO start with the [NONEXISTENT] code: what an adapter's select raises FolderGone
+    for."""
+    if isinstance(said, str):
+        said = said.encode("utf-8", "replace")
+    return bool(said) and _NONEXISTENT.match(said) is not None
 
 
 HEADER_BATCH = 300                      # UIDs to a header FETCH, so no command line grows too long
@@ -99,6 +119,28 @@ def move_by_copy(session: MailSession, uids: Uids, dest: str) -> None:
             raise
         except imaplib.IMAP4.error:
             pass
+
+
+def select_or_gone(session: MailSession, folder: str, *, readonly: bool = True) -> Selected:
+    """Select `folder` (`readonly` as `MailSession.select`), telling a folder the server no longer has apart from any other
+    refusal: a NO without the [NONEXISTENT] code asks LIST, and a LIST that works but doesn't name the folder raises
+    FolderGone. INBOX is never gone. A LIST that fails, as a lost connection does, leaves the refusal as it was."""
+    try:
+        return session.select(folder, readonly=readonly)
+    except (FolderGone, imaplib.IMAP4.abort):
+        raise
+    except imaplib.IMAP4.error as refused:
+        if folder.upper() == "INBOX" or not _listed_without(session, folder):
+            raise
+        raise FolderGone("the server's LIST doesn't name the folder") from refused
+
+
+def _listed_without(session: MailSession, folder: str) -> bool:
+    """Whether the server's LIST works and doesn't name `folder`; False when the LIST itself fails."""
+    try:
+        return all(f.name != folder for f in session.folders())
+    except Exception:
+        return False
 
 
 def find_role(session: MailSession, *wanted: str) -> str | None:

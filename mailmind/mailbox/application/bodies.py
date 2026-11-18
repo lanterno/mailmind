@@ -6,7 +6,10 @@ from mailmind.content.mime import Parsed
 from mailmind.kernel.errors import NotFound
 from mailmind.kernel.ids import FolderName, MessageKey
 from mailmind.kernel.parsed import as_int
+from mailmind.kernel.row import Row
+from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.ports import Reader, StoredMail
+from mailmind.mailbox.application.session import FolderGone
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.domain import inline_images
 from mailmind.platform.db.uow import UnitOfWork
@@ -16,6 +19,7 @@ from mailmind.platform.workers import gates
 log = get_logger("mailbox")
 
 _GONE = "This message isn’t here any more."
+FOLDER_GONE = "This message’s folder isn’t on the server any more: it was deleted or renamed somewhere else."
 _NO_PREVIEW = "This file can’t be previewed. Download it to see it."
 PREVIEW_MAX_BYTES = 10 << 20   # what a preview holds of one image, as its document carries the bytes
 
@@ -26,11 +30,22 @@ def _as_number(text: str) -> int | None:
     return as_int(text) if text.isascii() and text.isdigit() else None
 
 class Bodies:
-    def __init__(self, uow: UnitOfWork, store: StoredMail, ingest: Ingest, reader: Reader):
+    def __init__(self, uow: UnitOfWork, store: StoredMail, ingest: Ingest, reader: Reader, folders: Folders | None = None):
         self._uow = uow
         self._store = store
         self._ingest = ingest
         self._reader = reader
+        self._folders = folders
+
+    def _fetch(self, row: Row, pk: int, priority: int, wait: bool = True) -> Parsed | None:
+        """The message's body as `Ingest.fetch_body` has it, on the account's gate. Its folder gone from the server
+        (another client deleted or renamed it), the folder is forgotten and FolderGone raised."""
+        try:
+            return gates.run(row["account"], lambda: self._ingest.fetch_body(pk), priority=priority, wait=wait)
+        except FolderGone:
+            if self._folders is not None:
+                self._folders.gone(row["account"], row["folder"])
+            raise
 
     def _resolve_cids(self, pk: int, safe_html: str) -> str:
         """The inline images of the message `pk`, as far as `domain.inline_images` may embed them."""
@@ -54,7 +69,7 @@ class Bodies:
 
     def message_body(self, pk: int, prefetch: bool = False) -> dict[str, Any]:
         """A message opened, or for a `prefetch` whether its body is stored now. Raises NotFound for one that has gone, or
-        whose body the server no longer has."""
+        whose body the server no longer has, and one whose folder the server no longer has, saying so."""
         with self._uow.read() as c:
             row = self._store.get_message(c, pk)
         if not row:
@@ -65,12 +80,16 @@ class Bodies:
             if row["body_fetched"]:
                 return {"ok": True, "prefetched": True}     # already warm
             try:
-                gates.run(row["account"], lambda: self._ingest.fetch_body(pk),
-                          priority=gates.Priority.MAINTENANCE, wait=False)
+                self._fetch(row, pk, gates.Priority.MAINTENANCE, wait=False)
             except gates.Busy:                   # it gave way: nothing went wrong, and the open will fetch it
                 return {"ok": True, "prefetched": False}
+            except FolderGone:
+                raise NotFound(FOLDER_GONE) from None
             return {"ok": True, "prefetched": True}
-        parsed = gates.run(row["account"], lambda: self._ingest.fetch_body(pk), priority=gates.Priority.INTERACTIVE)
+        try:
+            parsed = self._fetch(row, pk, gates.Priority.INTERACTIVE)
+        except FolderGone:
+            raise NotFound(FOLDER_GONE) from None
         if parsed is None:
             raise NotFound("not found")
         safe_html, info = self._safe_html(pk, parsed, False)
@@ -105,8 +124,10 @@ class Bodies:
                 row = self._store.get_message(c, pk)
             parsed = None
             if row and str(row["message_key"]) == key and (uid is None or row["uid"] == uid):
-                parsed = gates.run(row["account"], lambda: self._ingest.fetch_body(pk),
-                                   priority=gates.Priority.INTERACTIVE)
+                try:
+                    parsed = self._fetch(row, pk, gates.Priority.INTERACTIVE)
+                except FolderGone:
+                    parsed = None
             if parsed is None:
                 return 404, frame.of_text(_GONE)
             if not parsed.get("html"):
@@ -163,8 +184,10 @@ class Bodies:
             row = self._store.get_message(c, pk)
         if not row:
             return {"error": "not found"}
-        gates.run(row["account"], lambda: self._ingest.fetch_body(pk),   # ensure body + attachment metadata exist
-                  priority=gates.Priority.INTERACTIVE)
+        try:
+            self._fetch(row, pk, gates.Priority.INTERACTIVE)   # ensure body + attachment metadata exist
+        except FolderGone:
+            return {"error": "not found"}
         with self._uow.read() as c:
             att = self._store.attachment_of(c, pk, part_id)
             raw = self._store.get_body(c, pk)

@@ -85,6 +85,13 @@ def command_open_counts(c):
         "AND state IN ('queued', 'running', 'error') GROUP BY state")}
 
 
+def command_queued_for_folder(c, account, folder):
+    """The account's queued changes that the server doesn't hold, out of `folder` or into it, oldest first: none a try
+    holds now."""
+    return c.execute("SELECT * FROM mail_commands WHERE account=? AND applied=0 AND state='queued' "
+                     "AND (src_folder=? OR dest=?) ORDER BY id", (account, folder, folder)).fetchall()
+
+
 def flag_changes_waiting(c, account):
     """The Message-IDs with a flag change still on its way to the account's server."""
     return {r["message_id"] for r in c.execute(

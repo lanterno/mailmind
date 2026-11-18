@@ -75,7 +75,14 @@ class ImapClientSession:
         return int(got.get(b"UNSEEN", 0)), int(got.get(b"MESSAGES", 0))
 
     def select(self, folder, *, readonly=True):
-        got = self._c.select_folder(unescaped(folder), readonly=readonly)
+        try:
+            got = self._c.select_folder(unescaped(folder), readonly=readonly)
+        except imaplib.IMAP4.abort:
+            raise
+        except imaplib.IMAP4.error as e:     # "select failed: " and the words of the server's NO
+            if port.says_nonexistent(str(e).partition("failed: ")[2]):
+                raise port.FolderGone("select failed: [NONEXISTENT]") from e
+            raise
         return Selected(int(got.get(b"EXISTS", 0)), got.get(b"UIDVALIDITY"), got.get(b"UIDNEXT"),
                         got.get(b"HIGHESTMODSEQ"))
 

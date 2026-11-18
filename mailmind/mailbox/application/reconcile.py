@@ -15,6 +15,7 @@ from mailmind.kernel.when import now_iso
 from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.pool import Pool
 from mailmind.mailbox.application.ports import Account, AccountPruned, Accounts, Pruned, ReconcileTrail, StoredMail
+from mailmind.mailbox.application.session import FolderGone, select_or_gone
 from mailmind.mailbox.application.stats import LiveStats
 from mailmind.mailbox.domain import prune
 from mailmind.platform import environment, sse
@@ -54,6 +55,7 @@ class Reconciler:
         against a non-empty stored set as 'unknown' (prunes nothing) unless force.
         Only rows stored before the SEARCH may go: the 300 s sync passes no IMAP gate, so
         it can store mail while this runs, and that mail is missing from the SEARCH's answer.
+        A folder the server no longer has (`FolderGone`) is forgotten, each of its rows a ghost.
         dry_run computes the ghost count without changing anything."""
         res: Pruned = {"account": acct["email"], "live": 0, "stored": 0, "ghosts": 0,
                        "pruned": 0, "error": None}
@@ -62,8 +64,13 @@ class Reconciler:
         res["stored"] = len(stored_uids)
         try:
             with self._pool.borrow(acct, timeout=self.READ_TIMEOUT) as s:
-                uidv = s.select(folder).uidvalidity
+                uidv = select_or_gone(s, folder).uidvalidity
                 live = set(s.uids("ALL"))                 # a refused SEARCH raises: nothing is pruned
+        except FolderGone:                                # another client deleted or renamed it
+            res["ghosts"] = res["stored"]
+            if not dry_run:
+                res["pruned"] = self._folders.gone(acct["email"], folder)
+            return res
         except Exception as e:
             reconcile_log.warning("an account failed", exc_info=e)
             res["error"] = type(e).__name__      # what a server said stays out of the answer
