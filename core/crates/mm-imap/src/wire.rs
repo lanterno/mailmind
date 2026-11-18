@@ -11,8 +11,13 @@ pub(crate) enum Piece {
     Literal(Vec<u8>),
 }
 
-/// The longest line or literal a response may hold before the connection is given up on.
+/// The longest line a response may hold before the connection is given up on.
 const MOST: usize = 16 << 20;
+
+/// The longest literal a response may hold before the connection is given up on: a whole message, larger than any
+/// the providers take (Exchange's 150 MB, Fastmail's 70, Gmail's 25 MB attached and about 35 once encoded), so every
+/// message a person was sent opens. Its bytes are read only as they come, so an announced length takes no room.
+const LITERAL_MOST: usize = 160 << 20;
 
 #[derive(Debug)]
 pub(crate) struct Wire {
@@ -55,7 +60,7 @@ impl Wire {
     }
 
     fn exactly(&mut self, n: usize) -> io::Result<Vec<u8>> {
-        if n > MOST {
+        if n > LITERAL_MOST {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "a literal too long"));
         }
         while self.buffer.len() < n {
