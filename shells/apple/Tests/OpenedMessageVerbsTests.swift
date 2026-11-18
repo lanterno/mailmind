@@ -580,6 +580,46 @@ final class OpenedMessageVerbsTests: XCTestCase {
         await waiting(for: "the list moves on") { world.app.selection.copy == MailCopy(Self.rows[1]) }
     }
 
+    /// Unsnooze in Snoozed, Unmute in Muted and Dismiss in Waiting take the message off the stack shown, so the list
+    /// moves on as File does; and a message opened from outside the stack closes.
+    func testUnsnoozeUnmuteAndDismissInTheirStacksMoveOnAsFileDoes() async throws {
+        for stack in [VirtualFolder.snoozed, .muted, .waiting] {
+            let server = Self.server()
+            server.on("POST", API.Post.Unsnooze.path, API.Unsnoozed(count: 1, ok: true))
+            server.on("POST", API.Post.Unmute.path, API.OnThread(ok: true, threadId: "t1"))
+            server.on("POST", API.Post.FollowupsDismiss.path, API.OnThread(ok: true, threadId: "t1"))
+            let world = await world(server)
+            world.app.place = .virtual(stack, account: Fixture.ada)
+            await waiting(for: "\(stack)'s rows") { world.app.list?.copy(at: 1) != nil }
+            world.mailbox.chose([try XCTUnwrap(world.app.list?.copy(at: 0))])
+            try await leave(stack, world)
+            await waiting(for: "\(stack) moves on") { world.app.selection.copy == MailCopy(Self.rows[1]) }
+            XCTAssertEqual(world.mailbox.marked, [MailCopy(Self.rows[1])], "\(stack): chosen in its row")
+
+            // Opened from outside the stack's list (a sender's card), it closes to show the stack.
+            world.mailbox.open(Self.away)
+            try await leave(stack, world)
+            await waiting(for: "\(stack) closes the message") { world.app.selection.copy == nil }
+            XCTAssertEqual(world.app.place, .virtual(stack, account: Fixture.ada))
+        }
+    }
+
+    /// The stack's verb that takes the message open off it, as the pane's bar and the snooze chooser run it.
+    private func leave(_ stack: VirtualFolder, _ world: World) async throws {
+        let copies = [try XCTUnwrap(world.app.selection.copy)]
+        switch stack {
+        case .snoozed:
+            await world.desk.attention.unsnooze(copies)
+        case .muted:
+            let unmute = try XCTUnwrap(world.desk.paneCommands.first { $0.id == "mute" }, "the bar's Unmute")
+            XCTAssertEqual(unmute.label, "Unmute thread")
+            await world.desk.attention.unmute(copies)
+        default:
+            XCTAssertNotNil(world.desk.paneCommands.first { $0.id == "dismiss" }, "the bar's Dismiss")
+            await world.desk.attention.dismissFollowup(copies)
+        }
+    }
+
     /// The pane over a message no list holds, filed already or in Trash, takes it back to its account's Inbox.
     func testMoveToInboxAndRestoreTakeTheMessageOpenBack() async throws {
         for folder in ["Archive", "Trash"] {
