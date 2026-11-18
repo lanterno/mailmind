@@ -28,6 +28,7 @@ struct SettingsLayout: View {
     var lights = true
     var opened = true
     @Environment(\.meadow) private var meadow
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 0) {
@@ -49,6 +50,14 @@ struct SettingsLayout: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background { ComposePaper() }
         .overlay(alignment: .bottom) { NoticeBanner(status: status) }
+        // Esc closes Settings, as ⌘W does, wherever the keyboard is in it.
+        .background {
+            Button("Close Settings") { dismiss() }
+                .keyboardShortcut(.cancelAction)
+                .opacity(0)
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
+        }
         // The window is sized from the frame below, which stands in the room under its title bar; the paper takes
         // that room as well, up to the window's top, so it runs from edge to edge with no strip of the window's own
         // colour at its foot.
