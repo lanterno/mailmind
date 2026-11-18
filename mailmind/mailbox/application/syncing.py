@@ -3,7 +3,7 @@ job at a time, with what each account's last try came to.
 
 An account shows as failing only as domain.sync_health says: trouble that may pass (a lost connection, a timeout, a
 server that can't take a login for now) once a second sync in a row has failed too, or three minutes on. Until then it shows as it did before, and its record keeps no
-error.
+error, but its status says it is trying again (`trying_again`), so nothing says it synced when its last sync didn't.
 
 An account removed (`account_removed`) stops each sync reading its mail at its next message, as its flights were told, and
 nothing is kept of how its syncs went: its status, its run of failures, its body backfill's rest; now, and again as the last
@@ -52,13 +52,18 @@ class Syncing:
         self._backfill_resting: dict[str, float] = {}        # email -> when backfill may ask anything of that account again
 
     @property
-    def status(self) -> dict[str, dict[str, str]]:
-        """How each account's sync stands now: one whose failures in a row now show, three minutes on, as failing."""
+    def status(self) -> dict[str, dict[str, Any]]:
+        """How each account's sync stands now: one whose failures in a row now show, three minutes on, as failing; one
+        whose don't show yet as it did before, trying again. One syncing now says that alone."""
         now = time.time()
-        shown = dict(self._status)
+        shown: dict[str, dict[str, Any]] = dict(self._status)
         for email, run in list(self._failing.items()):
-            if run.shows(now) and shown.get(email, {}).get("health") != "syncing":
+            if shown.get(email, {}).get("health") == "syncing":
+                continue
+            if run.shows(now):
                 shown[email] = {"health": "error", "msg": run.error}
+            else:   # as it was, but its last sync failed: nothing may say it synced. One no sync has reached has no health
+                shown[email] = {**shown.get(email, {"health": "", "msg": ""}), "trying_again": True}
         return shown
 
     def account_removed(self, email: str) -> None:

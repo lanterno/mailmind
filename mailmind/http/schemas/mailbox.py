@@ -381,6 +381,7 @@ class AccountSync(Answer):
     msg: str
     done: int | None = None                 # while the Inbox's first scan still reads older mail: how many of
     total: int | None = None                # the Inbox's messages it has read, of how many
+    trying_again: bool | None = None        # its last sync failed by trouble that doesn't show yet: the next tries again
 
 
 class SyncState(Answer):
