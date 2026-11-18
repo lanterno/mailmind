@@ -283,6 +283,31 @@ final class MailboxVerbsTests: XCTestCase {
         XCTAssertEqual(app.selection.copy?.key, 2, "the reader moves on to the next row")
     }
 
+    /// The gate and the paper trail are pages across the window only while no message is open: arriving at one closes
+    /// the message left open in the place before, which would otherwise keep it in the list's room beside that message.
+    /// A place with a list of its own beside the pane, a lane among them, leaves the message open as before.
+    func testAPageAcrossTheWindowClosesTheMessageLeftOpenWhereAListKeepsIt() async throws {
+        let app = await opened(Fixture.server(grouped: false))
+        let mailbox = app.mailbox
+        let inbox = Place.folder(account: Fixture.ada, folder: "INBOX")
+        func openTheFirst() async throws {
+            app.place = inbox
+            await until { app.list?.copy(at: 0) != nil }
+            mailbox.chose([try XCTUnwrap(app.list?.copy(at: 0))])
+            XCTAssertNotNil(app.selection.copy)
+        }
+        for page in [Place.desk(.screener(account: Fixture.ada)),
+                     .search(Search(q: "category:receipt", lane: .papertrail))] {
+            try await openTheFirst()
+            app.place = page
+            XCTAssertNil(app.selection.copy, "\(page) spans the window")
+        }
+        try await openTheFirst()
+        let open = app.selection.copy
+        app.place = .search(Search(q: "category:newsletter", lane: .feed))
+        XCTAssertEqual(app.selection.copy, open, "a lane's list stands beside the pane: the message stays")
+    }
+
     func testAConversationFilesWhole() async throws {
         let server = Fixture.server()
         server.on("POST", API.Post.ThreadTrash.path, API.ManyFiled(count: 3, failed: 0, filed: [], msg: "", ok: true, queued: 0,
