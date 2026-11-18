@@ -11,11 +11,6 @@ def digest(c, limit=300):
            ORDER BY s.importance DESC, m.ts DESC LIMIT ?""", (limit,)).fetchall()
 
 
-def stored_accounts(c):
-    """Each account that has mail stored."""
-    return [row[0] for row in c.execute("SELECT DISTINCT account FROM messages ORDER BY account").fetchall()]
-
-
 def stats(c):
     return {
         "total": c.execute("SELECT COUNT(*) FROM messages").fetchone()[0],

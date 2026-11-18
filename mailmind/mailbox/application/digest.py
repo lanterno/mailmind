@@ -1,5 +1,8 @@
 """What `/api/digest` answers: the items the brief is built from, and with them what the page needs of the rest of the app
-as it opens, the identities to send from, the sync's state and the AI's."""
+as it opens, the accounts, the identities to send from, the sync's state and the AI's.
+
+The accounts are the ones configured, in the config's order, whether or not any of their mail is stored: an account whose
+Inbox is filed empty, or whose first sync hasn't ended, still has its place on the rail."""
 from collections.abc import Callable
 from typing import Any
 
@@ -42,12 +45,11 @@ class Digest:
                 "seen": bool(r["seen"]), "flagged": bool(r["flagged"]), "has_attach": bool(r["has_attach"]),
                 "thread_id": r["thread_id"], "folder": r["folder"], "ts": r["ts"],
             } for r in rows]
-            accts = self._store.stored_accounts(c)
             st = self._store.stats(c)
-        # send_accounts = the authoritative configured (enabled) identities — the compose
-        # From list + reply-all self-dedupe set, independent of what's been synced yet.
-        send_accounts = [a["email"] for a in self._accounts.accounts()]
-        return {"items": items, "stats": st, "accounts": accts, "send_accounts": send_accounts,
+        # The configured (enabled) accounts, independent of what has been synced yet: the rail's, and the identities
+        # to send from (the compose From list and reply-all's own addresses).
+        accounts = [a["email"] for a in self._accounts.accounts()]
+        return {"items": items, "stats": st, "accounts": accounts, "send_accounts": accounts,
                 "aliases": amap, "signatures": self._accounts.signature_map(),
                 "signature_default": self._accounts.signature_default(),
                 "status": self._syncing.status, "sync": self._syncing.sync, "ai": self._ai_status(), "profile": profile.current().value,

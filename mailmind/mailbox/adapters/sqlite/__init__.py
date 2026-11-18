@@ -17,7 +17,7 @@ from mailmind.mailbox.adapters.sqlite.flags import (classified_from_address, cla
     flag_rows_of, set_classification, set_flags_if_still, set_local_flags)
 from mailmind.mailbox.adapters.sqlite.lists import (digest, folder_conversation_count, folder_conversation_rows, folder_count,
     folder_rows, inboxes_conversation_count, inboxes_conversation_rows, inboxes_count, inboxes_rows, snoozed_count,
-    snoozed_rows, stats, stored_accounts, stored_folder_counts, thread_rows)
+    snoozed_rows, stats, stored_folder_counts, thread_rows)
 from mailmind.mailbox.adapters.sqlite.messages import (copy_in_folder, copy_now, copy_pk, delete_by_uids,
     delete_message, forget_account, forget_gone_messages, get_message, get_message_by_key, get_message_by_msgid, has_copy_in, is_known,
     is_listed_in, mark_pending_removal, mark_verified, message_pk, mint_key, names_of, newest_copy_in, pending_removal_pks,
@@ -46,7 +46,7 @@ __all__ = [
     "sent_since",
     "set_classification", "set_flags_if_still", "set_ingested_headers", "set_labels", "set_list_unsub", "set_local_flags",
     "set_modseq", "set_recipients", "set_recipients_text", "set_scan_state", "set_uidvalidity", "set_watermark",
-    "snoozed_count", "snoozed_rows", "stats", "still_without_body", "store_body", "stored_accounts", "stored_folder_counts",
+    "snoozed_count", "snoozed_rows", "stats", "still_without_body", "store_body", "stored_folder_counts",
     "stored_folder_names", "stored_uids", "synced_folders", "thread_anchor_pk", "thread_pks_in", "thread_rows", "thread_stamps",
     "thread_stored",
     "upsert_message",
