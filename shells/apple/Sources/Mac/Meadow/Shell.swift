@@ -176,7 +176,7 @@ final class MeadowShell {
 
 /// How the pane bar folds as the pane narrows (the mockup's `@container pane` rules): the keycaps go first, then the
 /// second labels (Later, All, Forward), then every label, then the second buttons and the position.
-struct PaneBarFold: Equatable {
+struct PaneBarFold: Hashable {
     /// The keycaps beside the words (wider than 980).
     let keys: Bool
     /// Later's, All's and Forward's words (wider than 820).
@@ -192,6 +192,29 @@ struct PaneBarFold: Equatable {
         labels = width > 720
         secondary = width > 480
     }
+
+    init(keys: Bool, secondLabels: Bool, labels: Bool, secondary: Bool) {
+        self.keys = keys
+        self.secondLabels = secondLabels
+        self.labels = labels
+        self.secondary = secondary
+    }
+
+    /// This fold, then each further one, in the order the bar gives things up: the keycaps, the second labels, every
+    /// label, the second buttons. The mockup's widths are the page's faces' measures, not the Mac's, so the bar shows
+    /// the first of these that fits (`MeadowPaneBar`), and a word gives way whole, never cut short.
+    var further: [PaneBarFold] {
+        var folds: [PaneBarFold] = []
+        for step in 0...4 {
+            let fold = PaneBarFold(keys: keys && step < 1, secondLabels: secondLabels && step < 2,
+                                   labels: labels && step < 3, secondary: secondary && step < 4)
+            if folds.last != fold { folds.append(fold) }
+        }
+        return folds
+    }
+
+    /// The bar folded as far as it goes: the buttons as icons, without the second ones or the position.
+    static let folded = PaneBarFold(keys: false, secondLabels: false, labels: false, secondary: false)
 }
 
 extension DeskPlace {

@@ -326,6 +326,8 @@ struct MeadowPaneBar: View {
     /// A message is open, which the bar's verbs act on.
     var message = true
     var writing = PaneWriting()
+    /// One fold alone, in place of those the pane's width gives: a test measures it.
+    var only: PaneBarFold?
     @Environment(\.meadow) private var meadow
     @Environment(\.meadowPaneWidth) private var width
     @Environment(MeadowShell.self) private var shell: MeadowShell?
@@ -338,7 +340,20 @@ struct MeadowPaneBar: View {
     static func height(message: Bool) -> CGFloat { message ? 70 : 52 }
 
     var body: some View {
-        let fold = PaneBarFold(width: width)
+        // The fold the pane's width gives, else the first further one whose buttons all fit: a label never runs out
+        // of room mid-word, and in the narrowest pane the bar folds to icons that stay inside it.
+        ViewThatFits(in: .horizontal) {
+            ForEach(only.map { [$0] } ?? PaneBarFold(width: width).further, id: \.self) { row($0) }
+        }
+        .padding(.horizontal, 10)
+        .frame(height: Self.height(message: message))
+        .overlay(alignment: .bottom) { Rectangle().fill(meadow.line).frame(height: 1) }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(message ? "Message actions" : "Reading pane")
+    }
+
+    /// The bar's row as `fold` folds it.
+    private func row(_ fold: PaneBarFold) -> some View {
         HStack(spacing: 2) {
             if message, inTrash {
                 group { restore(fold) }
@@ -352,11 +367,6 @@ struct MeadowPaneBar: View {
             separator
             nav(fold)
         }
-        .padding(.horizontal, 10)
-        .frame(height: Self.height(message: message))
-        .overlay(alignment: .bottom) { Rectangle().fill(meadow.line).frame(height: 1) }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(message ? "Message actions" : "Reading pane")
     }
 
     /// A group (`.grp`): its buttons set a little lower than the bar's middle, as the mockup's are.
@@ -492,6 +502,7 @@ struct MeadowPaneBar: View {
                 .monospacedDigit()
                 .foregroundStyle(meadow.ink3)
                 .lineLimit(1)
+                .fixedSize()
                 .padding(.horizontal, 4)
         }
         Button { mailbox.move(by: -1) } label: { MeadowIconView(.up) }
@@ -519,7 +530,8 @@ struct MeadowPaneBar: View {
         let words = fold.labels && (!second || fold.secondLabels)
         return Button(action: run) {
             MeadowIconView(icon)
-            if words { Text(title) }
+            // Its words whole or not at all: the bar folds further rather than cut one short.
+            if words { Text(title).fixedSize() }
             if words, fold.keys, let key { MeadowKey(key) }
         }
         .buttonStyle(MeadowButtonStyle(kind: .quiet, del: del, icon: !fold.labels))
