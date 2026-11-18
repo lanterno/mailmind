@@ -652,6 +652,20 @@ final class MailboxTableView: NSTableView {
                            object: window)
         center.addObserver(self, selector: #selector(keyChanged), name: NSWindow.didResignKeyNotification,
                            object: window)
+        // The list has the keyboard as the window opens, as Mail's does, not the search field the window would
+        // otherwise start in; and a list come in place of another (g then a letter, a tab, a folder) takes it on.
+        window.initialFirstResponder = self
+        DispatchQueue.main.async { [weak self] in MainActor.assumeIsolated { self?.takeKeyboardIfNowhere(placed: true) } }
+    }
+
+    /// Take the keyboard where nothing in the window has it, unless a dialog is up, or the first run's welcome. A
+    /// list just `placed` takes it from the window's SwiftUI too, which a click on a tab or a place in the rail
+    /// leaves holding it; never from a field.
+    func takeKeyboardIfNowhere(placed: Bool = false) {
+        guard let window, mailbox?.typing != true, !AppStatus.shared.firstRun else { return }
+        let responder = window.firstResponder
+        guard DialogFocus.nowhere(responder, in: window) || (placed && responder === window.contentView) else { return }
+        window.makeFirstResponder(self)
     }
 
     /// The window came to the front with the pointer already resting on a row, which moved no mouse: the row shows
