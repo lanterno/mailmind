@@ -5,6 +5,7 @@ expiry, and the Rust core, which classifies, says the same of the lists it holds
 Expiry rules are separate from keep and block: a kept sender can also expire. Keep decides what the
 classifier shows, expiry how long it stays.
 """
+import unicodedata
 from collections.abc import Collection, Iterable, Iterator, Mapping
 from typing import Any, Final, Literal, TypedDict, get_args
 
@@ -98,8 +99,30 @@ def token_of(raw: str) -> str:
 
 
 def is_token(token: str) -> bool:
-    """Whether a rule could name this: an address or a domain, and a bare word is neither."""
+    """Whether a rule could name this: an address or a domain, and a bare word is neither. Removing one asks only this,
+    so a rule kept before `names_a_sender` held them to more still goes."""
     return bool(token) and ("." in token or "@" in token)
+
+
+_SETS_APART = frozenset('@<>()[],;:"\\')     # what parts an address, or quotes or comments in one
+
+
+def _plain(part: str) -> bool:
+    """Some of an address or a domain: not empty, with no space, control character or mark that sets parts apart."""
+    return bool(part) and not any(ch.isspace() or unicodedata.category(ch) == "Cc" or ch in _SETS_APART for ch in part)
+
+
+def _domain(name: str, labels: int) -> bool:
+    parts = name.split(".")
+    return len(parts) >= labels and all(_plain(p) for p in parts)
+
+
+def names_a_sender(token: str) -> bool:
+    """Whether a keep or block rule can name this: one address (`name@host`), or one domain with a dot in it, and
+    nothing beside it. A number pasted before an address, two addresses or a name in brackets is neither, and a rule
+    on it would never match a sender. The Rust core's `rulebook::names_a_sender` says the same."""
+    local, at, domain = token.rpartition("@")
+    return _plain(local) and _domain(domain, 1) if at else _domain(token, 2)
 
 
 def is_domain(token: str) -> bool:

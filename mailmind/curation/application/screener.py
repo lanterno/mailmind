@@ -8,6 +8,8 @@ from mailmind.kernel.errors import Refused
 from mailmind.kernel.when import rel_time
 
 SHOWN = 100         # the most the queue lists, of however many are left to decide on
+# What a rule on anything else is refused with, which the page and the Mac app show as said.
+NOT_A_SENDER = "A rule names one address, such as name@example.com, or one domain, such as example.com."
 
 
 class Screener:
@@ -26,12 +28,13 @@ class Screener:
 
     def rule(self, b: Mapping[str, Any]) -> dict[str, Any]:
         """A keep, block or remove from the person, on a sender or a domain. Raises Refused for one that names neither, or
-        no verdict it knows."""
+        no verdict it knows. A keep or block names one address or one domain; a removal takes any rule kept before
+        that was held to less."""
         token = rulebook.token_of(b.get("token") or "")
         verdict = b.get("verdict")
         pk = b.get("pk")
-        if not rulebook.is_token(token):
-            raise Refused("invalid token (need a domain or an address)")
+        if not (rulebook.is_token(token) if verdict == "remove" else rulebook.names_a_sender(token)):
+            raise Refused(NOT_A_SENDER)
         if verdict == "remove":
             self._rules.remove(token)
             placed = None
