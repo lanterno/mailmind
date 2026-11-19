@@ -4356,6 +4356,7 @@ export interface components {
             ok: true;
             /** References */
             references: string | null;
+            reply_draft?: components["schemas"]["ReplyDraft"] | null;
             /** Reply To */
             reply_to: string;
             sender: components["schemas"]["SenderFacts"] | null;
@@ -5268,6 +5269,17 @@ export interface components {
             on: boolean;
             /** Thread Id */
             thread_id: string;
+        };
+        /**
+         * ReplyDraft
+         * @description A reply already saved to a message, which Reply opens rather than a second, empty one: its newest.
+         */
+        ReplyDraft: {
+            /** Draft Id */
+            draft_id: number | null;
+            in_drafts: components["schemas"]["Copy"] | null;
+            /** More */
+            more: number;
         };
         /** ReplyLaterBody */
         ReplyLaterBody: {
