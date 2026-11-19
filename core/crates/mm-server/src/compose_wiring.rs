@@ -217,7 +217,8 @@ impl Copies for ImapCopies {
         let landed = left.filter(|_| tried == message_id);
         let uid = match landed {
             Some(uid) => Some(uid),
-            None => s.0.append(&drafts, raw, &["\\Draft"], Some(&self.now())).map_err(failed)?,
+            // Read, as a mail app files its own: a draft is never unread mail.
+            None => s.0.append(&drafts, raw, &["\\Seen", "\\Draft"], Some(&self.now())).map_err(failed)?,
         };
         if let Some(left) = left
             && landed.is_none()
