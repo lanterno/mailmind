@@ -982,6 +982,9 @@ struct GuardStrip: View {
 struct LaterChoices: View {
     let composer: Composer
     @State private var custom = Date().addingTimeInterval(3600)
+    /// The preset the keyboard is on: the first as the popover opens, as the page's `useFocusFirst` puts it there,
+    /// never the date and time of one's own; the arrows move it and Return picks it.
+    @FocusState private var focused: Int?
     @Environment(\.meadow) private var meadow
 
     var body: some View {
@@ -995,9 +998,13 @@ struct LaterChoices: View {
             }
             ForEach(Array(presets.enumerated()), id: \.offset) { index, preset in
                 Button { pick(preset.epoch) } label: {
-                    MeadowPaletteRow(preset.label, icon: .clock, keys: ["\(index + 1)"], pop: true)
+                    MeadowPaletteRow(preset.label, icon: .clock, keys: ["\(index + 1)"], picked: focused == index,
+                                     pop: true)
                 }
                 .buttonStyle(.plain)
+                .focusable()
+                .focused($focused, equals: index)
+                .focusEffectDisabled()
                 .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: [])
             }
             MeadowPopRule()
@@ -1028,6 +1035,22 @@ struct LaterChoices: View {
                 .padding(.bottom, 6)
         }
         .frame(minWidth: 300)
+        .defaultFocus($focused, 0)
+        .onAppear { focused = 0 }
+        .onKeyPress(.downArrow) { move(1, among: presets.count) }
+        .onKeyPress(.upArrow) { move(-1, among: presets.count) }
+        .onKeyPress(.return) {
+            guard let at = focused, presets.indices.contains(at) else { return .ignored }
+            pick(presets[at].epoch)
+            return .handled
+        }
+    }
+
+    /// Move the keyboard `by` presets, from the first to the last and no further, while it is on one.
+    private func move(_ by: Int, among count: Int) -> KeyPress.Result {
+        guard let at = focused else { return .ignored }
+        focused = min(max(at + by, 0), count - 1)
+        return .handled
     }
 
     /// MailMind sends only while it is open, so a message for later needs it open then.
