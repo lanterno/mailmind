@@ -28,6 +28,7 @@ describe("the tray's changes waiting", () => {
     expect(heldWhy(held, false)).toBe("once the server is back");
     expect(heldWhy({ ...held, attempts: 2 }, false)).toBe("tried 2×, trying again");
     expect(heldWhy({ ...held, state: "error", error: "refused" }, true)).toBe("the server refused it");
+    expect(heldWhy({ ...held, state: "error", error: "folder_gone" }, false)).toBe("its folder was deleted or renamed in another app");
     expect(heldWhy({ ...held, state: "error", error: "something else" }, false)).toBe("couldn’t reach the server");
   });
 });
