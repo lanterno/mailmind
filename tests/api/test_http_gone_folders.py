@@ -1,7 +1,7 @@
 """A folder another client deleted or renamed, over HTTP against the fake server. It is forgotten once the server is known
 not to have it: a LIST that worked (the rail's) leaves it out, or a SELECT's NO says [NONEXISTENT], or a bare NO comes
 and a LIST that works leaves it out. Then its mail leaves the lists, reconcile asks for it no more, a message opened
-from it says why, and a change queued for it is given back as one the server refused. A NO that says nothing of the
+from it says why, and a change queued for it is given back, the tray saying its folder went. A NO that says nothing of the
 folder, a LIST that fails and a server away never forget one.
 
 Ada's Archive holds one message the world synced, its body left on the server until it is opened.
@@ -111,7 +111,7 @@ def test_a_message_opened_from_a_folder_another_client_deleted_says_so_and_leave
     assert (r.status, r.json) == (404, problems.not_found("not found"))
 
 
-def test_a_move_queued_into_a_folder_another_client_deleted_is_given_back_as_refused(app, world):
+def test_a_move_queued_into_a_folder_another_client_deleted_is_given_back_saying_its_folder_went(app, world):
     world.server.drop("SELECT", user=w.ADA)
     moved = app.post("/api/move", {**world.copy(LUNCH), "to": "Archive", "mutation_id": "m-gone"}).json
     assert moved["status"] == "queued"
@@ -120,7 +120,7 @@ def test_a_move_queued_into_a_folder_another_client_deleted_is_given_back_as_ref
     assert "Archive" not in on_rail(app)
     assert [row["folder"] for row in world.where(LUNCH)["db"]] == ["INBOX"], "listed where it was"
     tray = app.get("/api/pending").json
-    assert [(item["state"], item["error"]) for item in tray["items"]] == [("error", "refused")]
+    assert [(item["state"], item["error"]) for item in tray["items"]] == [("error", "folder_gone")]
     assert (tray["waiting"], tray["stuck"]) == (0, 1)
     mark = world.mark()
     app.work("commands")
