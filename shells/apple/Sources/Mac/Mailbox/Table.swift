@@ -609,10 +609,8 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
         menu.removeAllItems()
         let clicked = table.clickedRow
         guard clicked >= 0, let position = position(clicked), let mailbox else { return }
-        // A row's menu acts on it: on the rows chosen when it is one of them, else on it alone, which it chooses.
-        if !table.selectedRowIndexes.contains(clicked) {
-            table.selectRowIndexes(IndexSet(integer: clicked), byExtendingSelection: false)
-        }
+        // A row's menu acts on it (`RowMenu.rows`) and chooses nothing: the marks, the rows chosen and the message
+        // open stay as they were, as a right-click leaves them in Mail.
         for item in RowMenu.items(for: mailbox, clicked: list.copy(at: position)) { menu.addItem(item) }
     }
 }
@@ -966,9 +964,19 @@ enum RowKeys {
 /// sender's card and mail.
 @MainActor
 enum RowMenu {
+    /// The rows a row's menu acts on: every row marked when the row clicked is one of them, else the row clicked
+    /// alone, whatever is chosen or open. As the list holds them now: a mark since they were chosen changed their
+    /// flags, and the words follow it.
+    static func rows(for mailbox: Mailbox, clicked: API.FolderRow?) -> [API.FolderRow] {
+        let marks = mailbox.marking ? mailbox.chosenRows : []
+        guard let clicked else { return mailbox.current(marks) }
+        let copy = MailCopy(clicked)
+        if marks.contains(where: { MailCopy($0) == copy }) { return mailbox.current(marks) }
+        return mailbox.current([clicked])
+    }
+
     static func items(for mailbox: Mailbox, clicked: API.FolderRow?) -> [NSMenuItem] {
-        // As the list holds them now: a mark since they were chosen changed their flags, and the words follow it.
-        let rows = mailbox.chosenRows.isEmpty ? clicked.map { [$0] } ?? [] : mailbox.current(mailbox.chosenRows)
+        let rows = rows(for: mailbox, clicked: clicked)
         guard let first = rows.first else { return [] }
         var items: [NSMenuItem] = []
         if rows.count == 1, let open = mailbox.opensWindow {
@@ -981,21 +989,17 @@ enum RowMenu {
         ]
         if Set(rows.map(\.account)).count == 1 {
             let from = Set(rows.map(\.folder))
-            let ask = MoveAsk(account: first.account, from: from.count == 1 ? first.folder : nil)
+            let ask = MoveAsk(account: first.account, from: from.count == 1 ? first.folder : nil, rows: rows)
             let move = NSMenuItem(title: String(localized: "Move To"), action: nil, keyEquivalent: "")
             move.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
             let folders = NSMenu()
             for folder in mailbox.destinations(ask) {
                 folders.addItem(Item(Words.role(folder), nil) {
-                    mailbox.chose(rows)
-                    mailbox.move(to: folder)
+                    Task { await mailbox.moveNow(to: folder.name, label: Words.role(folder), rows: rows) }
                 })
             }
             folders.addItem(.separator())
-            folders.addItem(Item(String(localized: "Other Folder…"), nil) {
-                mailbox.chose(rows)
-                mailbox.moving = ask
-            })
+            folders.addItem(Item(String(localized: "Other Folder…"), nil) { mailbox.moving = ask })
             move.submenu = folders
             items.append(move)
         }

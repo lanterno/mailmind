@@ -739,6 +739,9 @@ struct Toast: Identifiable, Equatable {
 struct MoveAsk: Identifiable, Equatable {
     let account: String
     let from: String?
+    /// The rows to move, when a row's menu asked for them: the row clicked, which needn't be the one chosen. Nil
+    /// moves what is chosen, else what is open.
+    var rows: [API.FolderRow]? = nil
     var id: String { account + "\u{0}" + (from ?? "") }
 }
 

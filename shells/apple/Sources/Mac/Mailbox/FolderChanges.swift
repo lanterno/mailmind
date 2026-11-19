@@ -42,7 +42,7 @@ extension Mailbox {
     func makeFolderAndMove(_ name: String, ask: MoveAsk) async -> FolderChange {
         let made = await makeFolder(name, account: ask.account)
         if case .done(let folder) = made {
-            await moveNow(to: folder, label: name.trimmingCharacters(in: .whitespaces))
+            await moveNow(to: folder, label: name.trimmingCharacters(in: .whitespaces), rows: ask.rows)
         }
         return made
     }

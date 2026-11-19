@@ -98,8 +98,9 @@ extension Mailbox {
 
     /// Move what is chosen, else what is open, to `folder` of its account (`moveRow`, `moveMarked`).
     func move(to folder: API.RailFolder) {
+        let rows = moving?.rows
         moving = nil
-        Task { await moveNow(to: folder.name, label: Words.role(folder)) }
+        Task { await moveNow(to: folder.name, label: Words.role(folder), rows: rows) }
     }
 
     /// Whether the rows being dragged can drop on `folder` of `account`: a folder that takes filing, and rows all of
