@@ -1139,6 +1139,33 @@ final class OpenedMessageVerbsTests: XCTestCase {
         XCTAssertEqual(opened, [], "the Undo is the later verb's, which closed no window")
     }
 
+    /// A notification's message is chosen in its row once its folder's rows come, as a click on it would choose it,
+    /// so the list shows which it is. One the list doesn't hold stays open with no row chosen, and a message opened
+    /// before the rows come stays open.
+    func testANotificationsMessageIsChosenInItsRowOnceTheListHoldsIt() async throws {
+        let world = await world()
+        let copy = MailCopy(Self.rows[2])
+        world.mailbox.openInItsFolder(copy)
+        XCTAssertEqual(world.app.selection.copy, copy, "it opens at once")
+        await waiting(for: "its row chosen") { world.mailbox.marked == [copy] }
+        XCTAssertEqual(world.app.selection.copy, copy)
+        XCTAssertFalse(world.mailbox.marking, "chosen, not marked")
+
+        world.mailbox.openInItsFolder(Self.away)
+        try await Task.sleep(for: .milliseconds(20))
+        XCTAssertEqual(world.app.selection.copy, Self.away)
+        XCTAssertEqual(world.mailbox.marked, [], "no row is chosen for a message the list doesn't hold")
+
+        let other = await self.world()
+        other.mailbox.openInItsFolder(copy)
+        let first = MailCopy(Self.rows[0])
+        other.mailbox.open(first)
+        await waiting(for: "the Inbox's rows") { other.app.list?.copy(at: 0) != nil }
+        try await Task.sleep(for: .milliseconds(20))
+        XCTAssertEqual(other.app.selection.copy, first, "a message opened since stays open")
+        XCTAssertNotEqual(other.mailbox.marked, [copy])
+    }
+
     // MARK: The reader's row
 
     /// A message opened from outside the list reads by the row the server has for it: its folder's listing says
