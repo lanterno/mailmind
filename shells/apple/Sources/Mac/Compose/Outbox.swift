@@ -174,20 +174,26 @@ struct OutboxButton: View {
         if let tray = composing.outbox, tray.active + tray.failed > 0 || shown {
             // In the top bar, a button beside the light's: the outbox's icon, or the alert's while one failed, and
             // how many wait.
+            let count = Self.badge(tray.active + tray.failed)
             Button {
                 shown.toggle()
             } label: {
                 MeadowIconView(tray.failed > 0 ? .alert : .outbox)
-                Text(verbatim: "\(tray.active + tray.failed)").monospacedDigit()
+                if let count { Text(verbatim: count).monospacedDigit() }
             }
             .meadowButton()
-            .help("Outbox and changes waiting: \(tray.active + tray.failed)")
-            .accessibilityLabel("Outbox: \(tray.active + tray.failed) waiting")
+            .help(count.map { "Outbox and changes waiting: \($0)" } ?? "Outbox")
+            .accessibilityLabel(count.map { "Outbox: \($0) waiting" } ?? "Outbox")
             .meadowPopover(isPresented: $shown) {
                 OutboxList(tray: tray, readOnly: composing.digest?.profile == "read-only")
                     .task { await tray.load() }
             }
         }
+    }
+
+    /// How many wait, as the button says it: nothing once none do, while the tray stays open with nothing in it.
+    static func badge(_ waiting: Int) -> String? {
+        waiting > 0 ? "\(waiting)" : nil
     }
 }
 
