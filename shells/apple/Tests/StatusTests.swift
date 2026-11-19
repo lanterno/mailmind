@@ -504,4 +504,24 @@ final class StatusHearsTests: XCTestCase {
         XCTAssertGreaterThan(step, 2, "the steps came faster than a read waits")
         XCTAssertLessThan(server.asked(API.Get.Digest.path).count, step, "a read for the burst, not one a step")
     }
+
+    /// An account's server stops answering: the core says so (`sync-trouble`) and nothing else, no sync having ended.
+    /// The status reads the digest again, and the pill says it is trying again within moments, not at the next sync.
+    func testAServerThatDidntAnswerIsShownTryingAgainOnceTheCoreSaysSo() async {
+        var trying = StatusFixtures.digest(accounts: [Fixture.ada], status: [Fixture.ada: "ok"],
+                                           last: "2026-11-14T14:59:00Z")
+        trying.status[Fixture.ada]?.tryingAgain = true
+        let server = Fixture.server(rows: [])
+        server.on("GET", API.Get.Digest.path, trying)
+        let status = AppStatus(newMail: NewMailAlerts(notifier: SystemNotifier.Silent(), isActive: { true },
+                                                      badge: { _ in }, announce: { _ in }))
+        status.wire = server.wire
+        await status.heard(CoreEvent(id: "1", name: "sync-trouble", data: #"{"account": "ada@example.test"}"#))
+        let started = ContinuousClock.now
+        while status.digest == nil {
+            guard ContinuousClock.now - started < .seconds(3) else { return XCTFail("the digest was never read again") }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertEqual(status.pill, StatusWords.Pill(dot: .busy, text: "Couldn’t reach the server · trying again"))
+    }
 }
