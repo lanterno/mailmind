@@ -87,6 +87,39 @@ final class MeadowContrastTests: XCTestCase {
         XCTAssertFalse(status.highContrast)
     }
 
+    /// The pill over the list for mail that came in since ("▾ 2 new"), on the window's material, which the list shows
+    /// through: in high contrast it stands on solid paper, as the other panels do, in each light.
+    func testTheNewMailPillIsOpaqueInHighContrast() throws {
+        for light in MeadowLight.allCases {
+            let face = NewMailPillFace(words: "▾ 2 new — open the Inbox", line: "Grace sent the figures.")
+            // In its padding, left of the words, clear of the rounded corners and the edge's shadow.
+            let pill = try XCTUnwrap(Self.drawn(face, light: light) { CGPoint(x: 10, y: $0.height / 2) })
+            // The paper as the same renderer draws it: a picture's colours aren't the palette's own in a dark light.
+            let paper = try XCTUnwrap(Self.drawn(PaperProbe(), light: light) { _ in CGPoint(x: 5, y: 5) })
+            XCTAssertEqual(pill.alphaComponent, 1, accuracy: 0.01, "\(light): opaque")
+            for (drawn, wanted) in [(pill.redComponent, paper.redComponent),
+                                    (pill.greenComponent, paper.greenComponent),
+                                    (pill.blueComponent, paper.blueComponent)] {
+                XCTAssertEqual(drawn, wanted, accuracy: 0.02, "\(light): on the paper, not the material")
+            }
+        }
+    }
+
+    /// One point of `content` drawn in `light`'s high contrast, at the point `at` picks for the picture's size.
+    private static func drawn(_ content: some View, light: MeadowLight, at: (CGSize) -> CGPoint) throws -> NSColor? {
+        let renderer = ImageRenderer(content: content.meadowLight(light, highContrast: true))
+        renderer.scale = 1
+        let bitmap = NSBitmapImageRep(cgImage: try XCTUnwrap(renderer.cgImage, "it drew"))
+        let point = at(CGSize(width: bitmap.pixelsWide, height: bitmap.pixelsHigh))
+        return bitmap.colorAt(x: Int(point.x), y: Int(point.y))?.usingColorSpace(.sRGB)
+    }
+
+    private struct PaperProbe: View {
+        @Environment(\.meadow) private var meadow
+
+        var body: some View { meadow.paperRaised.frame(width: 10, height: 10) }
+    }
+
     // MARK: Helpers
 
     /// A panel half seen through, and a square of ink, as a window lit by `status` draws them.
