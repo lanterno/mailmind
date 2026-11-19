@@ -113,8 +113,8 @@ def test_its_numbers_count_all_that_needs_you_and_all_you_wait_on_and_its_lists_
     model.replies = [{"narrative": "test", "next": []}]                  # too short: the numbers say it themselves
     r = reviews.build({w.ADA})
     assert (r["stats"]["needs_you"], r["stats"]["waiting_on"], len(r["needs"]), len(r["waiting"])) == (13, 11, 8, 8)
-    assert r["narrative"].endswith("13 still need a reply from you and you're waiting to hear back on 11.")
-    assert "Still need your reply: 13\nWaiting to hear back: 11\n" in model.prompt
+    assert r["narrative"].endswith("13 messages still need a reply from you and you're waiting to hear back on 11.")
+    assert "Messages that still need your reply: 13\nWaiting to hear back: 11\n" in model.prompt
     assert model.prompt.count(" — Asks ") == 8
 
 

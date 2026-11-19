@@ -134,7 +134,7 @@ def test_a_stub_is_no_retrospective():
 
 def test_a_review_falls_back_on_the_counts():
     got = review.fallback(STATS, [NEEDED], [])
-    assert got == {"narrative": "In the last 7 days you sent 1 message and 2 came in. 1 still need a reply from you.",
+    assert got == {"narrative": "In the last 7 days you sent 1 message and 2 came in. 1 message still needs a reply from you.",
                    "next": ["Reply to Bea — Lunch"]}
 
 
@@ -145,7 +145,15 @@ def test_a_clear_week_says_so():
 
 def test_a_week_with_someone_to_hear_from_says_so():
     got = review.fallback({**STATS, "waiting_on": 3}, [], [])
-    assert got["narrative"].endswith("1 still need a reply from you and you're waiting to hear back on 3.")
+    assert got["narrative"].endswith("1 message still needs a reply from you and you're waiting to hear back on 3.")
+
+
+def test_a_review_says_what_needs_you_a_message_each():
+    """It counts each message that needs you and wasn't answered, where the brief counts a conversation once."""
+    assert review.fallback({**STATS, "needs_you": 2}, [], [])["narrative"].endswith(
+        "2 messages still need a reply from you.")
+    assert review.fallback({**STATS, "needs_you": 0, "waiting_on": 1}, [], [])["narrative"].endswith(
+        "0 messages still need a reply from you and you're waiting to hear back on 1.")
 
 
 def test_a_reviews_fingerprint_moves_with_its_counts_and_its_threads_and_nothing_else():
