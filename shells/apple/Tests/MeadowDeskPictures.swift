@@ -278,7 +278,8 @@ enum DeskPictures {
         API.DigestItem(account: account, action: action, alias: account == work ? "Work" : "Personal",
                        commitmentWorthy: commitment, flagged: false, folder: "INBOX", fromAddr: from, fromName: name,
                        hasAttach: false, importance: importance, key: key, kind: "message", link: "", needsYou: needs,
-                       replyWorthy: needs, safeToFile: safe, seen: seen, subject: subject, summary: summary,
+                       replyWorthy: needs, safeToFile: safe, seen: seen, sentTo: [], sentToMore: 0,
+                       subject: subject, summary: summary,
                        uid: key - 100, when: when)
     }
 
@@ -360,7 +361,8 @@ enum DeskPictures {
 
     static let waiting = API.WaitingOnOthers(items: [
         API.WaitingRow(account: work, count: 1, flagged: false, folder: "Sent", hasAttach: false, isJunk: false,
-                       key: 401, kind: "message", seen: true, snippet: "", subject: "Sign quote for the lobby",
+                       key: 401, kind: "message", seen: true, sentTo: [], sentToMore: 0,
+                       snippet: "", subject: "Sign quote for the lobby",
                        to: "Kit Marlowe <kit@example.test>", ts: 1_794_480_000, uid: 41, waiting: true,
                        waitingLabel: "", when: "Nov 12"),
     ], ok: true)
@@ -386,7 +388,7 @@ enum DeskPictures {
     static let letter = API.SearchHit(
         account: work, commitmentWorthy: false, date: "2026-11-15", flagged: false, folder: "INBOX",
         fromAddr: "yuki@library.example.test", fromName: "Yuki Mori", hasAttach: false, isJunk: false, key: 501,
-        needsYou: false, replyWorthy: false, safeToFile: false, seen: false,
+        needsYou: false, replyWorthy: false, safeToFile: false, seen: false, sentTo: [], sentToMore: 0,
         snippet: "Dear Ada, Ruth mentioned you're finishing the lease this week, so I wanted to introduce myself "
             + "before the November opening. I chair the library board, and we'd love a few words from you at the "
             + "opening.",
@@ -397,7 +399,8 @@ enum DeskPictures {
         API.SearchHit(account: account, commitmentWorthy: false, date: date, flagged: false, folder: folder,
                       fromAddr: "receipts@\(from.lowercased().filter(\.isLetter)).example.test", fromName: from,
                       hasAttach: false, isJunk: false, key: key, needsYou: false, replyWorthy: false, safeToFile: true,
-                      seen: true, snippet: "Thank you for your order.", subject: subject, uid: key, when: date)
+                      seen: true, sentTo: [], sentToMore: 0,
+                      snippet: "Thank you for your order.", subject: subject, uid: key, when: date)
     }
 
     static let receipts: [API.SearchHit] = [

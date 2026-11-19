@@ -137,7 +137,8 @@ final class ScreensTests: XCTestCase {
         let copy = MailCopy(API.FolderRow(
             account: "ada@example.test", action: "", commitmentWorthy: false, flagged: false, folder: "INBOX",
             fromAddr: "bo@bank.example.test", fromName: "Bo Brown", hasAttach: true, isJunk: false, key: 7, needsYou: false,
-            replyWorthy: true, safeToFile: false, seen: true, snippet: "", subject: "The guild dinner", summary: "",
+            replyWorthy: true, safeToFile: false, seen: true, sentTo: [], sentToMore: 0,
+            snippet: "", subject: "The guild dinner", summary: "",
             ts: 1_793_620_800, uid: 7, when: ""))
         let message = API.MessageOpened(
             account: "ada@example.test",

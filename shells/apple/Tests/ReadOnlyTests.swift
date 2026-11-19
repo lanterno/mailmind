@@ -109,7 +109,8 @@ final class ReadOnlyTests: XCTestCase {
     /// reader's message and a conversation's members go this way.
     func testOpeningMailAsksNoServerToMarkItReadWhileReadOnlyOrBeforeTheProfileIsKnown() async throws {
         let member = API.ThreadMessage(answered: false, flagged: false, folder: "INBOX", hasAttach: false,
-                                       isJunk: false, key: 22, seen: false, snippet: "", subject: "Plans", uid: 22,
+                                       isJunk: false, key: 22, seen: false, sentTo: [], sentToMore: 0,
+                                       snippet: "", subject: "Plans", uid: 22,
                                        when: "")
         let copy = MailCopy(member, account: Fixture.ada)
         for (profile, marks) in [(nil, false), ("read-only", false), ("full", true)] as [(String?, Bool)] {
@@ -132,7 +133,8 @@ final class ReadOnlyTests: XCTestCase {
         let routes = FakeRoutes()
         let conversation = ConversationModel(routes: routes, account: Fixture.ada, id: "t1", profile: { "full" })
         await conversation.markRead(API.ThreadMessage(answered: false, flagged: false, folder: "INBOX", hasAttach: false,
-                                                      isJunk: false, key: 21, seen: true, snippet: "", subject: "Plans",
+                                                      isJunk: false, key: 21, seen: true, sentTo: [], sentToMore: 0,
+                                                      snippet: "", subject: "Plans",
                                                       uid: 21, when: ""))
         XCTAssertTrue(routes.calls(to: API.Post.Seen.path).isEmpty)
     }

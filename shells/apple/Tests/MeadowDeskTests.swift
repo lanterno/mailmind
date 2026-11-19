@@ -199,7 +199,8 @@ final class MeadowDeskTests: XCTestCase {
                          folder: String = "INBOX") -> API.SearchHit {
         API.SearchHit(account: account, commitmentWorthy: false, date: date, flagged: false, folder: folder,
                       fromAddr: "shop@example.test", fromName: "Shop", hasAttach: false, isJunk: false, key: 1,
-                      needsYou: false, replyWorthy: false, safeToFile: true, seen: true, snippet: "", subject: subject,
+                      needsYou: false, replyWorthy: false, safeToFile: true, seen: true, sentTo: [], sentToMore: 0,
+                      snippet: "", subject: subject,
                       uid: 1, when: date)
     }
 

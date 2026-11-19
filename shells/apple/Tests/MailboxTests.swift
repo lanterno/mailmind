@@ -173,6 +173,7 @@ final class MailboxRowsTests: XCTestCase {
         let hit = API.SearchHit(account: Fixture.ada, action: "  Pay it ", commitmentWorthy: false, date: "2026-11-02",
                                 flagged: true, folder: "INBOX", fromAddr: "shop@example.test", fromName: "Shop", hasAttach: true,
                                 isJunk: false, key: 7, needsYou: true, replyWorthy: false, safeToFile: false, seen: false,
+                                sentTo: [], sentToMore: 0,
                                 snippet: "Thanks.", subject: "Your receipt", threadId: "t7", uid: 70, when: "Nov 2")
         let row = API.FolderRow(hit)
         XCTAssertEqual(MailCopy(row), MailCopy(key: 7, folder: "INBOX", uid: 70, account: Fixture.ada))
@@ -540,6 +541,7 @@ final class MailboxVerbsTests: XCTestCase {
 
     private func threadMessage(_ key: Int, seen: Bool) -> API.ThreadMessage {
         API.ThreadMessage(answered: false, flagged: false, folder: "INBOX", hasAttach: false, isJunk: false, key: key, seen: seen,
+                          sentTo: [], sentToMore: 0,
                           snippet: "", subject: "Re: The engine's notes", uid: key, when: "")
     }
 }

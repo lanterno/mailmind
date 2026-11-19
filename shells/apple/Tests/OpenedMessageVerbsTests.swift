@@ -49,6 +49,7 @@ final class OpenedMessageVerbsTests: XCTestCase {
     /// As its conversation says it stands: unread, and starred.
     nonisolated static let awayMember = API.ThreadMessage(answered: false, flagged: true, folder: "INBOX", fromAddr: "cy@example.test",
                                               fromName: "Cy Young", hasAttach: false, isJunk: false, key: 90, seen: false,
+                                              sentTo: [], sentToMore: 0,
                                               snippet: "No rush.", subject: "Whenever suits", uid: 90, when: "Mon")
 
     static func hitCopy(_ index: Int) -> MailCopy { MailCopy(API.FolderRow(hits[index])) }
@@ -1353,6 +1354,7 @@ final class OpenedMessageVerbsTests: XCTestCase {
                                              profile: { "full" }, marked: { other.mailbox.markedRead($0) })
         await conversation.markRead(API.ThreadMessage(answered: false, flagged: false, folder: "INBOX",
                                                       hasAttach: false, isJunk: false, key: 2, seen: false,
+                                                      sentTo: [], sentToMore: 0,
                                                       snippet: "", subject: "Re: The engine's notes", uid: 2,
                                                       when: ""))
         XCTAssertFalse(server.asked(API.Post.Seen.path).isEmpty)

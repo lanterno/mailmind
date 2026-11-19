@@ -225,6 +225,7 @@ enum DeskFixture {
         API.DigestItem(account: "ada@example.test", action: action, alias: "Work", commitmentWorthy: commitment, flagged: false,
                        folder: "INBOX", fromAddr: from, fromName: name, hasAttach: false, importance: importance, key: key,
                        kind: "message", link: "", needsYou: needs, replyWorthy: needs, safeToFile: safe, seen: false,
+                       sentTo: [], sentToMore: 0,
                        subject: subject, summary: summary, uid: key - 100, when: "9:12 am")
     }
 
@@ -277,7 +278,8 @@ enum DeskFixture {
 
     static let waiting = API.WaitingOnOthers(items: [
         API.WaitingRow(account: "ada@example.test", count: 1, flagged: false, folder: "Sent", hasAttach: false, isJunk: false,
-                       key: 401, kind: "message", seen: true, snippet: "", subject: "Contract for the new office",
+                       key: 401, kind: "message", seen: true, sentTo: [], sentToMore: 0,
+                       snippet: "", subject: "Contract for the new office",
                        to: "Ruth Lane <ruth@example.test>", ts: 1_762_819_200, uid: 41, waiting: true, waitingLabel: "",
                        when: "Nov 11"),
     ], ok: true)

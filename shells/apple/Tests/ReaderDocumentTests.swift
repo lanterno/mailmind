@@ -428,7 +428,8 @@ final class ReaderDocumentTests: XCTestCase {
         let mine = SendGuard.mineSet(["ada@example.test"])
         let member = { (from: String, key: Int) in
             API.ThreadMessage(answered: false, flagged: false, folder: "Sent", fromAddr: from, fromName: "Ada Park",
-                              hasAttach: false, isJunk: false, key: key, seen: true, snippet: "", subject: "Lunch",
+                              hasAttach: false, isJunk: false, key: key, seen: true, sentTo: [], sentToMore: 0,
+                              snippet: "", subject: "Lunch",
                               uid: key, when: "")
         }
         let latest = opened(from: "ada@example.test", to: "Lin Mori <lin@example.test>", key: 9)

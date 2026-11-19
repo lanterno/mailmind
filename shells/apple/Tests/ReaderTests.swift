@@ -80,7 +80,8 @@ final class ReaderTests: XCTestCase {
     /// answered "missing account/thread", and the pane showed that in place of the conversation.
     func testAConversationIsAskedForByItsAccountAndThreadID() async throws {
         let member = API.ThreadMessage(answered: false, flagged: false, folder: "INBOX", hasAttach: false, isJunk: false,
-                                       key: 21, seen: true, snippet: "See you then", subject: "Plans", uid: 21, when: "Mon")
+                                       key: 21, seen: true, sentTo: [], sentToMore: 0,
+                                       snippet: "See you then", subject: "Plans", uid: 21, when: "Mon")
         let thread = API.Thread(account: Fixture.work, count: 1, items: [member], ok: true, replyKey: 21, threadId: "t1")
         let routes = FakeRoutes()
         routes.answer(API.Get.Thread.path, String(decoding: try JSONEncoder().encode(thread), as: UTF8.self))

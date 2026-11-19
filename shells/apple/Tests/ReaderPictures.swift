@@ -326,7 +326,8 @@ private enum Mail {
         API.FolderRow(account: account, action: action, bucket: bucket, commitmentWorthy: false, count: count,
                       flagged: false, folder: "INBOX", fromAddr: address(from), fromName: from, hasAttach: attach,
                       isJunk: false, key: key, needsYou: !action.isEmpty, replyWorthy: !action.isEmpty,
-                      safeToFile: false, seen: true, snippet: snippet ?? summary, subject: subject, summary: summary,
+                      safeToFile: false, seen: true, sentTo: [], sentToMore: 0,
+                      snippet: snippet ?? summary, subject: subject, summary: summary,
                       threadCount: count, threadId: count.map { _ in "t\(key)" }, ts: 1_793_620_800 - key * 600,
                       uid: key, when: when)
     }
@@ -379,15 +380,16 @@ private enum Mail {
     /// The conversation: Ren's first draft, your answer, and Ren's latest.
     static let thread = API.Thread(account: Fixture.work, count: 3, items: [
         API.ThreadMessage(answered: true, flagged: false, folder: "INBOX", fromAddr: ren, fromName: "Ren Takeda",
-                          hasAttach: true, isJunk: false, key: 101, seen: true,
+                          hasAttach: true, isJunk: false, key: 101, seen: true, sentTo: [], sentToMore: 0,
                           snippet: "First draft of the agreement attached — have a look when you can.",
                           subject: "Harbor Library contract", uid: 101, when: "Mon 26 Oct"),
         API.ThreadMessage(answered: false, flagged: false, folder: "[Gmail]/Sent Mail", fromAddr: Fixture.work,
                           fromName: "Hana Ito", hasAttach: false, isJunk: false, key: 102, seen: true,
+                          sentTo: [], sentToMore: 0,
                           snippet: "Happy with v2. Could we get a small studio credit on the entrance sign?",
                           subject: "Re: Harbor Library contract", uid: 102, when: "Tue 27 Oct"),
         API.ThreadMessage(answered: false, flagged: false, folder: "INBOX", fromAddr: ren, fromName: "Ren Takeda",
-                          hasAttach: true, isJunk: false, key: 1, seen: true,
+                          hasAttach: true, isJunk: false, key: 1, seen: true, sentTo: [], sentToMore: 0,
                           snippet: "Legal came back on the Harbor Library agreement — v3 is attached.",
                           subject: "Harbor Library contract — signature needed", uid: 1, when: "11:42 am"),
     ], ok: true, replyKey: 1, threadId: "t1")

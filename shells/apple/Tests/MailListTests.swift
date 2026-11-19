@@ -124,7 +124,8 @@ private actor Folder {
     static func row(_ n: Int) -> API.FolderRow {
         API.FolderRow(account: "ada@example.test", action: "", commitmentWorthy: false, flagged: false, folder: "INBOX",
                       fromAddr: "sender\(n)@example.test", fromName: "Sender \(n)", hasAttach: false, isJunk: false,
-                      key: n, needsYou: false, replyWorthy: false, safeToFile: false, seen: n % 2 == 0, snippet: "",
+                      key: n, needsYou: false, replyWorthy: false, safeToFile: false, seen: n % 2 == 0,
+                      sentTo: [], sentToMore: 0, snippet: "",
                       subject: "Message \(n)", summary: "", ts: 1_793_620_800 - n * 60, uid: n + 1, when: "")
     }
 }

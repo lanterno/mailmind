@@ -170,6 +170,73 @@ final class MeadowRowsTests: XCTestCase {
         XCTAssertEqual(RowWords.initials(row), "N")
     }
 
+    // MARK: Whom a row names
+
+    private static let mine = SendGuard.mineSet([Fixture.ada, Fixture.work])
+    private static let lin = API.Addressee(addr: "lin@example.test", name: "Lin Mori")
+    private static let bea = API.Addressee(addr: "bea@example.test", name: nil)
+
+    /// A row of Ada's own mail: from her address, to `to` and `more` besides.
+    private func yours(_ to: [API.Addressee], more: Int = 0, from: String = Fixture.ada) -> API.FolderRow {
+        Fixture.row(1, folder: "Sent", from: "Ada Park", fromAddr: from, to: to, more: more)
+    }
+
+    func testMailFromSomeoneElseIsNamedByItsSenderWhoeverItWentTo() {
+        let row = Fixture.row(1, from: "Ren Takeda", to: [Self.lin, Self.bea], more: 3)
+        XCTAssertEqual(RowWords.who(row, mine: Self.mine),
+                       RowWords.Who(name: "Ren Takeda", avatarName: "Ren Takeda", avatarAddress: "ren.takeda@example.test"))
+    }
+
+    func testYourOwnMailIsNamedByWhomItWentToAndTheFirstOfThemInTheAvatar() {
+        XCTAssertEqual(RowWords.who(yours([Self.lin]), mine: Self.mine),
+                       RowWords.Who(name: "To Lin", avatarName: "Lin Mori", avatarAddress: "lin@example.test"))
+        XCTAssertEqual(RowWords.who(yours([Self.lin, Self.bea], more: 2), mine: Self.mine).name,
+                       "To Lin, bea@example.test +2")
+        XCTAssertEqual(RowWords.who(yours([API.Addressee(addr: "help@parcel.example.test", name: "Parcel Service")]),
+                                    mine: Self.mine).name, "To Parcel Service", "an organisation's name whole")
+    }
+
+    func testYourOwnIsFromAnyOfYourAddressesTaggedOrInCapitals() {
+        for from in ["ada+news@example.test", "Work@Example.test"] {
+            XCTAssertEqual(RowWords.who(yours([Self.lin], from: from), mine: Self.mine).name, "To Lin", from)
+        }
+    }
+
+    func testYouAreLeftOutOfWhomYourOwnWentTo() {
+        let ada = API.Addressee(addr: "ADA@example.test", name: "Ada")
+        XCTAssertEqual(RowWords.who(yours([ada, Self.lin], more: 1), mine: Self.mine).name, "To Lin +1")
+        // A note to yourself, or a draft that names no one yet, is named by who wrote it.
+        XCTAssertEqual(RowWords.who(yours([API.Addressee(addr: "ada+notes@example.test", name: nil)]),
+                                    mine: Self.mine).name, "Ada Park")
+        XCTAssertEqual(RowWords.who(yours([]), mine: Self.mine).name, "Ada Park")
+        XCTAssertEqual(RowWords.who(yours([Self.lin]), mine: []).name, "Ada Park", "before your addresses are known")
+    }
+
+    func testTheBriefsCardNamesYourOwnAsTheListDoes() {
+        let item = API.DigestItem(account: Fixture.ada, action: "", commitmentWorthy: false, flagged: false,
+                                  folder: "INBOX", fromAddr: Fixture.ada, fromName: "Ada Park", hasAttach: false, key: 1,
+                                  kind: "imap", link: "", needsYou: true, replyWorthy: true, safeToFile: false,
+                                  seen: false, sentTo: [Self.lin], sentToMore: 0, subject: "Notes", uid: 1, when: "Mon")
+        XCTAssertEqual(RowWords.who(item, mine: Self.mine).name, "To Lin")
+        XCTAssertEqual(RowWords.named(item, mine: Self.mine), "To Lin", "the read and tidy rows name it so too")
+        var nameless = item
+        nameless.fromName = nil
+        nameless.fromAddr = nil
+        XCTAssertEqual(RowWords.named(nameless, mine: Self.mine), "—", "a card that names no one has a dash")
+    }
+
+    func testARowOfYourOwnSaysWhomItWentToAndDrawsTheirInitials() throws {
+        let cell = MailRowCell()
+        let look = RowLook(inks: RowInks.of(.day, light: .day, highContrast: false), measure: RowMeasure(.comfortable),
+                           accounts: [Fixture.ada])
+        cell.show(yours([Self.lin, Self.bea], more: 1), head: nil, acts: [], look: look)
+        let said = try XCTUnwrap(cell.accessibilityLabel())
+        XCTAssertTrue(said.contains("To Lin, bea@example.test +1"), said)
+        XCTAssertFalse(said.contains("Ada Park"), said)
+        cell.show(Fixture.row(2, from: "Ren Takeda", to: [Self.lin]), head: nil, acts: [], look: look)
+        XCTAssertTrue(try XCTUnwrap(cell.accessibilityLabel()).contains("Ren Takeda"))
+    }
+
     func testARowsButtonsFollowItsFolder() {
         XCTAssertEqual(RowAct.shown(role: "trash"), [.restore])
         XCTAssertEqual(RowAct.shown(role: "archive"), [.toInbox, .delete, .snooze])

@@ -118,7 +118,8 @@ final class MeadowRowsPictures: XCTestCase {
                           flagged: flagged, folder: folder,
                           fromAddr: from.lowercased().replacingOccurrences(of: " ", with: ".") + "@example.test",
                           fromName: from, hasAttach: attach, isJunk: junk, key: key, needsYou: !action.isEmpty,
-                          replyWorthy: !action.isEmpty, safeToFile: false, seen: seen, snippet: snippet,
+                          replyWorthy: !action.isEmpty, safeToFile: false, seen: seen, sentTo: [], sentToMore: 0,
+                          snippet: snippet,
                           subject: subject, summary: summary, threadCount: count,
                           threadId: count.map { _ in "t\(key)" }, ts: at, uid: key, when: when)
         }

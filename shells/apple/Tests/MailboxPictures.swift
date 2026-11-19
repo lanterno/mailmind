@@ -153,7 +153,8 @@ final class MailboxPictures: XCTestCase {
     nonisolated private static func hit(of row: API.FolderRow) -> API.SearchHit {
         API.SearchHit(account: row.account, commitmentWorthy: false, date: "2026-11-02", flagged: row.flagged, folder: row.folder,
                       fromAddr: row.fromAddr, fromName: row.fromName, hasAttach: row.hasAttach, isJunk: row.isJunk, key: row.key,
-                      needsYou: row.needsYou, replyWorthy: false, safeToFile: false, seen: row.seen, snippet: row.snippet,
+                      needsYou: row.needsYou, replyWorthy: false, safeToFile: false, seen: row.seen,
+                      sentTo: [], sentToMore: 0, snippet: row.snippet,
                       subject: row.subject, uid: row.uid, when: row.when)
     }
 

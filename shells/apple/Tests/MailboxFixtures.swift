@@ -103,12 +103,14 @@ enum Fixture {
     static func row(_ key: Int, account: String = ada, folder: String = "INBOX", seen: Bool = true, flagged: Bool = false,
                     attach: Bool = false, count: Int? = nil, thread: String? = nil, junk: Bool = false,
                     needs: Bool = false, action: String = "", summary: String = "", from: String = "Grace Hopper",
+                    fromAddr: String? = nil, to: [API.Addressee] = [], more: Int = 0,
                     subject: String? = nil, when: String = "10:42") -> API.FolderRow {
         API.FolderRow(account: account, action: action, bucket: junk ? "promo/deals" : nil, commitmentWorthy: false,
                       count: count, flagged: flagged, folder: folder,
-                      fromAddr: from.lowercased().replacingOccurrences(of: " ", with: ".") + "@example.test",
+                      fromAddr: fromAddr ?? from.lowercased().replacingOccurrences(of: " ", with: ".") + "@example.test",
                       fromName: from, hasAttach: attach, isJunk: junk, key: key, needsYou: needs, replyWorthy: needs,
-                      safeToFile: false, seen: seen, snippet: "A line of fictional mail, number \(key).",
+                      safeToFile: false, seen: seen, sentTo: to, sentToMore: more,
+                      snippet: "A line of fictional mail, number \(key).",
                       subject: subject ?? "Message \(key)", summary: summary, threadCount: count,
                       threadId: thread ?? (count.map { _ in "t\(key)" }), ts: 1_790_000_000 - key * 600, uid: key, when: when)
     }
@@ -118,6 +120,7 @@ enum Fixture {
         API.SearchHit(account: account, commitmentWorthy: false, date: date, flagged: false, folder: "INBOX",
                       fromAddr: "\(from.lowercased())@example.test", fromName: from, hasAttach: false, isJunk: false,
                       key: key, needsYou: false, replyWorthy: false, safeToFile: false, seen: seen,
+                      sentTo: [], sentToMore: 0,
                       snippet: "Thanks for your order.", subject: subject, uid: key, when: "Nov 2")
     }
 
