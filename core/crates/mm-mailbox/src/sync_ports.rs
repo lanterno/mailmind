@@ -62,7 +62,8 @@ pub struct Incoming {
     pub gmail_thread: Option<String>,
     pub gmail_labels: Option<Vec<String>>,
     pub verdict: Verdict,
-    /// Its body's text, for the Inbox; empty elsewhere and for junk.
+    /// Its body's text, where the sync read it (`sync_plan::reads_text`): the Inbox's but junk, a draft's, what Undo
+    /// brought back; empty elsewhere.
     pub snippet: String,
     /// Its whole body, where the sync read all of it: an Inbox opening that held the whole message, or an invite
     /// fetched whole (Today & next reads invites from stored bodies only). Kept with the row, in its transaction, as

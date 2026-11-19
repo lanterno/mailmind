@@ -214,6 +214,15 @@ pub fn reads_bodies(folder: &str) -> bool {
     folder.eq_ignore_ascii_case("INBOX")
 }
 
+/// Whether a sync reads a message's text from its opening as it stores it, its flags being `flags`: in a folder that
+/// reads bodies (`inbox`), what isn't junk, for the AI's snippet; a draft wherever it is, as drafts are few and a
+/// person's own, so its row says what it says from the first; and whatever Undo brings back (`restoring`), junk too,
+/// so its row shows as it did before it left.
+pub fn reads_text(inbox: bool, restoring: bool, junk: bool, flags: &[i64; 5]) -> bool {
+    let draft = COLUMNS.iter().position(|c| *c == "draft").is_some_and(|at| flags[at] != 0);
+    restoring || draft || (inbox && !junk)
+}
+
 /// Whether opening a folder already read should catch it up: not INBOX, which the background sync keeps, and not
 /// again within `every` seconds of the last that started (`since`, None when none has). An open while one runs waits
 /// for it too, or it would answer with what that one is about to change.

@@ -1,6 +1,7 @@
 //! Mail into the database, whole or by UID watermark (`mailbox.application.sync.Ingest`): fetch the headers,
-//! classify, store with the message's identity and index it, read the opening of the Inbox's mail that isn't junk for
-//! its text, read again the flags of mail already stored, and thread what arrived.
+//! classify, store with the message's identity and index it, read the opening of the Inbox's mail that isn't junk, of
+//! a draft in any folder and of what Undo brings back for its text, read again the flags of mail already stored, and
+//! thread what arrived.
 //!
 //! What a sync stores goes in steps (`sync_plan::Step`), each one transaction with how far the sync got. A first scan
 //! stores the newest step and leaves the folder's older mail to `read_older`, which the background calls a few steps
@@ -140,8 +141,11 @@ impl Drop for Open {
 #[derive(Clone, Copy, Debug)]
 struct Pass<'a> {
     folder: &'a str,
-    /// The Inbox's: each message's text is read from its opening.
+    /// The Inbox's: each message's text is read from its opening, junk aside. A draft's is read in any folder
+    /// (`sync_plan::reads_text`).
     with_body: bool,
+    /// Undo's: what it brings back has its text read, junk too, wherever it goes back to.
+    restoring: bool,
     /// What it finds is new to the folder, so the person's filters speak for what MailMind has never seen.
     arriving: bool,
     /// It reads a first scan's older mail: a message whose headers the server won't send is left out, so the scan
@@ -282,6 +286,7 @@ impl Ingest {
         let pass = Pass {
             folder,
             with_body: sync_plan::reads_bodies(folder),
+            restoring: false,
             arriving: plan.arrives_in(folder),
             older: false,
         };
@@ -338,7 +343,8 @@ impl Ingest {
         let below = s.0.search(Search::Below(floor))?;
         let total = usize::try_from(selected.exists).unwrap_or(usize::MAX).max(below.len());
         let mut left = below.len();
-        let pass = Pass { folder, with_body: sync_plan::reads_bodies(folder), arriving: false, older: true };
+        let pass =
+            Pass { folder, with_body: sync_plan::reads_bodies(folder), restoring: false, arriving: false, older: true };
         let mut reached = None;
         for step in sync_plan::older_steps(floor, &below, chunks) {
             let mut stored = Vec::new();
@@ -369,8 +375,9 @@ impl Ingest {
         self.ingest_messages(account, folder, &[message_id.to_owned()])
     }
 
-    /// The same for each of `message_ids`, on one session: Undo's way to bring back a sweep's hundreds at once. How
-    /// many it stored.
+    /// The same for each of `message_ids`, on one session: Undo's way to bring back a sweep's hundreds at once. Each
+    /// is read with its text, junk too and whatever the folder, so its row shows as it did before it left, not bare
+    /// until the body backfill comes to it. How many it stored.
     pub fn ingest_messages(&self, account: &str, folder: &str, message_ids: &[String]) -> Result<usize, SyncError> {
         if message_ids.iter().all(String::is_empty) {
             return Ok(0);
@@ -388,7 +395,8 @@ impl Ingest {
         if uids.is_empty() {
             return Ok(0);
         }
-        let pass = Pass { folder, with_body: sync_plan::reads_bodies(folder), arriving: false, older: false };
+        let pass =
+            Pass { folder, with_body: sync_plan::reads_bodies(folder), restoring: true, arriving: false, older: false };
         let fetched = self.fetch(&mut *s.0, &acct, &uids, pass)?;
         let mut stored = Vec::new();
         for row in &fetched {
@@ -402,8 +410,9 @@ impl Ingest {
         Ok(uids.len())
     }
 
-    /// The messages `uids` names in the selected folder: their headers, classified, and the Inbox's text read from
-    /// the opening of each that isn't junk, with the whole body where the sync read it whole, oldest first.
+    /// The messages `uids` names in the selected folder: their headers, classified, and the text of those the pass
+    /// reads (`sync_plan::reads_text`: the Inbox's that aren't junk, drafts, what Undo brings back) read from the
+    /// opening of each, with the whole body where the sync read it whole, oldest first.
     fn fetch(
         &self,
         s: &mut dyn MailServer,
@@ -445,10 +454,14 @@ impl Ingest {
                 body: None,
             })
             .collect();
-        if !pass.with_body {
+        let wanted: Vec<u32> = fetched
+            .iter()
+            .filter(|f| sync_plan::reads_text(pass.with_body, pass.restoring, f.verdict.is_junk, &f.flags))
+            .map(|f| f.uid)
+            .collect();
+        if wanted.is_empty() {
             return Ok(fetched);
         }
-        let wanted: Vec<u32> = fetched.iter().filter(|f| !f.verdict.is_junk).map(|f| f.uid).collect();
         let mut heads = match s.heads(&wanted, HEAD_BYTES) {
             Ok(heads) => heads,
             // A connection lost part way stores nothing of the step, which is read again, rather than its mail with
