@@ -44,7 +44,7 @@ CREATE TABLE outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL
 CREATE TABLE drafts (id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, folder TEXT, uid INTEGER,
   message_id TEXT, uidvalidity INTEGER, mode TEXT, subject TEXT, created_at TEXT, updated_at TEXT, own_text TEXT,
   tail_text TEXT, tail_html TEXT, bcc TEXT, raw_sha TEXT, idempotency_key TEXT, version INTEGER NOT NULL DEFAULT 0,
-  saved_by TEXT, pushed_at INTEGER);
+  saved_by TEXT, pushed_at INTEGER, in_reply_to TEXT);
 CREATE TABLE draft_journal(draft_id INTEGER PRIMARY KEY REFERENCES drafts(id) ON DELETE CASCADE,
   version INTEGER NOT NULL, account TEXT NOT NULL, discard INTEGER NOT NULL DEFAULT 0, message_id TEXT, raw BLOB,
   raw_sha TEXT, own_text TEXT, tail_text TEXT, tail_html TEXT, bcc TEXT, tried TEXT, saved_at INTEGER NOT NULL,
@@ -278,6 +278,40 @@ fn a_draft_is_repointed_only_where_no_save_moved_it_on() {
     assert!(sending_ports::write(&store, |book| book.draft_repoint(&now, "Drafts", 9, Some(77), true)).unwrap());
     let after = sending_ports::read(&store, |book| book.draft_get(id)).unwrap().unwrap();
     assert_eq!((after.uid, after.pushed_at, after.own_text, after.raw_sha), (Some(9), Some(130), None, None));
+}
+
+#[test]
+fn a_draft_answers_what_its_newest_save_names_until_its_copy_has_gone_with_no_save_waiting() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = database(dir.path());
+    let record = record();
+    let at = "2026-11-13T12:00:00+00:00";
+    let id = sending_ports::write(&store, |book| {
+        let id = book.draft_insert(&tracked("Re: Linen"))?;
+        book.draft_note_save(id, Some("reply"), Some("Re: Linen"), 1, Some("k-1"), at, Some("<linen@example.test>"))?;
+        book.journal_put(&save(id, 1, &record, 100))?;
+        Ok(id)
+    })
+    .unwrap();
+    let answers =
+        |store: &Database| sending_ports::read(store, |book| book.draft_get(id)).unwrap().unwrap().in_reply_to;
+    assert_eq!(answers(&store).as_deref(), Some("<linen@example.test>"));
+    let seen = sending_ports::read(&store, |book| book.draft_get(id)).unwrap().unwrap();
+    sending_ports::write(&store, |book| book.draft_answers_nothing(&seen)).unwrap();
+    assert_eq!(answers(&store).as_deref(), Some("<linen@example.test>"), "a save waits here");
+    sending_ports::write(&store, |book| {
+        book.journal_settled(id, 1)?;
+        book.draft_settle_push(id, "ada@example.test", "Drafts", Some(4), "<d@example.test>", Some(77), 130)
+    })
+    .unwrap();
+    sending_ports::write(&store, |book| book.draft_answers_nothing(&seen)).unwrap();
+    assert_eq!(answers(&store).as_deref(), Some("<linen@example.test>"), "a push moved it on since it was read");
+    let now = sending_ports::read(&store, |book| book.draft_get(id)).unwrap().unwrap();
+    sending_ports::write(&store, |book| book.draft_answers_nothing(&now)).unwrap();
+    assert_eq!(answers(&store), None);
+    // A save says so again, and one that answers nothing says that.
+    sending_ports::write(&store, |book| book.draft_note_save(id, Some("new"), None, 2, None, at, None)).unwrap();
+    assert_eq!(answers(&store), None);
 }
 
 #[test]

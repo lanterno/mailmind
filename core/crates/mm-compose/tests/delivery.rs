@@ -228,7 +228,12 @@ impl Book for Rows<'_> {
         _version: i64,
         _saved_by: Option<&str>,
         _updated_at: &str,
+        _in_reply_to: Option<&str>,
     ) -> Result<(), Fault> {
+        unreachable!("a send never asks it")
+    }
+
+    fn draft_answers_nothing(&self, _seen: &DraftRow) -> Result<(), Fault> {
         unreachable!("a send never asks it")
     }
 

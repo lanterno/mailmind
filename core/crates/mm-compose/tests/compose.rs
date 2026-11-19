@@ -1,5 +1,5 @@
 //! What the outbox tray lists, and a draft as it opens, as the Python app's `outbox_item.listed`,
-//! `draft_journal` and `drafts.info` give them.
+//! `draft_journal` and `drafts.info` give them, with the reply already saved to a message that isn't one.
 
 #![allow(clippy::unwrap_used)]
 
@@ -100,10 +100,19 @@ impl Clock for Now {
 struct Book {
     known: Option<Row>,
     tracked: Mutex<Vec<Tracked>>,
+    /// MailMind's own drafts that answer the message, and the copies listed that name it.
+    answering: Vec<Row>,
+    naming: Vec<Row>,
+    /// The tracked drafts by Message-ID, and those a send holds or a discard is taking.
+    by_msgid: Vec<(&'static str, i64)>,
+    held: Vec<i64>,
 }
 
 impl StoredDrafts for Book {
     fn by_message_id(&self, _account: &str, message_id: Option<&str>) -> Result<Option<Row>, Fault> {
+        if let Some((_, id)) = self.by_msgid.iter().find(|(m, _)| Some(*m) == message_id) {
+            return Ok(Some(row(json!({"id": id}))));
+        }
         Ok(message_id.and(self.known.clone()))
     }
 
@@ -114,6 +123,18 @@ impl StoredDrafts for Book {
 
     fn uidvalidity(&self, _account: &str, _folder: &str) -> Result<Option<i64>, Fault> {
         Ok(Some(77))
+    }
+
+    fn answering(&self, _message_id: &str) -> Result<Vec<Row>, Fault> {
+        Ok(self.answering.clone())
+    }
+
+    fn naming(&self, _message_id: &str) -> Result<Vec<Row>, Fault> {
+        Ok(self.naming.clone())
+    }
+
+    fn held(&self, draft_id: i64) -> Result<bool, Fault> {
+        Ok(self.held.contains(&draft_id))
     }
 }
 
@@ -158,4 +179,81 @@ fn another_apps_draft_is_tracked_as_it_opens() {
         (Some("Drafts"), Some(5), Some(77))
     );
     assert_eq!(tracked[0].at, "2026-11-02T12:00:00+00:00");
+}
+
+fn reply_draft(book: Book) -> Value {
+    let drafts = Drafts::new(Arc::new(book), Arc::new(DraftsIs("Drafts")), Arc::new(Now));
+    let info = drafts.info(&message("INBOX", 0)).unwrap();
+    info.get("reply_draft").cloned().unwrap_or(Value::Null)
+}
+
+/// A copy listed in `folder` naming the message, `<d@example.test>`, in its In-Reply-To (`irt`), saved at `ts`.
+fn copy(folder: &str, message_id: &str, irt: &str, ts: i64, draft: i64) -> Row {
+    row(json!({"pk": ts, "account": "bea@example.test", "folder": folder, "uid": ts, "message_key": ts * 10,
+               "message_id": message_id, "in_reply_to": irt, "ts": ts, "draft": draft}))
+}
+
+#[test]
+fn a_message_no_draft_answers_names_none() {
+    assert_eq!(reply_draft(Book::default()), Value::Null);
+}
+
+#[test]
+fn of_mailminds_own_replies_the_newest_save_opens_and_the_others_are_counted() {
+    let book = Book {
+        answering: vec![
+            row(json!({"id": 3, "saved_at": 100})),
+            row(json!({"id": 5, "saved_at": 300})),
+            row(json!({"id": 4, "saved_at": 300})),
+            row(json!({"id": 6, "saved_at": null})),
+        ],
+        ..Book::default()
+    };
+    assert_eq!(reply_draft(book), json!({"draft_id": 5, "in_drafts": null, "more": 3}));
+}
+
+#[test]
+fn another_apps_reply_in_drafts_is_named_by_its_copy() {
+    let book = Book {
+        answering: vec![row(json!({"id": 3, "saved_at": 100}))],
+        naming: vec![copy("Drafts", "<other@example.test>", "<d@example.test>", 200, 0)],
+        ..Book::default()
+    };
+    assert_eq!(
+        reply_draft(book),
+        json!({"draft_id": null, "in_drafts": {"key": 2000, "folder": "Drafts", "uid": 200}, "more": 1})
+    );
+}
+
+#[test]
+fn a_copy_mailmind_tracks_is_named_by_its_id_once() {
+    let book = Book {
+        answering: vec![row(json!({"id": 3, "saved_at": 100}))],
+        naming: vec![
+            copy("Drafts", "<mine@example.test>", "<d@example.test>", 50, 0),
+            copy("Drafts", "<older@example.test>", "<d@example.test>", 400, 0),
+        ],
+        by_msgid: vec![("<mine@example.test>", 3), ("<older@example.test>", 8)],
+        ..Book::default()
+    };
+    assert_eq!(reply_draft(book), json!({"draft_id": 8, "in_drafts": null, "more": 1}));
+}
+
+#[test]
+fn a_copy_that_isnt_a_draft_names_another_message_first_or_is_held_answers_nothing() {
+    let book = Book {
+        naming: vec![
+            copy("Sent", "<sent@example.test>", "<d@example.test>", 10, 0),
+            copy("Drafts", "<later@example.test>", "<other@example.test>", 20, 0),
+            copy("Drafts", "<held@example.test>", "<d@example.test>", 30, 0),
+            copy("Archive", "<flagged@example.test>", "<d@example.test>", 5, 1),
+        ],
+        by_msgid: vec![("<held@example.test>", 9)],
+        held: vec![9],
+        ..Book::default()
+    };
+    assert_eq!(
+        reply_draft(book),
+        json!({"draft_id": null, "in_drafts": {"key": 50, "folder": "Archive", "uid": 5}, "more": 0})
+    );
 }
