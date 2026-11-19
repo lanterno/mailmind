@@ -273,13 +273,13 @@ final class MeadowOverlayTests: XCTestCase {
     }
 
     /// The sync popover's items keep room for the focus ring, which reaches past its row: on Check for mail now it no
-    /// longer crosses the title of Check Mail Against the Server, which its second line puts at its top. Between two
+    /// longer crosses the title of Check mail against the server, which its second line puts at its top. Between two
     /// items there is the ring's whole reach.
     func testTheSyncPopoversItemsLeaveRoomForTheFocusRing() {
         func height(ringRoom: Bool) -> CGFloat {
             let items = [
                 MeadowMenuItem(id: "sync", title: "Check for mail now", icon: .refresh) {},
-                MeadowMenuItem(id: "reconcile", title: "Check Mail Against the Server",
+                MeadowMenuItem(id: "reconcile", title: "Check mail against the server",
                                detail: "Drop mail deleted elsewhere", icon: .restore) {},
             ]
             let menu = MeadowMenu(parts: items.map { .item($0) }, width: 280, model: MeadowMenuModel(), close: {},
@@ -288,6 +288,23 @@ final class MeadowOverlayTests: XCTestCase {
         }
         XCTAssertEqual(height(ringRoom: true) - height(ringRoom: false), 2 * MeadowMenu.ringReach, accuracy: 0.5,
                        "half the reach above and below each item: the whole of it between two")
+    }
+
+    /// The sync popover's items say what they do in sentence case, as the page's menus and the rest of the popover do:
+    /// only a place's own name, Settings, keeps its capital.
+    func testTheSyncPopoversItemsAreSaidInSentenceCase() {
+        let status = AppStatus(newMail: NewMailAlerts(notifier: SystemNotifier.Silent(), isActive: { true },
+                                                      badge: { _ in }, announce: { _ in }))
+        let menu = StatusMenu(status: status, model: MeadowMenuModel(), settings: {}, close: {})
+        let titles = menu.parts.compactMap { part -> String? in
+            if case .item(let item) = part { return item.title }
+            return nil
+        }
+        XCTAssertEqual(titles, ["Check for mail now", "Check mail against the server", "Sync & account settings"])
+        for title in titles {
+            let rest = title.split(separator: " ").dropFirst().filter { $0 != "Settings" }
+            XCTAssertFalse(rest.contains { $0.first?.isUppercase == true }, title)
+        }
     }
 
     func testAnAccountsStateSaysHowItStands() {
