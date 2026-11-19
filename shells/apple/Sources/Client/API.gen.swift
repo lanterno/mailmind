@@ -3497,6 +3497,7 @@ extension API {
         public var bccCount: Int
         public var cc: [String]
         public var createdAt: String
+        public var draftId: Int?
         public var error: String?
         public var id: Int
         public var nextAttemptAt: Int
@@ -3508,12 +3509,13 @@ extension API {
         public var to: [String]
         public var unsure: Bool
 
-        public init(account: String, attempts: Int, bccCount: Int, cc: [String], createdAt: String, error: String? = nil, id: Int, nextAttemptAt: Int, retrying: Bool, scheduled: Bool, sentAt: String? = nil, state: String, subject: String, to: [String], unsure: Bool) {
+        public init(account: String, attempts: Int, bccCount: Int, cc: [String], createdAt: String, draftId: Int? = nil, error: String? = nil, id: Int, nextAttemptAt: Int, retrying: Bool, scheduled: Bool, sentAt: String? = nil, state: String, subject: String, to: [String], unsure: Bool) {
             self.account = account
             self.attempts = attempts
             self.bccCount = bccCount
             self.cc = cc
             self.createdAt = createdAt
+            self.draftId = draftId
             self.error = error
             self.id = id
             self.nextAttemptAt = nextAttemptAt
@@ -3532,6 +3534,7 @@ extension API {
             case bccCount = "bcc_count"
             case cc
             case createdAt = "created_at"
+            case draftId = "draft_id"
             case error
             case id
             case nextAttemptAt = "next_attempt_at"
