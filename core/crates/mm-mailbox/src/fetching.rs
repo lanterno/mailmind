@@ -12,6 +12,10 @@
 //! opening that holds the whole message is kept as its body; one cut off is fetched whole, several a FETCH too, where
 //! the message is at most `WHOLE_MOST`; and a larger message keeps only its opening's text, which search indexes, so
 //! its attachments are fetched when it is opened.
+//!
+//! A folder the server no longer has (another client deleted or renamed it) is forgotten as it is found gone, where
+//! this forgets folders (`forgetting_gone`): by a message opened, the assistant reading one, or the backfill, so its
+//! mail leaves the lists and no one asks for it again.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -101,12 +105,22 @@ impl Fetching {
         Fetching { stored, kept, servers, gates, clock, folders: None }
     }
 
-    /// The same, forgetting a message's folder that its server no longer has as the message is opened: its body is
-    /// then the `NO_SUCH_FOLDER` fault.
+    /// The same, forgetting a message's folder that its server no longer has as the message is fetched, opened or by
+    /// the backfill: its body is then the `NO_SUCH_FOLDER` fault.
     #[must_use]
     pub fn forgetting_gone(mut self, folders: Arc<Folders>) -> Fetching {
         self.folders = Some(folders);
         self
+    }
+
+    /// Forget `folder` of `account` where `read` found it gone and this forgets folders.
+    fn forget_if_gone<T>(&self, account: &str, folder: &str, read: &Result<T, ServerError>) -> Result<(), ServerError> {
+        if let (Err(error), Some(folders)) = (read, &self.folders)
+            && error.is_gone()
+        {
+            folders.gone(account, folder).map_err(ServerError::Failed)?;
+        }
+        Ok(())
     }
 
     /// The body as stored, its parts kept again where a parsing change took them away; None when it isn't stored.
@@ -137,11 +151,7 @@ impl Fetching {
             other => other,
         });
         server.logout();
-        if let (Err(error), Some(folders)) = (&read, &self.folders)
-            && error.is_gone()
-        {
-            folders.gone(account, folder).map_err(ServerError::Failed)?;
-        }
+        self.forget_if_gone(account, folder, &read)?;
         Ok(read?.unwrap_or_default())
     }
 
@@ -196,13 +206,15 @@ impl Fetching {
             Err(ServerError::Unreachable(_)) => server.shutdown(),
             _ => server.logout(),
         }
+        self.forget_if_gone(account, folder, &read)?;
         read
     }
 
     /// Each message's opening, then the whole of those cut off but small enough, each kept as it comes: what was
-    /// kept stays kept, however the rest goes. A folder the server won't select keeps nothing.
+    /// kept stays kept, however the rest goes. A folder the server won't select keeps nothing; one it no longer has
+    /// fails as `NO_SUCH_FOLDER`.
     fn read_bodies(&self, s: &mut dyn MailServer, folder: &str, messages: &[(i64, u32)]) -> Result<(), ServerError> {
-        s.select(folder, true)?;
+        select_or_gone(s, folder, true)?;
         let pk_of: HashMap<u32, i64> = messages.iter().map(|(pk, uid)| (*uid, *pk)).collect();
         let uids: Vec<u32> = messages.iter().map(|(_, uid)| *uid).collect();
         let when = when::iso(self.clock.now());

@@ -53,6 +53,7 @@ use mm_kernel::errors::Fault;
 use mm_kernel::seams::{Clock, Outside, Secret};
 use mm_kernel::zone::Zone;
 use mm_mailbox::fetching::{Fetching, FetchingParts};
+use mm_mailbox::folders::Folders;
 use mm_mailbox::gates::Gates;
 use mm_mailbox::ports::BodyFetch;
 use mm_mailbox::session::MailServers;
@@ -265,6 +266,8 @@ pub(crate) struct Parts {
     /// What reads a body that hasn't come down from its server, on its account's gate.
     pub(crate) servers: Arc<dyn MailServers>,
     pub(crate) gates: Arc<dyn Gates>,
+    /// What forgets a folder that read finds gone from its server, as opening one of its messages does.
+    pub(crate) folders: Arc<Folders>,
     pub(crate) config: Arc<dyn ConfigFile>,
     /// What the Keychain gave this process, which the Directory forgets as it keeps a key again or takes one out.
     pub(crate) keychain: Arc<KeychainReads>,
@@ -332,7 +335,8 @@ impl Assistant {
     }
 
     pub(crate) fn assemble(parts: Parts, environment: &Environment) -> Assistant {
-        let Parts { database, accounts, servers, gates, config, keychain, op, outside, clock, zone, local_ai } = parts;
+        let Parts { database, accounts, servers, gates, folders, config, keychain, op, outside, clock, zone, local_ai } =
+            parts;
         let around = Arc::new(Surroundings::over(&database, config.clone(), &outside, &clock, &zone));
         let engine = Arc::new(ApiEngine {
             file: config.clone(),
@@ -351,13 +355,16 @@ impl Assistant {
         let gateway = Arc::new(Gateway::new(engine.clone(), budget, governor.clone()));
         let status = Arc::new(Status::new(gateway.clone(), clock.clone()).with_backlog(database.clone()));
         let calls = Arc::new(Calls::new(gateway, status.clone(), environment.no_schema()));
-        let fetch = Arc::new(Fetching::new(FetchingParts {
-            stored: database.clone(),
-            kept: database.clone(),
-            servers,
-            gates,
-            clock: clock.clone(),
-        }));
+        let fetch = Arc::new(
+            Fetching::new(FetchingParts {
+                stored: database.clone(),
+                kept: database.clone(),
+                servers,
+                gates,
+                clock: clock.clone(),
+            })
+            .forgetting_gone(folders),
+        );
         let mail = Arc::new(AssistantMail { database: database.clone(), fetch });
         let context = Context::new(mail, accounts.clone());
         let index = Arc::new(DiscoveryStore::new(database.clone(), clock.clone()));

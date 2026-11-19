@@ -62,12 +62,14 @@ pub(crate) fn warming(
     )
 }
 
-/// The body backfill over the stored mail, fetching each body as a prefetch does.
+/// The body backfill over the stored mail, fetching each body as a prefetch does; a folder its server no longer has
+/// is forgotten through `folders`, as opening one of its messages forgets it.
 pub(crate) fn backfill(
     directory: &Arc<Directory>,
     database: &Arc<Database>,
     servers: &Arc<dyn MailServers>,
     gates: &Arc<dyn Gates>,
+    folders: &Arc<Folders>,
     clock: &Arc<dyn Clock>,
 ) -> Backfill {
     let fetch = Fetching::new(FetchingParts {
@@ -76,7 +78,8 @@ pub(crate) fn backfill(
         servers: servers.clone(),
         gates: gates.clone(),
         clock: clock.clone(),
-    });
+    })
+    .forgetting_gone(folders.clone());
     Backfill::new(BackfillParts {
         accounts: Arc::new(DirectoryMoveAccounts(directory.clone())),
         wanted: database.clone(),

@@ -212,6 +212,13 @@ impl App {
             clock: seams.clock.clone(),
         }));
         kept_heard.tell(&kept);
+        let sessions = Arc::new(ImapSessions { login: login.clone() });
+        let folders = Arc::new(Folders::new(
+            Arc::new(KnownAccounts(directory.clone())),
+            sessions.clone(),
+            database.clone(),
+            seams.clock.clone(),
+        ));
         // The Assistant's: every AI call, and how AI stands, which the digest says.
         let assistant = crate::assistant_wiring::Assistant::assemble(
             crate::assistant_wiring::Parts {
@@ -219,6 +226,7 @@ impl App {
                 accounts: Arc::new(KnownAccounts(directory.clone())),
                 servers: kept.clone(),
                 gates: gates.clone(),
+                folders: folders.clone(),
                 config: Arc::new(ConfigFile::new(settings.config(), seams.outside.clone())),
                 keychain: keychain_reads,
                 op,
@@ -233,13 +241,6 @@ impl App {
         let tidying = crate::bound::Tidying::assemble(&database, &seams.clock);
         // The calendar's, reading a TZID in the system's zone database.
         let zones = Arc::new(mm_store::calendar::SystemZones::new(seams.outside.clone()));
-        let sessions = Arc::new(ImapSessions { login: login.clone() });
-        let folders = Arc::new(Folders::new(
-            Arc::new(KnownAccounts(directory.clone())),
-            sessions.clone(),
-            database.clone(),
-            seams.clock.clone(),
-        ));
         let servers: Arc<dyn MailServers> = kept.clone();
         // The page's own state, and what the app says of itself.
         let places = Places::new(database.clone(), seams.clock.clone());
@@ -271,7 +272,8 @@ impl App {
                 seams.clock.clone(),
             )
             .flying_in(flights.clone())
-            .reading_only(environment.read_only()),
+            .reading_only(environment.read_only())
+            .forgetting_gone(folders.clone()),
         );
         // A message's body from its server where it isn't stored, on its account's gate; the reads a person waits on.
         // One whose folder has gone from the server forgets the folder.
@@ -389,7 +391,8 @@ impl App {
             });
         // Folders beyond the Inbox, warmed as each sync round ends for the accounts asking; and the body backfill.
         let warming = crate::backfill_wiring::warming(&directory, &servers, &ingest, &folders, environment);
-        let backfill = crate::backfill_wiring::backfill(&directory, &database, &servers, &gates, &seams.clock);
+        let backfill =
+            crate::backfill_wiring::backfill(&directory, &database, &servers, &gates, &folders, &seams.clock);
         let syncing = Arc::new(Syncing::new(SyncingParts {
             ingest: ingest.clone(),
             accounts: move_accounts.clone(),

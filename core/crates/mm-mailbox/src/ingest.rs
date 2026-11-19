@@ -36,6 +36,7 @@ use serde_json::json;
 use crate::arrival_ports::ArrivalFilters;
 use crate::fetch_ports::KeptBody;
 use crate::flights::{Flight, Flights};
+use crate::folders::Folders;
 use crate::session::{
     HEADER_BATCH, HEADER_FIELDS, Headers, MailServer, MailServers, Search, ServerError, found_by_message_id,
     select_or_gone,
@@ -126,6 +127,8 @@ pub struct Ingest {
     /// This process only reads: what a sync marks on its own queues nothing for a full run to send. A muted thread's
     /// new mail is marked read here alone, and the person's filters ask nothing.
     read_only: bool,
+    /// What forgets a folder Undo's read finds gone from its server, where one is bound.
+    folders: Option<Arc<Folders>>,
 }
 
 /// A session that logs out however the work on it ends.
@@ -221,7 +224,15 @@ impl Ingest {
             arrivals: OnceLock::new(),
             flights,
             read_only: false,
+            folders: None,
         }
+    }
+
+    /// The same, forgetting a folder its server no longer has as Undo reads mail back into it
+    /// (`ingest_messages`). A sync's callers forget the folders their syncs find gone.
+    #[must_use]
+    pub fn forgetting_gone(self, folders: Arc<Folders>) -> Ingest {
+        Ingest { folders: Some(folders), ..self }
     }
 
     /// The same, its syncs in `flights`, which a removal stops through.
@@ -385,7 +396,13 @@ impl Ingest {
         let flight = self.flights.fly(account);
         let acct = self.account(account)?;
         let mut s = Open(self.servers.open(&acct.email, TIMEOUT_SECONDS)?);
-        s.0.select(folder, true)?;
+        if let Err(error) = select_or_gone(&mut *s.0, folder, true) {
+            // Another client deleted or renamed it: forgotten, as a sync forgets it.
+            if let (true, Some(folders)) = (error.is_gone(), &self.folders) {
+                folders.gone(&acct.email, folder)?;
+            }
+            return Err(error.into());
+        }
         let mut uids = Vec::with_capacity(message_ids.len());
         for mid in message_ids.iter().filter(|mid| !mid.is_empty()) {
             uids.extend(found_by_message_id(&mut *s.0, mid)?);
