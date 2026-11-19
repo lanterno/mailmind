@@ -391,7 +391,119 @@ final class MeadowDeskTests: XCTestCase {
         XCTAssertEqual(routes.sent("POST", "/api/rules").count, 1, "a ر typed in a field decides no one")
     }
 
+    /// From one account's gate to another's through the rail, as a click on the rail's At the gate does: the click
+    /// leaves the keyboard on the rail, and the gate takes it back as its account changes, so Y lets in the new
+    /// account's visitor, as it does as the gate first shows. The first account's is left alone.
+    func testTheGateTakesTheKeyboardAgainAsItsAccountChanges() async throws {
+        func gate(_ account: String) async -> (ScreenerModel, DeskRoutes) {
+            let routes = DeskRoutes()
+            routes.answer("GET", "/api/screener", DeskFixture.screener)
+            routes.answer("GET", "/api/search", API.SearchAnswer.searchPage(API.SearchPage(
+                generated: "2026-11-15T09:00:00Z", hasMore: false, items: [], offset: 0, ok: true, query: "",
+                scope: "account")))
+            routes.answer("POST", "/api/rules", API.RuleChanged(ok: true, reclassified: 0, rules: DeskFixture.rules,
+                                                                token: "hello@studio.example.test", trashed: false))
+            let model = ScreenerModel(account: account, link: CoreLink(routes), notices: DeskNotices())
+            await model.load()
+            return (model, routes)
+        }
+        let (ada, adaRoutes) = await gate("ada@example.test")
+        let (work, workRoutes) = await gate("work@example.test")
+        let shown = GateShown(ada)
+        let host = NSHostingView(rootView: GateBesideARail(shown: shown, gates: [ada, work]).meadowLight(.day))
+        host.frame = CGRect(x: 0, y: 0, width: 1200, height: 800)
+        // A click and the focus go only to a key window on screen: this one is, far off it and see-through.
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.alphaValue = 0
+        window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
+        window.makeKeyAndOrderFront(nil)
+        defer {
+            window.orderOut(nil)
+            window.contentView = nil
+        }
+        func settle() async throws {
+            for _ in 0..<20 {
+                host.layoutSubtreeIfNeeded()
+                try await Task.sleep(for: .milliseconds(10))
+            }
+        }
+        func type(_ key: String, _ code: UInt16) async throws {
+            window.sendEvent(try XCTUnwrap(NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                context: nil, characters: key, charactersIgnoringModifiers: key, isARepeat: false, keyCode: code)))
+            try await settle()
+        }
+        /// A click on the rail's place for the `index`th gate, top down, as the window server hands it over.
+        func click(gate index: Int) async throws {
+            let height = host.bounds.height / 2
+            let point = host.convert(NSPoint(x: 90, y: height * (CGFloat(index) + 0.5)), to: nil)
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                window.sendEvent(try XCTUnwrap(NSEvent.mouseEvent(
+                    with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                    windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)))
+            }
+            try await settle()
+        }
+        try await settle()
+
+        // A click on the rail's place for the gate shown: the rail has the keyboard, and N screens no one out.
+        try await click(gate: 0)
+        try await type("n", 45)
+        XCTAssertTrue(adaRoutes.sent("POST", "/api/rules").isEmpty, "the rail has the keyboard")
+
+        // The other account's gate, which takes the keyboard as it shows.
+        try await click(gate: 1)
+        XCTAssertTrue(shown.model === work, "the click went to the other account's gate")
+        try await type("y", 16)
+        XCTAssertEqual(workRoutes.sent("POST", "/api/rules").first?["token"], .string("hello@studio.example.test"))
+        XCTAssertEqual(workRoutes.sent("POST", "/api/rules").first?["verdict"], .string("keep"))
+        XCTAssertTrue(adaRoutes.sent("POST", "/api/rules").isEmpty, "the first account's gate is left alone")
+
+        // And back again.
+        try await click(gate: 0)
+        try await type("n", 45)
+        XCTAssertEqual(adaRoutes.sent("POST", "/api/rules").first?["verdict"], .string("block"))
+    }
+
     private static func views(in view: NSView) -> [NSView] {
         [view] + view.subviews.flatMap(views(in:))
+    }
+}
+
+/// Which account's gate the window shows.
+@MainActor
+@Observable
+private final class GateShown {
+    var model: ScreenerModel
+
+    init(_ model: ScreenerModel) {
+        self.model = model
+    }
+}
+
+/// The gate beside a stand-in for the rail: each account's gate a place on it, top down, in a column that takes the
+/// keyboard with a click as the rail's does, the gate shown in the one place, as `DeskScreen`'s `.screener` shows it.
+private struct GateBesideARail: View {
+    let shown: GateShown
+    let gates: [ScreenerModel]
+
+    var body: some View {
+        HStack(spacing: 0) {
+            VStack(spacing: 0) {
+                ForEach(gates, id: \.account) { gate in
+                    Button { shown.model = gate } label: {
+                        Color.clear.contentShape(Rectangle()).frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .frame(width: 180)
+            .focusable()
+            .focusEffectDisabled()
+            .onKeyPress(.downArrow) { .handled }
+            ScreenerScreen(model: shown.model)
+        }
     }
 }
