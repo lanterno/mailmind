@@ -117,8 +117,8 @@ class Folders:
 
     def gone(self, account: str, folder: str) -> int:
         """The server no longer has `folder`: another client deleted or renamed it. Forget it, as a folder MailMind deleted
-        is: its rows and its sync's record go in one transaction with each change queued for it, given back as refused, so
-        its mail leaves the lists, no sync asks for it again and the tray says why. Lists on screen load again. The Inbox
+        is: its rows and its sync's record go in one transaction with each change queued for it, given back, so its mail
+        leaves the lists, no sync asks for it again and the tray says its folder went. Lists on screen load again. The Inbox
         is never gone. Returns how many rows went; a failure is logged, and the folder is left to the next time."""
         if folder.upper() == "INBOX":
             return 0

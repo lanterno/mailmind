@@ -17,6 +17,10 @@ CANCELLED = "cancelled"         # an Undo or a Discard got there first
 
 WONT_HAPPEN = (REFUSED, NO_FOLDER, REMOVED)
 
+# What a change given back because its folder went from the server says, for the tray: another client deleted or renamed
+# it, which no retry undoes (`MailCommands.give_back_for_folder`).
+FOLDER_GONE = "folder_gone"
+
 _UNDO_LABEL = {"trash": "Trashed", "archive": "Archived", "junk": "Marked junk", "move": "Moved"}
 _REQUEST_ID_MAX = 128
 
