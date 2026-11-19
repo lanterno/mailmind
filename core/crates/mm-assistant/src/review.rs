@@ -108,7 +108,8 @@ pub fn fingerprint_of(stats: &Map<String, Value>, needs: &[Value], waiting: &[Va
     format!("{}|{}|{}", counts.join(":"), threads(needs), threads(waiting))
 }
 
-/// The review's prose and picks, from the numbers alone.
+/// The review's prose and picks, from the numbers alone. What needs the person is counted a message each, and only
+/// those not answered, so it says messages and a reply: the brief counts a conversation once, answered or not.
 pub fn fallback(stats: &Map<String, Value>, needs: &[Value]) -> (String, Vec<String>) {
     let (sent, received, handled) = (count(stats, "sent"), count(stats, "received"), count(stats, "handled"));
     let (needs_you, waiting_on) = (count(stats, "needs_you"), count(stats, "waiting_on"));
@@ -120,7 +121,8 @@ pub fn fallback(stats: &Map<String, Value>, needs: &[Value]) -> (String, Vec<Str
         n += &format!("You filed away {handled}. ");
     }
     if needs_you != 0 || waiting_on != 0 {
-        n += &format!("{needs_you} still need a reply from you");
+        let (s, needs) = if needs_you == 1 { ("", "needs") } else { ("s", "need") };
+        n += &format!("{needs_you} message{s} still {needs} a reply from you");
         n += &if waiting_on != 0 {
             format!(" and you're waiting to hear back on {waiting_on}.")
         } else {

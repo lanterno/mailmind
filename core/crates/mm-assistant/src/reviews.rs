@@ -315,8 +315,8 @@ impl Reviews {
         let bl: Vec<String> = buckets.iter().take(5).map(|(k, v)| format!("{k}: {v}")).collect();
         let n = |name: &str| stats[name].as_i64().unwrap_or(0);
         let stats_txt = format!(
-            "Sent: {}\nReceived in inbox: {} ({})\nStill need your reply: {}\nWaiting to hear back: {}\n\
-             Pinned to reply-later: {}\nSenders cleaned up: {}\nFiled away: {}",
+            "Sent: {}\nReceived in inbox: {} ({})\nMessages that still need your reply: {}\n\
+             Waiting to hear back: {}\nPinned to reply-later: {}\nSenders cleaned up: {}\nFiled away: {}",
             n("sent"),
             n("received"),
             bl.join(", "),
