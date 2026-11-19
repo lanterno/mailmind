@@ -760,13 +760,32 @@ enum MeadowPopoverKeys {
 @MainActor
 final class MeadowAnchors {
     private(set) var frames: [String: CGRect] = [:]
+    /// Which view said where each name stands last, so one that goes forgets only its own: the pane's bar draws
+    /// its Snooze again in each fold, and the fold that goes leaves after the one that comes has said where it is.
+    private var by: [String: UUID] = [:]
 
-    func remember(_ name: String, at frame: CGRect) {
+    func remember(_ name: String, at frame: CGRect, by view: UUID? = nil) {
         frames[name] = frame
+        by[name] = view
     }
 
-    func forget(_ name: String) {
+    /// Forget where `name` stands: what any view said, or only what `view` said last.
+    func forget(_ name: String, by view: UUID? = nil) {
+        guard view == nil || by[name] == view else { return }
         frames[name] = nil
+        by[name] = nil
+    }
+
+    /// The list's: where the clock of a message's row stands, while the list shows it.
+    var rowClock: (@MainActor (MailCopy) -> CGRect?)?
+
+    /// Where the snooze chooser for `copies` hangs, as a click on what offers it hangs it: under the pane's Snooze for
+    /// the message in the pane, else under the clock of the first of their rows the list shows (the rows marked),
+    /// else under the pane's Snooze; nil where neither is on screen.
+    func snooze(for copies: [MailCopy], open: MailCopy?) -> CGRect? {
+        if let open, copies == [open], let pane = frames["snooze"] { return pane }
+        if let clock = copies.lazy.compactMap({ self.rowClock?($0) }).first { return clock }
+        return frames["snooze"]
     }
 }
 
@@ -778,13 +797,14 @@ extension EnvironmentValues {
 private struct MeadowAnchorModifier: ViewModifier {
     let name: String
     @Environment(\.meadowAnchors) private var anchors
+    @State private var view = UUID()
 
     func body(content: Content) -> some View {
         content
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
-                anchors?.remember(name, at: frame)
+                anchors?.remember(name, at: frame, by: view)
             }
-            .onDisappear { anchors?.forget(name) }
+            .onDisappear { anchors?.forget(name, by: view) }
     }
 }
 

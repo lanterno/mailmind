@@ -49,9 +49,9 @@ enum WindowDialog: Equatable {
 }
 
 /// What floats over the mail window (`Overlays`' blocks): a dialog on the scrim, the window blurred under it as
-/// the mockup's scrim blurs the page; the snooze chooser beside the pane's Snooze, or near the middle when it isn't
-/// there; and the toasts at the window's foot, over the reading pane and clear of its reply box (`ToastPlace`). The
-/// window applies it inside `DeskSurfaces`, so the desk is here.
+/// the mockup's scrim blurs the page; the snooze chooser beside the pane's Snooze, or the clock of the row it
+/// snoozes, or near the middle when neither is there; and the toasts at the window's foot, over the reading pane and
+/// clear of its reply box (`ToastPlace`). The window applies it inside `DeskSurfaces`, so the desk is here.
 struct WindowOverlays: ViewModifier {
     let mailbox: Mailbox
     var status = AppStatus.shared
@@ -181,7 +181,8 @@ struct WindowOverlays: ViewModifier {
     @ViewBuilder private var snoozeAnchor: some View {
         if case .snoozeUntil(let copies, let canUnsnooze)? = desk?.sheet, let desk {
             GeometryReader { window in
-                let button = anchors.frames[MailboxTableController.rowSnooze] ?? anchors.frames["snooze"]
+                let button = anchors.frames[MailboxTableController.rowSnooze]
+                    ?? anchors.snooze(for: copies, open: mailbox.app?.selection.copy)
                 let at = button.map { $0.offsetBy(dx: -window.frame(in: .global).minX,
                                                   dy: -window.frame(in: .global).minY) }
                     ?? CGRect(x: window.size.width / 2 - 130, y: window.size.height / 3, width: 0, height: 0)

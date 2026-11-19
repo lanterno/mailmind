@@ -90,8 +90,11 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
     /// The row the keyboard is on while rows are marked, as the window last said: scrolled into view as it moves.
     private(set) var cursor: MailCopy?
     /// Where the window's buttons stand, for what opens beside them: a row's snooze clock says where it is, so the
-    /// chooser it opens hangs from it and not from the pane's Snooze, which is the open message's.
-    weak var anchors: MeadowAnchors?
+    /// chooser it opens hangs from it and not from the pane's Snooze, which is the open message's. A row's clock
+    /// is where h hangs it too for rows the pane doesn't show (`MeadowAnchors.snooze(for:open:)`).
+    weak var anchors: MeadowAnchors? {
+        didSet { anchors?.rowClock = { [weak self] copy in self?.clockFrame(of: copy) } }
+    }
     /// The name a row's clock is remembered under while its chooser is open.
     static let rowSnooze = "snooze-row"
     /// The window's shell, whose drawer and focus reading Esc undoes before the list's own Esc.
@@ -458,6 +461,12 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
             mailbox.snoozes?([mail])
         case .act(.restore), .act(.toInbox): mailbox.restore([mail])
         }
+    }
+
+    /// Where the clock of `copy`'s row stands in the window, while the list shows that row.
+    func clockFrame(of copy: MailCopy) -> CGRect? {
+        guard let position = list.position(of: copy) else { return nil }
+        return clockFrame(row: row(at: position))
     }
 
     /// Where a row's clock stands in the window, top left first, as SwiftUI's global space has it.
