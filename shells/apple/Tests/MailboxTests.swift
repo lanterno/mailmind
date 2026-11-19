@@ -942,7 +942,8 @@ final class MailboxAccountsTests: XCTestCase {
 }
 
 /// Summaries land with no mail changing (`summarized`): the Inbox's Needs you tab, the rail and the brief's line over
-/// the list read again and count the same mail, as the page's do.
+/// the list read again and count the same mail, as the page's do; and a change of tab reads the brief's line with the
+/// list, so neither says what the other no longer does.
 @MainActor
 final class MailboxSummariesTests: XCTestCase {
     private static let landed = CoreEvent(id: "1", name: "summarized", data: #"{"count": 2}"#)
@@ -1001,6 +1002,24 @@ final class MailboxSummariesTests: XCTestCase {
         XCTAssertEqual(BriefLine(needs: desk.brief.needs, waiting: 0, canWait: 0).tally,
                        "1 need you · 0 waiting · 0 can wait", "and so does the brief's line over the list")
         XCTAssertEqual(server.asked(API.Get.Folders.path).count, folders, "the folders count unread mail, which stays")
+        withExtendedLifetime(desk) {}
+    }
+
+    /// The round's word was missed (the stream reconnecting, say): Everything and back reads the brief's line with
+    /// the list, rather than leave it saying nothing needs you over a list that says otherwise.
+    func testAChangeOfTabReadsTheBriefsLineWithTheList() async {
+        let server = server()
+        let (app, desk) = await opened(server)
+        summarize(server)
+        let digests = server.asked(API.Get.Digest.path).count
+
+        app.mailbox.tab = .all
+
+        await until { desk.brief.needs.count == 1 }
+        XCTAssertGreaterThan(server.asked(API.Get.Digest.path).count, digests)
+        app.mailbox.tab = .needs
+        await until { app.mailbox.facts.needs == 1 && app.list?.total == 1 }
+        XCTAssertEqual(desk.brief.needs.count, app.mailbox.facts.needs)
         withExtendedLifetime(desk) {}
     }
 
