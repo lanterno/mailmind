@@ -14,6 +14,13 @@ struct MeadowTopBar: View {
     var lights: CGFloat = WindowLights.room
     @Environment(\.meadow) private var meadow
     @Environment(\.meadowLight) private var light
+    /// The window is in full screen, where the traffic lights leave the bar.
+    @State private var fullScreen = false
+
+    /// The room at the bar's left: the traffic lights', in a window that shows them on the bar; else its own edge.
+    static func leading(lights: CGFloat, fullScreen: Bool) -> CGFloat {
+        lights == 0 || fullScreen ? 10 : lights
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -35,10 +42,11 @@ struct MeadowTopBar: View {
             }
             .fixedSize()
         }
-        .padding(.leading, lights == 0 ? 10 : lights)
+        .padding(.leading, Self.leading(lights: lights, fullScreen: fullScreen))
         .padding(.trailing, 10)
         .frame(height: ShellLayout.topBar)
         .background { WindowDragArea() }
+        .background { if lights > 0 { FullScreenWatch { fullScreen = $0 } } }
     }
 
     private var railButton: some View {

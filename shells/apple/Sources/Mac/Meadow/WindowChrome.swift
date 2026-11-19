@@ -171,4 +171,49 @@ final class WindowDragView: NSView {
         window.performDrag(with: event)
     }
 }
+
+/// Says whether the window this stands in is in full screen, as it goes in and comes out: there the traffic lights
+/// leave the top bar, and the room kept for them goes too.
+struct FullScreenWatch: NSViewRepresentable {
+    let changed: @MainActor (Bool) -> Void
+
+    func makeNSView(context: Context) -> FullScreenWatchView {
+        FullScreenWatchView(changed: changed)
+    }
+
+    func updateNSView(_ view: FullScreenWatchView, context: Context) {
+        view.changed = changed
+    }
+}
+
+final class FullScreenWatchView: NSView {
+    var changed: @MainActor (Bool) -> Void
+    private var watching: [NSObjectProtocol] = []
+
+    init(changed: @escaping @MainActor (Bool) -> Void) {
+        self.changed = changed
+        super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("not from a nib") }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        for token in watching { NotificationCenter.default.removeObserver(token) }
+        watching = []
+        guard let window else { return }
+        // Said after the view's update, never during it.
+        let now = window.styleMask.contains(.fullScreen)
+        DispatchQueue.main.async { [weak self] in self?.changed(now) }
+        let turns: [(Notification.Name, Bool)] = [
+            (NSWindow.willEnterFullScreenNotification, true), (NSWindow.didExitFullScreenNotification, false),
+        ]
+        for (name, full) in turns {
+            watching.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) {
+                [weak self] _ in MainActor.assumeIsolated { self?.changed(full) }
+            })
+        }
+    }
+}
 #endif
