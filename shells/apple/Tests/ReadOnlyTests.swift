@@ -249,6 +249,40 @@ final class ReadOnlyTests: XCTestCase {
         back.close(force: true)
     }
 
+    /// A draft closed while read only is on was kept on this Mac, where no Drafts folder shows it: closing says so in
+    /// the tray's words, and the outbox's tray is read again, so the draft shows there at once, as after a relaunch.
+    func testADraftClosedReadOnlySaysItIsKeptOnThisMacAndShowsInTheOutbox() async throws {
+        XCTAssertEqual(Composing.keptWords, "Draft saved · Kept on this Mac")
+        // Closed with words not saved yet, which its close saves; and closed once saved, with nothing new in it.
+        for savedFirst in [false, true] {
+            let composing = Composing()
+            let routes = FakeRoutes()
+            routes.answer(API.Post.Draft.path,
+                          #"{"ok": true, "draft_id": 41, "version": 1, "message_id": "<d@example.test>", "pushed": false}"#)
+            composing.use(routes, digest: Fixture.digest(readOnly: true))
+            composing.openWindow = { _ in }
+            // The tray's reads, not the scheduled sends' (`readScheduled`, 200 at a time).
+            let trayReads = { routes.calls(to: API.Get.Outbox.path).filter { $0.query["limit"] == "50" }.count }
+            await eventually("the tray read as it opened") { trayReads() == 1 }
+
+            var seed = ComposeSeed()
+            seed.to = ["bo@example.test"]
+            seed.subject = "Plans"
+            let composer = try XCTUnwrap(composing.open(seed))
+            composer.setBody("Thursday works.", selection: NSRange(location: 15, length: 0))
+            if savedFirst {
+                _ = await composer.save(silent: true, autosave: true).value
+                XCTAssertFalse(composer.dirty)
+            }
+            let before = trayReads()
+            composer.close()
+
+            await eventually("where it is kept said") { composing.notice?.text == Composing.keptWords }
+            await eventually("the tray read again, which shows it") { trayReads() > before }
+            XCTAssertNotEqual(composing.notice?.text, "Saved to Drafts", "no Drafts folder holds it")
+        }
+    }
+
     func testADiscardReadOnlyTurnsDownKeepsTheComposerOpenWithItsWords() async {
         let routes = FakeRoutes()
         routes.answer(API.Post.Draft.path) { body in
