@@ -69,6 +69,36 @@ final class MeadowShellTests: XCTestCase {
         XCTAssertEqual(full.full, CGRect(x: 8, y: 0, width: 984, height: 692))
     }
 
+    /// At the window's least width with the list dragged wide, and just over 1100 with the rail open, the list gives
+    /// way so the pane keeps room for its bar folded as far as it goes, and everything stays inside the window.
+    func testTheListGivesWaySoThePaneKeepsItsLeast() {
+        let windows: [(size: CGSize, railOpen: Bool, list: CGFloat)] = [
+            (CGSize(width: 900, height: 536), false, 560), (CGSize(width: 1101, height: 536), true, 560),
+            (CGSize(width: 1101, height: 536), false, 560), (CGSize(width: 900, height: 536), false, 300),
+        ]
+        for (size, railOpen, wanted) in windows {
+            let layout = ShellLayout(size: size, railOpen: railOpen, listWidth: wanted, mode: .columns)
+            let said = "\(size.width) wide, the rail \(railOpen ? "open" : "folded"), the list at \(wanted)"
+            let pane = layout.pane, list = layout.list
+            XCTAssertGreaterThanOrEqual(pane?.width ?? 0, ShellLayout.paneLeast, said)
+            XCTAssertGreaterThanOrEqual(list?.width ?? 0, ShellLayout.listMin, said)
+            XCTAssertEqual(pane?.maxX, size.width - ShellLayout.gap, said + ": the pane ends inside the window")
+            XCTAssertEqual(pane?.minX, (list?.maxX ?? 0) + ShellLayout.gap, said + ": beside the list, not over it")
+        }
+        let least = ShellLayout(size: CGSize(width: 900, height: 536), railOpen: false, listWidth: 560, mode: .columns)
+        XCTAssertEqual(least.list?.width, 476, "as wide as it can be beside the pane's least")
+        XCTAssertEqual(least.splitter?.minX, least.list?.maxX, "the splitter stays at the list's edge")
+        XCTAssertEqual(ShellLayout(size: wide, railOpen: false, listWidth: 560, mode: .columns).list?.width, 560,
+                       "a wide window keeps the width the list was dragged to")
+    }
+
+    /// Folded as far as it goes, the pane's bar fits the narrowest pane the shell leaves beside the list.
+    func testThePanesBarFoldedFitsTheNarrowestPane() async throws {
+        let widths = try await barWidths()
+        let folded = try XCTUnwrap(widths.last)
+        XCTAssertLessThanOrEqual(folded, ShellLayout.paneLeast)
+    }
+
     // MARK: The list's width
 
     func testTheListKeepsWithinTheSplittersLimits() {
