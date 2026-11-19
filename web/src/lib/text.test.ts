@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { avatarHue, dayGroup, fileSize, initialsOf, shortAddress, usd, relWhen } from "./text";
+import { avatarHue, calling, dayGroup, fileSize, initialsOf, shortAddress, usd, relWhen } from "./text";
 
 it("takes initials from capitalised words first", () => {
   expect(initialsOf("Library of Ash Hollow", "x@example.test")).toBe("LA");
@@ -28,6 +28,31 @@ it("sorts a message into a day's section", () => {
     .toEqual(["Today", "Yesterday", "Past week", "Earlier"]);
 });
 it("shortens an address to its name", () => expect(shortAddress("bo@example.test")).toBe("bo"));
+
+describe("what a short line calls someone", () => {
+  it("calls a person by their first name, their address or their name's shape saying so", () => {
+    expect(calling("Ren Mori", "ren@example.test")).toBe("Ren");
+    expect(calling("Ren Mori", "rmori@example.test")).toBe("Ren");
+    expect(calling("Zoë Ångström", "zoe.angstrom@example.test")).toBe("Zoë");
+    expect(calling("Ren Mori")).toBe("Ren");
+    expect(calling("Lin")).toBe("Lin");
+  });
+  it("says an organisation's name whole", () => {
+    expect(calling("Parcel Service", "parcel@example.test")).toBe("Parcel Service");
+    expect(calling("Mori, Ren", "ren@example.test")).toBe("Mori, Ren");
+    expect(calling("Ada Park", "orders@example.test")).toBe("Ada Park");
+    expect(calling("Ada Park", "noreply-ada@example.test")).toBe("Ada Park");
+    expect(calling("Studio 54")).toBe("Studio 54");
+    expect(calling("the loom weekly")).toBe("the loom weekly");
+  });
+  it("says a name whose address doesn't carry it whole", () => {
+    expect(calling("Ren Mori", "x9@example.test")).toBe("Ren Mori");
+  });
+  it("has nothing to call one with only an address", () => {
+    expect([calling(null), calling(""), calling(" \"\" "), calling("ren@example.test", "ren@example.test")]).toEqual([null, null, null, null]);
+  });
+  it("takes a name's quotes off", () => expect(calling("'Lin'")).toBe("Lin"));
+});
 it("says money rounded up to the cent", () => {
   expect([usd(0), usd(1), usd(15_000_000), usd(1_234_567_890)]).toEqual(["$0.00", "$0.01", "$15.00", "$1,234.57"]);
 });

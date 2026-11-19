@@ -48,7 +48,7 @@ vi.mock("./actions", async () => {
 
 const row = (key: number, over: Partial<Row> = {}): Row => {
   const r = {
-    key, uid: key * 10, account: A, folder: "INBOX", fromName: "Bo", fromAddr: B, subject: `s${key}`, snippet: "", when: "", ts: null, date: "",
+    key, uid: key * 10, account: A, folder: "INBOX", fromName: "Bo", fromAddr: B, sentTo: [], sentToMore: 0, subject: `s${key}`, snippet: "", when: "", ts: null, date: "",
     seen: true, flagged: false, hasAttach: false, isJunk: false, replyWorthy: false, bucket: null, threadId: "", count: 1, threadCount: 1,
     action: "", summary: "", needsYou: true, ...over,
   };

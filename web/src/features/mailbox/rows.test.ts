@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { filedWords, folderTitle, fromFolder, fromSearch, inDaySections, inTab, isConversation, labelQuery, roleLabel, type FolderRow, type Row, type SearchRow } from "./rows";
+import { mineSet } from "../../lib/mine";
+import { filedWords, folderTitle, fromFolder, fromSearch, inDaySections, inTab, isConversation, labelQuery, roleLabel, whoOf, type FolderRow, type Row, type SearchRow } from "./rows";
 
 const folderRow = (o: Partial<FolderRow> = {}): FolderRow => ({
   key: 1, folder: "INBOX", uid: 1, account: "a@example.test", bucket: "PERSONAL", flagged: false, from_addr: "bo@example.test", from_name: "Bo", has_attach: false,
-  is_junk: false, seen: false, snippet: "s", subject: "Hi", thread_id: "t1", when: "Mon", ...o,
+  is_junk: false, seen: false, snippet: "s", subject: "Hi", thread_id: "t1", when: "Mon", sent_to: [{ name: "Ada Park", addr: "a@example.test" }],
+  sent_to_more: 0, ...o,
 });
 const row = (o: Partial<Row> = {}): Row => ({ ...fromFolder(folderRow()), ...o });
 
@@ -22,6 +24,45 @@ describe("a row", () => {
   it("comes from a search as a single message", () => {
     const hit = { ...folderRow(), account: "a", alias: "a", commitment_worthy: false, date: "", folder: "Later", importance: null, needs_you: true, reply_worthy: false, safe_to_file: false } as SearchRow;
     expect(fromSearch(hit)).toMatchObject({ id: "1:1:Later", key: 1, folder: "Later", uid: 1, threadId: folderRow().thread_id, count: 1, needsYou: true });
+  });
+});
+
+describe("whom a row names", () => {
+  const mine = mineSet(["ada@example.test", "ada@work.example.test"]);
+  const lin = { name: "Lin Mori", addr: "lin@example.test" }, bea = { name: null, addr: "bea@example.test" };
+  const yours = (o: Partial<Row> = {}) => row({ fromName: "Ada Park", fromAddr: "ada@example.test", sentTo: [lin], sentToMore: 0, ...o });
+
+  it("is the sender of mail from someone else, whoever it went to", () => {
+    expect(whoOf(row({ sentTo: [lin, bea], sentToMore: 3 }), mine)).toEqual({ name: "Bo", avatarName: "Bo", avatarAddr: "bo@example.test" });
+    expect(whoOf(row({ fromName: null }), mine).name).toBe("bo@example.test");
+  });
+  it("is whom your own mail went to, by first name, and the first of them in the avatar", () => {
+    expect(whoOf(yours(), mine)).toEqual({ name: "To Lin", avatarName: "Lin Mori", avatarAddr: "lin@example.test" });
+  });
+  it("names two and counts the rest, an address where no name was written", () => {
+    expect(whoOf(yours({ sentTo: [lin, bea], sentToMore: 2 }), mine).name).toBe("To Lin, bea@example.test +2");
+    expect(whoOf(yours({ sentTo: [bea, lin] }), mine).name).toBe("To bea@example.test, Lin");
+  });
+  it("says an organisation's name whole", () => {
+    expect(whoOf(yours({ sentTo: [{ name: "Parcel Service", addr: "help@parcel.example.test" }] }), mine).name).toBe("To Parcel Service");
+  });
+  it("is yours from any of your accounts, tagged or in capitals", () => {
+    for (const fromAddr of ["ada+news@example.test", "Ada@Work.example.test"]) expect(whoOf(yours({ fromAddr }), mine).name).toBe("To Lin");
+  });
+  it("leaves you out of whom it went to", () => {
+    expect(whoOf(yours({ sentTo: [{ name: "Ada", addr: "ADA@example.test" }, lin], sentToMore: 1 }), mine).name).toBe("To Lin +1");
+  });
+  it("is you where your own went to no one else, or names no one yet", () => {
+    expect(whoOf(yours({ sentTo: [{ name: "Ada", addr: "ada+notes@example.test" }] }), mine).name).toBe("Ada Park");
+    expect(whoOf(yours({ sentTo: [] }), mine).name).toBe("Ada Park");
+  });
+  it("is the sender while your addresses aren't known yet", () => {
+    expect(whoOf(yours(), new Set()).name).toBe("Ada Park");
+  });
+  it("comes with a row from a folder and from a search", () => {
+    expect(fromFolder(folderRow({ sent_to: [lin], sent_to_more: 4 }))).toMatchObject({ sentTo: [lin], sentToMore: 4 });
+    const hit = { ...folderRow({ sent_to: [bea], sent_to_more: 1 }), alias: null, commitment_worthy: false, date: "", importance: null, needs_you: false, reply_worthy: false, safe_to_file: false } as SearchRow;
+    expect(fromSearch(hit)).toMatchObject({ sentTo: [bea], sentToMore: 1 });
   });
 });
 
