@@ -780,12 +780,19 @@ final class MeadowAnchors {
     var rowClock: (@MainActor (MailCopy) -> CGRect?)?
 
     /// Where the snooze chooser for `copies` hangs, as a click on what offers it hangs it: under the pane's Snooze for
-    /// the message in the pane, else under the clock of the first of their rows the list shows (the rows marked),
-    /// else under the pane's Snooze; nil where neither is on screen.
+    /// the message in the pane, else under the Snooze of the brief's card for the one message, else under the clock of
+    /// the first of their rows the list shows (the rows marked), else under the pane's Snooze; nil where none is on
+    /// screen.
     func snooze(for copies: [MailCopy], open: MailCopy?) -> CGRect? {
         if let open, copies == [open], let pane = frames["snooze"] { return pane }
+        if copies.count == 1, let card = frames[Self.cardSnooze(copies[0])] { return card }
         if let clock = copies.lazy.compactMap({ self.rowClock?($0) }).first { return clock }
         return frames["snooze"]
+    }
+
+    /// The name a brief card's Snooze says where it stands by, for its message.
+    static func cardSnooze(_ copy: MailCopy) -> String {
+        "snooze-card \(copy.account)\n\(copy.folder)\n\(copy.uid)"
     }
 }
 

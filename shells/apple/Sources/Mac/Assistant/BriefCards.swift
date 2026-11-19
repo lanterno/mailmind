@@ -99,6 +99,7 @@ struct NeedCard: View {
             Spacer(minLength: 4)
             Button { actions.askUntil([copy]) } label: { MeadowIconView(.clock, size: 15) }
                 .meadowButton(.quiet, small: true, icon: true)
+                .meadowAnchor(MeadowAnchors.cardSnooze(copy))
                 .help("Snooze")
                 .accessibilityLabel("Snooze “\(subject)”")
             Button { Task { await model.file(item, .archive) } } label: { MeadowIconView(.archive, size: 15) }
