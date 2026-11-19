@@ -26,15 +26,25 @@ export function useRealtime() {
       queryKey: [key], refetchType: document.hidden ? "none" : "active", predicate: (query) => !gone || !query.queryKey.includes(gone),
     });
     let digestSoon: ReturnType<typeof setTimeout> | undefined;
+    const digestLater = () => {
+      clearTimeout(digestSoon);
+      digestSoon = setTimeout(() => again("digest"), 400);
+    };
     const mail = (gone?: string) => {
       again("messages", gone);
       again("folders", gone);
       again("screener");
       again("tidy");
-      clearTimeout(digestSoon);
-      digestSoon = setTimeout(() => again("digest"), 400);
+      digestLater();
     };
     for (const topic of MAIL_CHANGED) es.addEventListener(topic, () => mail());
+    // A round of summaries landed: no mail changed, but what needs you and what the AI rates safe to file did, which the
+    // lists, the Inbox's tabs, Tidy and the brief's tallies (the digest) count. The folders' counts are of unread mail.
+    es.addEventListener("summarized", () => {
+      again("messages");
+      again("tidy");
+      digestLater();
+    });
     // Mail gone from a server, or an account removed: the digest, read at once then, takes it off the rail.
     es.addEventListener("reconcile", (e) => {
       const d = JSON.parse((e as MessageEvent<string>).data) as { account?: string; removed?: boolean };
