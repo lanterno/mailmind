@@ -298,6 +298,13 @@ final class BriefModel {
         return .failed(String(localized: "couldn’t reach the server"))
     }
 
+    /// Mail a verb sent away from where it was, in any window (a list's, a reader's, a message's own, the gate's): the
+    /// brief leaves it out at once, as the page's brief leaves out whatever is being filed, rather than once the server
+    /// has carried the change and the digest is read again, which a server that doesn't answer puts off.
+    func left(_ copies: [MailCopy]) {
+        filing.formUnion(copies)
+    }
+
     /// File one card's message to Archive or Trash, and say where it went: a card has no list behind it to see the
     /// row leave.
     func file(_ item: API.DigestItem, _ verb: API.FilingVerb) async {

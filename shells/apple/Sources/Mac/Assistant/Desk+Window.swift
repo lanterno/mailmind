@@ -421,10 +421,11 @@ final class Desk {
         }
     }
 
-    /// Mail a verb sent away from where it was (the gate's "Read it whole", then Delete): a gate whose card shows one
-    /// of them reads its queue and its card's letter again, so the card goes with its sender's last message, or shows
-    /// the next.
+    /// Mail a verb sent away from where it was (the gate's "Read it whole", then Delete): the brief leaves it out at
+    /// once, and a gate whose card shows one of them reads its queue and its card's letter again, so the card goes
+    /// with its sender's last message, or shows the next.
     func wentAway(_ copies: [MailCopy]) {
+        brief.left(copies)
         let gone = Set(copies)
         for screener in screeners.values where screener.shows(any: gone) {
             Task { await screener.reload() }
