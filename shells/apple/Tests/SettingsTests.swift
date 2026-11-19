@@ -1305,6 +1305,20 @@ extension AccountFixTests {
         XCTAssertEqual(Tested.plainWords(of: "ConnectionResetError"), "The connection to the server was lost.")
         XCTAssertFalse(Tested.saidInFull(nil))
     }
+
+    /// An address MailMind has an account for already is said so as it is typed, and Save doesn't send it: both
+    /// servers would turn it down. Editing an account is no such thing.
+    func testAnAddressAlreadySetUpIsSaidSo() {
+        var draft = AccountDraft()
+        draft.email = " Ada@Example.test "
+        XCTAssertEqual(draft.alreadySetUp(among: ["ada@example.test", "bo@example.test"]),
+                       "Ada@Example.test is already set up in MailMind.")
+        XCTAssertNil(draft.alreadySetUp(among: ["bo@example.test"]))
+        draft.email = "ada"
+        XCTAssertNil(draft.alreadySetUp(among: ["ada"]), "not an address yet")
+        let editing = AccountDraft(editing: StatusFixtures.account("ada@example.test"))
+        XCTAssertNil(editing.alreadySetUp(among: ["ada@example.test"]))
+    }
 }
 
 /// The account sheet's form scrolls to its foot as a test's words come under it, so where the sheet can't grow past
