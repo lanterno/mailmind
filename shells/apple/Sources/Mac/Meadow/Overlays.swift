@@ -621,7 +621,12 @@ struct MeadowPopoverAnchor<Content: View>: NSViewRepresentable {
             let frame = NSRect(x: window.frame.minX + at.x - Self.room,
                                y: window.frame.minY + space.height - at.y - pop.height - Self.room,
                                width: size.width, height: size.height)
-            panel.setFrame(frame, display: true)
+            // Its paper stands 12 in from the window's edge, its shadow's room wider: the panel is cut at the edge,
+            // so nothing of it falls past the window, as nothing of a toast does.
+            let shown = frame.intersection(window.frame)
+            panel.setFrame(shown.isEmpty ? frame : shown, display: true)
+            host?.frame = NSRect(x: frame.minX - panel.frame.minX, y: frame.minY - panel.frame.minY,
+                                 width: frame.width, height: frame.height)
             if panel.parent == nil {
                 window.addChildWindow(panel, ordered: .above)
                 panel.orderFront(nil)
@@ -649,7 +654,10 @@ struct MeadowPopoverAnchor<Content: View>: NSViewRepresentable {
             panel.becomesKeyOnlyIfNeeded = true
             let host = NSHostingView(rootView: root)
             host.sizingOptions = [.intrinsicContentSize]
-            panel.contentView = host
+            // The content in a plain view that holds it whole where the panel is cut at the window's edge.
+            let holder = NSView()
+            holder.addSubview(host)
+            panel.contentView = holder
             self.panel = panel
             self.host = host
             return panel
