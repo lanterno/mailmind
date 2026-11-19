@@ -2,11 +2,16 @@
 //! whether one may go in, which copy is ours to remove. Values in and values out; where a fact comes from a port it
 //! is asked for through the function given, and only if the rule gets that far.
 
+use serde_json::{Value, json};
+
+use crate::builder::thread_ids;
 use crate::sending_ports::{DraftRow, InPlace};
 
 pub const HELD: &str = "This draft is in the outbox, waiting to be sent. Cancel it there first to change it.";
 pub const DISCARDED: &str = "You discarded this draft. It leaves the server as soon as the server can be reached.";
 pub const CHANGED_ELSEWHERE: &str = "This draft changed in another window.";
+pub const REACHED: &str = "That draft has reached the server. Open it from Drafts.";
+pub const GONE: &str = "That draft is no longer in Drafts.";
 
 /// The composer's idempotency key, as a save or a send gives it (`composer_key`): stripped, at most 200 characters.
 pub fn composer_key(given: Option<&str>) -> Option<String> {
@@ -68,4 +73,32 @@ pub fn replaced_in_place(prev: &DraftRow, account: &str) -> InPlace {
 pub fn left_elsewhere(prev: &DraftRow, account: &str, folder: &str) -> bool {
     let moved = prev.account != account || prev.folder.as_deref().is_some_and(|f| !f.is_empty() && f != folder);
     prev.uid.unwrap_or(0) != 0 && prev.uidvalidity.is_some() && moved
+}
+
+/// The Message-ID a draft answers, as its In-Reply-To names it (`answers`): the first well-formed one, or None for a
+/// draft that answers none.
+pub fn answers(in_reply_to: Option<&str>) -> Option<String> {
+    thread_ids(in_reply_to, None).0
+}
+
+/// A draft that answers a message, as the reader offers it (`Answer`): MailMind's own by its id, another app's by its
+/// copy in Drafts (key, folder and uid), with when it was last saved.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Answer {
+    pub saved_at: i64,
+    pub draft_id: Option<i64>,
+    pub in_drafts: Option<(i64, String, i64)>,
+}
+
+/// Of the drafts that answer a message, the newest, and how many more there are (`newest_answer`). Two saved in the
+/// same second go by the one MailMind saved last.
+pub fn newest_answer(found: &[Answer]) -> Option<Value> {
+    let rank = |a: &Answer| (a.saved_at, a.draft_id.unwrap_or(0));
+    let newest = found.iter().fold(None::<&Answer>, |best, a| match best {
+        Some(b) if rank(a) <= rank(b) => Some(b),
+        _ => Some(a),
+    })?;
+    let in_drafts =
+        newest.in_drafts.as_ref().map(|(key, folder, uid)| json!({"key": key, "folder": folder, "uid": uid}));
+    Some(json!({"draft_id": newest.draft_id, "in_drafts": in_drafts, "more": found.len() - 1}))
 }

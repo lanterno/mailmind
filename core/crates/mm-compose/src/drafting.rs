@@ -263,7 +263,16 @@ impl Drafting {
                     id
                 }
             };
-            book.draft_note_save(id, Some(mode), Some(&composed.spec.subject), version, key.as_deref(), &stamp)?;
+            let answers = draft::answers(composed.spec.in_reply_to.as_deref());
+            book.draft_note_save(
+                id,
+                Some(mode),
+                Some(&composed.spec.subject),
+                version,
+                key.as_deref(),
+                &stamp,
+                answers.as_deref(),
+            )?;
             // A read-only process keeps the save here: no push of it waits for a full run.
             let pushed_at = prev.as_ref().and_then(|p| p.pushed_at);
             let (due, attempts) =
@@ -496,7 +505,7 @@ impl Drafting {
         }
         let Some(pk) = pk else { return Err(Problem::refused("Missing draft.").into()) };
         let Some(row) = self.read(|book| book.message(pk))? else {
-            return Err(Problem::not_found("That draft is no longer in Drafts.").into());
+            return Err(Problem::not_found(draft::GONE).into());
         };
         if !self.is_draft(&row) {
             return Err(Problem::refused("That message isn\u{2019}t a draft.").into());
@@ -640,14 +649,62 @@ impl Drafting {
         if queued {
             return Err(Problem::new(Kind::Locked, draft::HELD).into());
         }
-        let (Some(d), Some(j)) = (d, j) else {
-            return Err(Problem::new(Kind::Conflict, "That draft has reached the server. Open it from Drafts.").into());
-        };
+        let Some(d) = d else { return Err(Problem::new(Kind::Conflict, draft::REACHED).into()) };
+        let Some(j) = j else { return self.resume_reached(&d) };
         if draft_journal::asks_removal(Some(&j)) {
             return Err(Problem::new(Kind::Conflict, draft::DISCARDED).into());
         }
         let record = (j.own_text.clone(), j.tail_text.clone(), j.bcc.clone());
         self.opened(&j.raw.clone().unwrap_or_default(), &d, &record, true, &j.account, d.subject.as_deref(), None)
+    }
+
+    /// A draft whose save has reached its server, opened from its copy there (`_resume_reached`). The copy listed in its
+    /// folder opens as any draft does; one not listed yet (saved since the folder was last caught up) is listed first,
+    /// as opening the folder would. One that has gone answers no message any more, so Reply starts afresh.
+    fn resume_reached(&self, d: &DraftRow) -> Result<Value, Failure> {
+        let Some(folder) = d.folder.as_deref().filter(|f| !f.is_empty()) else {
+            return Err(Problem::new(Kind::Conflict, draft::REACHED).into());
+        };
+        let mut pk = self.listed(d)?;
+        if pk.is_none() {
+            if self.parts.accounts.sending(&d.account)?.is_none() {
+                return Err(
+                    Problem::refused("That draft\u{2019}s account isn\u{2019}t set up in MailMind any more.").into()
+                );
+            }
+            let caught_up = on_gate(&*self.parts.gate, &d.account, Priority::Interactive, GateWait::Ever, || {
+                self.parts.copies.sync_whole(&d.account, folder)
+            });
+            match caught_up {
+                Ok(Ok(())) => {}
+                Ok(Err(failed)) if failed.unreachable => {
+                    log::warning(RESUME_TAG, "drafts catch-up failed", &[], Some(failed.class));
+                    return Err(Problem::new(Kind::Unreachable, NOT_LOADED).into());
+                }
+                Ok(Err(failed)) => {
+                    log::warning(RESUME_TAG, "drafts catch-up failed", &[], Some(failed.class));
+                    return Err(Problem::new(Kind::Conflict, draft::REACHED).into());
+                }
+                Err(_) => return Err(Problem::new(Kind::Unreachable, NOT_LOADED).into()),
+            }
+            pk = self.listed(d)?;
+        }
+        let Some(pk) = pk else {
+            self.write(|book| book.draft_answers_nothing(d))?;
+            return Err(Problem::not_found(draft::GONE).into());
+        };
+        self.resume(None, Some(pk))
+    }
+
+    /// The pk of the copy a draft's row names, as its folder lists it now (`_listed`).
+    fn listed(&self, d: &DraftRow) -> Result<Option<i64>, Fault> {
+        let Some(row) = self.read(|book| book.message_by_msgid(&d.account, d.message_id.as_deref()))? else {
+            return Ok(None);
+        };
+        let moved = text(&row, "folder").as_deref() != d.folder.as_deref()
+            || row.get("pending_removal").is_some_and(|v| !v.is_null())
+            || d.uid.is_some_and(|uid| uid != 0 && number(&row, "uid") != Some(uid));
+        Ok(if moved { None } else { number(&row, "pk") })
     }
 
     /// Another app changed the copy while a save waited here (`_keep_apart`): the save goes on as a draft of its own.
@@ -664,7 +721,15 @@ impl Drafting {
                 subject: d.subject.clone(),
                 at: stamp.clone(),
             })?;
-            book.draft_note_save(id, d.mode.as_deref(), d.subject.as_deref(), d.version, None, &stamp)?;
+            book.draft_note_save(
+                id,
+                d.mode.as_deref(),
+                d.subject.as_deref(),
+                d.version,
+                None,
+                &stamp,
+                d.in_reply_to.as_deref(),
+            )?;
             book.journal_move(d.id, id)
         })
     }

@@ -44,6 +44,15 @@ pub trait StoredDrafts: Send + Sync + fmt::Debug {
     fn track(&self, draft: &Tracked) -> Result<i64, Fault>;
     /// A folder's UIDVALIDITY as its last sync read it (the Mailbox's `get_uidvalidity`).
     fn uidvalidity(&self, account: &str, folder: &str) -> Result<Option<i64>, Fault>;
+    /// MailMind's drafts that answer a message, by the Message-ID their newest save named (`drafts_answering`): each
+    /// with its `id` and `saved_at`, when that save was made. None a send holds or a discard is taking, and none with
+    /// neither a save waiting nor a copy.
+    fn answering(&self, message_id: &str) -> Result<Vec<Row>, Fault>;
+    /// The copies listed that name a message in their In-Reply-To or References (the Mailbox's `answering`): `pk`,
+    /// `account`, `folder`, `uid`, `message_key`, `message_id`, `in_reply_to`, `ts` and `draft`.
+    fn naming(&self, message_id: &str) -> Result<Vec<Row>, Fault>;
+    /// Whether a send holds this draft, or a discard is taking it.
+    fn held(&self, draft_id: i64) -> Result<bool, Fault>;
 }
 
 /// What the Mailbox says of a folder, for a draft.

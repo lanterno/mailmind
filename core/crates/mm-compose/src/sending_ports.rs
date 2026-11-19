@@ -104,6 +104,8 @@ pub struct DraftRow {
     pub version: i64,
     pub saved_by: Option<String>,
     pub pushed_at: Option<i64>,
+    /// The Message-ID its newest save answers (migration 52).
+    pub in_reply_to: Option<String>,
 }
 
 /// What a draft still asks of its server (`draft_journal`): a save's bytes and what the composer held at it, or that
@@ -224,6 +226,9 @@ pub trait Book {
         forget: bool,
     ) -> Result<bool, Fault>;
     fn draft_delete(&self, id: i64) -> Result<(), Fault>;
+    /// What a save says of the composition: its mode, subject, version, the composer that made it, when, and the
+    /// Message-ID it answers.
+    #[allow(clippy::too_many_arguments)]
     fn draft_note_save(
         &self,
         id: i64,
@@ -232,7 +237,11 @@ pub trait Book {
         version: i64,
         saved_by: Option<&str>,
         updated_at: &str,
+        in_reply_to: Option<&str>,
     ) -> Result<(), Fault>;
+    /// Its copy has gone from the server and no save of it waits here, so it answers no message, until a save says so
+    /// again. `seen`: the row as read; one a save has moved on since is left as it is.
+    fn draft_answers_nothing(&self, seen: &DraftRow) -> Result<(), Fault>;
     fn draft_note_discard(&self, id: i64, version: i64, updated_at: &str) -> Result<(), Fault>;
     #[allow(clippy::too_many_arguments)]
     fn draft_settle_push(

@@ -48,6 +48,22 @@ impl StoredOutbox for Database {
     }
 }
 
+/// MailMind's drafts that answer a message (`drafts_answering`), each with when its newest save was made: the journal's
+/// save while one waits, else the push that settled it.
+const ANSWERING: &str = "SELECT d.id, d.account, d.folder, d.uid, d.message_id, \
+                         CASE WHEN j.raw IS NOT NULL THEN j.saved_at ELSE d.pushed_at END AS saved_at \
+                         FROM drafts d LEFT JOIN draft_journal j ON j.draft_id=d.id \
+                         WHERE d.in_reply_to=? AND COALESCE(j.discard, 0)=0 AND (j.raw IS NOT NULL OR d.folder IS NOT NULL) \
+                         AND NOT EXISTS (SELECT 1 FROM outbox o WHERE o.draft_id=d.id AND o.state IN ('queued','sending'))";
+
+/// The copies listed that name a message (the Mailbox's `answering`), by the names `thread_links` keeps for each.
+const NAMING: &str = "SELECT m.pk, m.account, m.folder, m.uid, m.message_key, m.message_id, m.in_reply_to, m.ts, m.draft \
+                      FROM thread_links l CROSS JOIN messages m ON m.pk=l.message_pk \
+                      WHERE l.name=? AND m.pending_removal IS NULL";
+
+const HELD: &str = "SELECT EXISTS(SELECT 1 FROM outbox WHERE draft_id=?1 AND state IN ('queued','sending')) \
+                    OR EXISTS(SELECT 1 FROM draft_journal WHERE draft_id=?1 AND discard!=0)";
+
 impl StoredDrafts for Database {
     fn by_message_id(&self, account: &str, message_id: Option<&str>) -> Result<Option<Row>, Fault> {
         let Some(message_id) = message_id.filter(|m| !m.is_empty()) else { return Ok(None) };
@@ -84,6 +100,18 @@ impl StoredDrafts for Database {
                 .optional()
                 .map(Option::flatten)
         })
+    }
+
+    fn answering(&self, message_id: &str) -> Result<Vec<Row>, Fault> {
+        self.read(|c| rows_of(c, ANSWERING, [message_id]))
+    }
+
+    fn naming(&self, message_id: &str) -> Result<Vec<Row>, Fault> {
+        self.read(|c| rows_of(c, NAMING, [message_id]))
+    }
+
+    fn held(&self, draft_id: i64) -> Result<bool, Fault> {
+        self.read(|c| c.prepare_cached(HELD)?.query_row([draft_id], |r| r.get(0)))
     }
 }
 

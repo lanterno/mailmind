@@ -75,6 +75,7 @@ fn draft(r: &rusqlite::Row<'_>) -> rusqlite::Result<DraftRow> {
         version: r.get("version")?,
         saved_by: r.get("saved_by")?,
         pushed_at: r.get("pushed_at")?,
+        in_reply_to: r.get("in_reply_to")?,
     })
 }
 
@@ -363,9 +364,16 @@ impl Book for Block<'_> {
         version: i64,
         saved_by: Option<&str>,
         updated_at: &str,
+        in_reply_to: Option<&str>,
     ) -> Result<(), Fault> {
-        let sql = "UPDATE drafts SET mode=?, subject=?, version=?, saved_by=?, updated_at=? WHERE id=?";
-        self.run(sql, params![mode, subject, version, saved_by, updated_at, id]).map(drop)
+        let sql = "UPDATE drafts SET mode=?, subject=?, version=?, saved_by=?, updated_at=?, in_reply_to=? WHERE id=?";
+        self.run(sql, params![mode, subject, version, saved_by, updated_at, in_reply_to, id]).map(drop)
+    }
+
+    fn draft_answers_nothing(&self, seen: &DraftRow) -> Result<(), Fault> {
+        let sql = "UPDATE drafts SET in_reply_to=NULL WHERE id=? AND uid IS ? AND message_id IS ? \
+                   AND NOT EXISTS (SELECT 1 FROM draft_journal j WHERE j.draft_id=drafts.id)";
+        self.run(sql, params![seen.id, seen.uid, seen.message_id]).map(drop)
     }
 
     fn draft_note_discard(&self, id: i64, version: i64, updated_at: &str) -> Result<(), Fault> {
