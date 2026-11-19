@@ -1,5 +1,6 @@
-//! What the digest reads (`mailbox.adapters.sqlite.lists.digest`, `stats`): the kept mail the AI found worth
-//! something, none on its way out, snoozed or muted, and what is stored all told.
+//! What the digest reads (`mailbox.adapters.sqlite.lists.digest`, `stats`): the Inbox's kept mail the AI found worth
+//! something, none on its way out, snoozed or muted, as the Inbox lists it, and what is stored all told. A copy filed
+//! elsewhere is no longer the brief's, and is never counted twice.
 
 use mm_kernel::errors::Fault;
 use mm_mailbox::ports::{DigestReads, StoredDigest};
@@ -9,7 +10,7 @@ use crate::db::Database;
 
 const DIGEST: &str = "SELECT m.*, s.summary, s.importance, s.category, s.action
      FROM messages m JOIN assessments s ON s.message_key=m.message_key
-     WHERE m.is_junk = 0
+     WHERE m.folder = 'INBOX' AND m.is_junk = 0
        AND NOT EXISTS (SELECT 1 FROM snoozes z WHERE z.message_key=m.message_key AND z.folder=m.folder)
        AND m.pending_removal IS NULL AND s.importance >= 1
        AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id)

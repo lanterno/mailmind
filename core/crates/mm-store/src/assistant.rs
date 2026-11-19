@@ -519,12 +519,15 @@ fn week_in(
 impl Overview for Database {
     fn brief_rows(&self, accounts: &[String], n: i64) -> Result<Vec<Glance>, Fault> {
         let (ac, ap) = among(accounts, "m.account");
-        // The Inbox's mail alone: a brief is written with no one asking, and mail filed, sent or trashed isn't sent.
+        // The Inbox's mail alone: a brief is written with no one asking, and mail filed, sent or trashed isn't sent. What
+        // the AI said is worth a glance, and all that needs you whatever its importance, the digest's rows that say so
+        // (`kernel.attention.needs_you`): mail that needs you is never called quiet.
         let sql = format!(
             "SELECT m.pk, m.message_key, m.uid, m.account, m.folder, m.from_name, m.from_addr, m.subject, m.message_id, \
              s.summary, s.importance, s.category, s.action \
              FROM messages m JOIN assessments s ON s.message_key=m.message_key \
-             WHERE m.folder='INBOX' AND m.is_junk=0 AND {} AND m.pending_removal IS NULL AND s.importance>=2 AND {NOT_MUTED}{ac} \
+             WHERE m.folder='INBOX' AND m.is_junk=0 AND {} AND m.pending_removal IS NULL \
+             AND (s.importance>=2 OR s.category='action-needed' OR TRIM(COALESCE(s.action,''))!='') AND {NOT_MUTED}{ac} \
              ORDER BY s.importance DESC, m.ts DESC LIMIT ?",
             not_snoozed_sql("m")
         );
