@@ -2,7 +2,8 @@ import AppKit
 import SwiftUI
 import XCTest
 
-/// What VoiceOver finds in Meadow's window: the AI's titles, the summary's among them, as headings.
+/// What VoiceOver finds in Meadow's window: no picture or group without a name (the panels' paper, grain and
+/// shadows are scenery), and the AI's titles, the summary's among them, as headings.
 @MainActor
 final class MeadowVoiceOverTests: XCTestCase {
     private var suite = ""
@@ -17,6 +18,20 @@ final class MeadowVoiceOverTests: XCTestCase {
     override func tearDown() async throws {
         Self.assistive(false)
         UserDefaults().removePersistentDomain(forName: suite)
+    }
+
+    func testTheWindowShowsVoiceOverNoNamelessPictureOrGroup() async throws {
+        let read = try await windowRead()
+        let nameless = read.filter { item in
+            item.label.isEmpty && [NSAccessibility.Role.image.rawValue, NSAccessibility.Role.unknown.rawValue,
+                                   "AXUnknown"].contains(item.role)
+        }
+        XCTAssertEqual(nameless.map(\.description), [], "what VoiceOver stops on with nothing to say:\n\(Self.said(read))")
+        // The panels are groups by their names, each once.
+        for panel in ["Mailboxes", "Message list", "Reading pane"] {
+            XCTAssertEqual(read.filter { $0.role == NSAccessibility.Role.group.rawValue && $0.label == panel }.count, 1,
+                           "the \(panel) group:\n\(Self.said(read))")
+        }
     }
 
     func testTheSummarysTitleIsAHeading() async throws {
