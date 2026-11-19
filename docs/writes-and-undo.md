@@ -182,7 +182,9 @@
   aside, and each goes alone from then on. A sync of the Inbox keeps the opening it reads as the body where it holds the
   whole message (`Incoming::body`), with the row in the step's one transaction, so that mail is never asked for again;
   one cut off keeps only its snippet and waits for the backfill, unless it carries an invite, whose calendar needs its
-  whole body at once.
+  whole body at once. A draft's opening is read the same way in any folder, so the Drafts list says what each says,
+  and so is each message Undo reads back (`ingest_messages`), junk too, so its row shows as it did before it left
+  (`sync_plan::reads_text` and `sync_plan.reads_text`).
   The Python server's sync reads the Inbox's mail whole and keeps a message under 64 KiB (`sync.WHOLE_BELOW`), or one
   carrying an invite, the same way.
 - Undo is a LIFO stack in the database (`undo_entries`, migration 25; `mailmind.platform.undo`; `undo_group` reaches one group wherever it stands, for Tidy's review strip),
