@@ -11,12 +11,14 @@ def _among(accounts, col):
 
 
 def brief_rows(c, accounts, n):
-    """What a brief is made from: the Inbox's mail the AI said is worth a glance, most important first. A brief is written with
-    no one asking, so mail filed, sent or trashed isn't sent."""
+    """What a brief is made from: the Inbox's mail the AI said is worth a glance, and all that needs you whatever its
+    importance (the digest's rows that say so), most important first: mail that needs you is never called quiet. A brief is
+    written with no one asking, so mail filed, sent or trashed isn't sent."""
     sql = ("SELECT m.pk, m.message_key, m.uid, m.account, m.folder, m.from_name, m.from_addr, m.subject, m.message_id, "
            "s.summary, s.importance, s.category, s.action "
            "FROM messages m JOIN assessments s ON s.message_key=m.message_key "
-           f"WHERE m.folder='INBOX' AND m.is_junk=0 AND {not_snoozed_sql()} AND m.pending_removal IS NULL AND s.importance>=2 "
+           f"WHERE m.folder='INBOX' AND m.is_junk=0 AND {not_snoozed_sql()} AND m.pending_removal IS NULL "
+           f"AND (s.importance>=2 OR {verdict.needs_you_sql()}) "
            "AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id) ")
     params = []
     if accounts:

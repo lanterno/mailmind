@@ -4,9 +4,11 @@ from mailmind.kernel.snoozed import not_snoozed_sql
 
 
 def digest(c, limit=300):
+    """The Inbox's kept mail the AI found worth something, none on its way out, snoozed or muted, as the Inbox lists it. A
+    copy filed elsewhere is no longer the brief's, and is never counted twice."""
     return c.execute(f"""SELECT m.*, s.summary, s.importance, s.category, s.action
            FROM messages m JOIN assessments s ON s.message_key=m.message_key
-           WHERE m.is_junk = 0 AND {not_snoozed_sql()} AND m.pending_removal IS NULL AND s.importance >= 1
+           WHERE m.folder = 'INBOX' AND m.is_junk = 0 AND {not_snoozed_sql()} AND m.pending_removal IS NULL AND s.importance >= 1
              AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id)
            ORDER BY s.importance DESC, m.ts DESC LIMIT ?""", (limit,)).fetchall()
 
