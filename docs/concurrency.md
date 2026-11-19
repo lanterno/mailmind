@@ -81,6 +81,13 @@ or signature change leaves the worker be. A worker also checks its account after
 so an edit of the file, which publishes nothing, still reaches it. The command path gives up a queued
 move whose account is gone, as the outbox does a send.
 
+A worker whose connection failed rests (5 s, doubling to 5 minutes) and asks for a sync of its account once its next
+connection is ready: the server answers again, and the sync says so. Meanwhile every login, IDLE's and every job's,
+goes through `open_session` (the Rust server's `ImapLogin::open`), which tells the sync of one that couldn't be made
+(`Syncing.unreached`): trouble that may pass shows at once as trying again, the tabs hear `sync-trouble`, and the
+sync runs now where this process runs one, rather than the status saying Synced until the next round, minutes on.
+One dropped connection that connects again at once logs in, and shows nothing.
+
 `realtime.stop()` and a retirement only interrupt a worker's session (`MailSession.interrupt`, a
 socket shutdown); the worker closes its own connection. Closing a socket another thread may be
 about to wait on frees its descriptor number for the next socket opened.
