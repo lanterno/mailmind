@@ -157,10 +157,16 @@ class StoredMail:
             base = ("SELECT from_addr AS addr, MAX(from_name) AS name, COUNT(*) AS n, MAX(ts) AS last "
                     "FROM messages WHERE from_addr IS NOT NULL AND from_addr != '' ")
             params = []
+            order = ""
             if q:
                 base += "AND (lower(from_addr) LIKE ? OR lower(from_name) LIKE ?) "
                 params += [f"%{q}%", f"%{q}%"]
-            base += "GROUP BY lower(from_addr) ORDER BY n DESC, last DESC LIMIT 8"
+                # Whose name or address starts with what was typed first, then a later word of the name, then the
+                # rest: "li" is Lin Mori before Mae Lindqvist, however often Mae writes.
+                order = ("CASE WHEN lower(MAX(from_name)) LIKE ? OR lower(from_addr) LIKE ? THEN 0 "
+                         "WHEN lower(MAX(from_name)) LIKE ? THEN 1 ELSE 2 END, ")
+                params += [f"{q}%", f"{q}%", f"% {q}%"]
+            base += f"GROUP BY lower(from_addr) ORDER BY {order}n DESC, last DESC LIMIT 8"
             return c.execute(base, params).fetchall()
 
     def sender_domains_like(self, q):
