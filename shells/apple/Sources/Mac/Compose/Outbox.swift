@@ -319,8 +319,8 @@ struct SendFloatView: View {
             MeadowToast(icon: .send, text: Text("Sending in \(count)")) {
                 MeadowToastButton(title: String(localized: "Undo"), icon: .undo) { composing.undo() }
             }
-        case .failed(let text):
-            MeadowToast(icon: .alert, text: Text(text)) {
+        case .failed(let text, let detail):
+            MeadowToast(icon: .alert, text: Text(text), detail: detail) {
                 MeadowToastButton(title: String(localized: "Edit")) { composing.editFailed() }
                 MeadowToastButton(title: String(localized: "Dismiss")) { composing.dismissFloat() }
             }

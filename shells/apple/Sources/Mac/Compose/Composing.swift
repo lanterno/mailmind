@@ -8,7 +8,8 @@ enum SendFloat: Equatable {
     case progress(String, clock: Bool)
     case countdown(id: Int, left: Int, total: Int)
     case done(String, clock: Bool)
-    case failed(String)
+    /// What failed, and in small type what is kept and why.
+    case failed(String, detail: String? = nil)
 }
 
 /// A reply written ahead for a message (`draftAhead.ts`): ready, or being written.
@@ -37,6 +38,8 @@ final class Composing: ComposeHost {
     private(set) var snippets: [API.Snippet] = []
     private(set) var composers: [UUID: Composer] = [:]
     private(set) var float: SendFloat?
+    /// How long the float stays before it goes by itself: 0 until it is acted on.
+    @ObservationIgnored private(set) var floatLife: Double = 0
     /// What the main window says for a moment, as the page's toasts.
     private(set) var notice: ToastWords?
     /// The replies written ahead, by the message's key.
@@ -299,11 +302,34 @@ final class Composing: ComposeHost {
                 draftsChanged()
             case false?:
                 failedSend = snapshot
-                showFloat(.failed("Your message couldn’t be saved"))
+                // An earlier save that holds all of it but what isn't an address leaves nothing to lose: the toast
+                // goes by itself, as the page's offers do. Else it stays until Edit or Dismiss.
+                let unsaved = composer.unsaved
+                let detail = Self.unsavedWords(unsaved, readOnly: readOnly)
+                showFloat(.failed("Your message couldn’t be saved", detail: detail),
+                          for: unsaved.keptAllBut ? Self.offersSeconds : 0)
             case nil:
                 break
             }
         }
+    }
+
+    /// How long a toast with something to do stays: the page's `OFFERS_MS`.
+    static let offersSeconds = 8.0
+
+    /// What a close that couldn't save says under its headline: why, and what an earlier save kept, if one did.
+    static func unsavedWords(_ unsaved: Composer.Unsaved, readOnly: Bool) -> String {
+        let kept: String
+        if let at = unsaved.keptAt {
+            let time = at.formatted(date: .omitted, time: .shortened)
+            kept = readOnly ? "What was saved at \(time) is kept on this Mac."
+                : "What was saved at \(time) is in Drafts."
+        } else {
+            kept = "Nothing of it was kept yet: Edit brings it back."
+        }
+        // The server's words may come without a full stop.
+        let why = unsaved.why.map { $0.isEmpty || ".?!".contains($0.last!) ? $0 : $0 + "." }
+        return [why, kept].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " ")
     }
 
     func closed(_ composer: Composer) {
@@ -361,11 +387,14 @@ final class Composing: ComposeHost {
     private func showFloat(_ next: SendFloat?, for seconds: Double = 0) {
         floatTimer?.cancel()
         float = next
+        floatLife = next == nil ? 0 : seconds
         if let next {
             switch next {
             case .countdown: break
-            case .progress(let text, _), .done(let text, _), .failed(let text):
+            case .progress(let text, _), .done(let text, _):
                 announce(text.replacingOccurrences(of: #"^[↑✓]\s*"#, with: "", options: .regularExpression))
+            case .failed(let text, let detail):
+                announce([text, detail].compactMap { $0 }.joined(separator: ". "))
             }
         }
         guard next != nil, seconds > 0 else { return }

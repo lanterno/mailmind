@@ -164,8 +164,10 @@ final class Composer: Identifiable {
     private var edits = 0
     @ObservationIgnored private var saving: Task<Bool?, Never>?
     @ObservationIgnored private var lastSaveHash: Int?
-    /// When its last save kept it.
+    /// When its last save kept it: what a close that couldn't save says is kept.
     @ObservationIgnored private(set) var savedAt: Date?
+    /// Why its last save didn't keep it, in the server's words.
+    @ObservationIgnored private var unsavedWhy: String?
     private(set) var savedLine = ""
     let note: String
     /// A reply-all's copied-in people.
@@ -369,6 +371,24 @@ final class Composer: Identifiable {
             if host.readOnly { host.keptOnThisMac(self) }
         }
         host.closed(self)
+    }
+
+    /// What a close that couldn't save says of it: why, and what an earlier save kept.
+    struct Unsaved: Equatable {
+        /// The first recipient that isn't an address, as the send check says it; else the server's answer.
+        let why: String?
+        /// When an earlier save kept it, if one did.
+        let keptAt: Date?
+        /// That save holds all of it but the recipients that aren't addresses.
+        let keptAllBut: Bool
+    }
+
+    var unsaved: Unsaved {
+        var why = unsavedWhy
+        if let problem = recipientProblem(), case .bad = problem { why = problem.line().text }
+        let good = payload(droppingBad: true)
+        return Unsaved(why: why, keptAt: lastSaveHash == nil ? nil : savedAt,
+                       keptAllBut: lastSaveHash != nil && lastSaveHash == good.hash)
     }
 
     /// Save what's unsaved as MailMind quits, but leave it open: a person may yet choose to stay. Nil when there is
@@ -777,10 +797,12 @@ final class Composer: Identifiable {
         }
     }
 
-    private func payload() -> Payload {
-        Payload(account: from, mode: mode, key: idempotencyKey, draftId: draftId, to: to.map(\.value),
-                cc: cc.map(\.value), bcc: bcc.map(\.value), subject: subject, text: body, originalKey: origKey,
-                attachments: attachments, resume: resume)
+    /// What a save sends; `droppingBad`, without the recipients that aren't addresses.
+    private func payload(droppingBad: Bool = false) -> Payload {
+        let kept = { (list: [Recipient]) in (droppingBad ? list.filter { !$0.bad } : list).map(\.value) }
+        return Payload(account: from, mode: mode, key: idempotencyKey, draftId: draftId, to: kept(to), cc: kept(cc),
+                       bcc: kept(bcc), subject: subject, text: body, originalKey: origKey, attachments: attachments,
+                       resume: resume)
     }
 
     /// A payload built before the save it waited for: that save may have switched the composer to naming itself.
@@ -844,15 +866,18 @@ final class Composer: Identifiable {
                 if edits == at { dirty = false }   // an edit since this save began stays to save
                 lastSaveHash = payload.hash
                 savedAt = Date()
+                unsavedWhy = nil
                 savedLine = "Saved \(Date().formatted(date: .omitted, time: .shortened))"
                 if !silent { say("Draft saved") }
                 return true
             } catch let problem as Problem where problem.status == 409 {
                 conflict = true
+                unsavedWhy = "This draft changed in another window."
                 savedLine = "Changed in another window"
                 if !silent { say("This draft changed in another window. Save again to keep this text.") }
                 return false
             } catch {
+                unsavedWhy = said(error)
                 savedLine = "Not saved"   // never leave an older "Saved" up
                 if !silent { say("Couldn’t save draft: \(said(error))") }
                 return false
