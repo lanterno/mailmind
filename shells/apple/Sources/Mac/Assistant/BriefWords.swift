@@ -174,9 +174,10 @@ enum BriefWords {
         var sun = false
     }
 
-    /// The pills under the brief, as the page's and the mockup's: what needs you in sunlight, then who you're
-    /// waiting on, what you'll reply to later, what is worth a read and what can wait, your commitments, and your
-    /// week, which the AI writes, so not while AI is turned off (`week`). A count of none isn't shown.
+    /// The pills under the brief, as the page's and the mockup's: what needs you in sunlight, then what waits (the
+    /// Waiting place it opens: who you're waiting on, and who waits on you), what you'll reply to later, what is worth
+    /// a read and what can wait, your commitments, and your week, which the AI writes, so not while AI is turned off
+    /// (`week`). A count of none isn't shown.
     static func tallies(needs: Int, waiting: Int, replyLater: Int, worthARead: Int, canWait: Int,
                         commitments: Int, week: Bool = true) -> [Tally] {
         var all: [Tally] = []
@@ -185,7 +186,7 @@ enum BriefWords {
                 : String(localized: "need you"), goes: .needs, sun: true))
         }
         if waiting > 0 {
-            all.append(Tally(count: waiting, words: String(localized: "waiting on others"), goes: .waiting))
+            all.append(Tally(count: waiting, words: String(localized: "waiting"), goes: .waiting))
         }
         if replyLater > 0 {
             all.append(Tally(count: replyLater, words: String(localized: "to reply later"), goes: .replyLater))
