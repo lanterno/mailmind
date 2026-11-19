@@ -1,6 +1,7 @@
 #if os(macOS)
 import AppKit
 import Observation
+import SwiftUI
 
 /// The mailbox as the window sees it, as the page's useMailbox.ts holds it: the sidebar's accounts, folders, views,
 /// labels and counts, the preferences the list reads, the Inbox's tab, the rows chosen, and what a person was last told.
@@ -147,6 +148,9 @@ final class Mailbox {
     @ObservationIgnored var undoing: (@MainActor () -> @MainActor (API.Undone?) -> Void)?
     /// The desk's: mail a verb sent away from where it was, so the gate whose card shows it reads its queue again.
     @ObservationIgnored var wentAway: (@MainActor ([MailCopy]) -> Void)?
+    /// The desk's: a message's own window inside the mail window's desk, so its reader shows the cards the pane's
+    /// does (the summary and what the message proposes, an invite with its RSVP).
+    @ObservationIgnored var inDesk: (@MainActor (AnyView) -> AnyView)?
     /// The areas that have hung their hooks here, each once a window however often its view appears.
     @ObservationIgnored private var joined: Set<String> = []
     /// Counted up each time the hooks are let go (`leave`): an area's view that is still on screen joins again when
@@ -184,6 +188,7 @@ final class Mailbox {
         stopsTranslating = nil
         undoing = nil
         wentAway = nil
+        inDesk = nil
         joinRound += 1
     }
 

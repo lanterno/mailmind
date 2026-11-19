@@ -24,9 +24,16 @@ struct MessageWindow: View {
         app.stage == .open ? app.core : nil
     }
 
+    /// `content` inside the mail window's desk, as the pane's reader is, so the cards it puts in a reader show here
+    /// too: none while no desk has joined the mailbox.
+    static func inDesk(of mailbox: Mailbox, _ content: some View) -> AnyView {
+        mailbox.inDesk?(AnyView(content)) ?? AnyView(content)
+    }
+
     var body: some View {
         if let copy, let core = Self.core(of: app) {
-            MessageWindowContent(core: core, copy: copy, reader: reader, find: find, verbs: verbs)
+            Self.inDesk(of: app.mailbox, MessageWindowContent(core: core, copy: copy, reader: reader, find: find,
+                                                              verbs: verbs))
                 .task(id: copy) {
                     reader.core = core
                     reader.open(copy)
