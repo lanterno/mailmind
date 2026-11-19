@@ -16,6 +16,36 @@ final class MeadowDialogTests: XCTestCase {
         XCTAssertEqual(ComposerForm.heading(.replyall, to: []), "Reply all")
     }
 
+    /// A reply's chip holds only the address, so its head calls them what the message replied to does: the sender,
+    /// or, following up your own, whom it went to.
+    func testAReplysHeadCallsThemWhatTheMessageDoes() {
+        XCTAssertEqual(ComposerForm.heading(.reply, to: [Recipient("otto@example.test")],
+                                            names: ["otto@example.test": "Otto Brandt"]), "Reply to Otto")
+        XCTAssertEqual(ComposerForm.heading(.reply, to: [Recipient("Bo Brown <bo@example.test>")],
+                                            names: ["bo@example.test": "Someone Else"]), "Reply to Bo",
+                       "the chip's own name first")
+
+        let mine = SendGuard.mineSet(["ada@example.test"])
+        let theirs = API.MessageOpened(
+            account: "ada@example.test", attachments: [], blockedCssUrls: 0, blockedImages: 0, cc: "",
+            date: "Mon", folder: "INBOX", fromAddr: "otto@example.test", fromName: "Otto Brandt", hasHtml: false,
+            key: 7, messageId: "<m7@example.test>", ok: true, replyTo: "", subject: "Stall layout", text: "Hi",
+            to: "ada@example.test", uid: 7)
+        let reply = Seeds.reply(theirs, all: false, mine: mine)
+        XCTAssertEqual(reply.to, ["otto@example.test"])
+        XCTAssertEqual(ComposerForm.heading(reply.mode, to: reply.to.map { Recipient($0) }, names: reply.names),
+                       "Reply to Otto")
+
+        var own = theirs
+        own.fromAddr = "ada@example.test"
+        own.fromName = "Ada Park"
+        own.to = "Lin Mori <lin@example.test>"
+        let followUp = Seeds.reply(own, all: false, mine: mine)
+        XCTAssertEqual(followUp.to, ["lin@example.test"])
+        XCTAssertEqual(ComposerForm.heading(followUp.mode, to: followUp.to.map { Recipient($0) }, names: followUp.names),
+                       "Reply to Lin")
+    }
+
     func testTheFromChipNamesTheAccountByItsAlias() {
         let aliases: [String: String?] = ["hana@example.test": "Work", "home@example.test": "", "x@example.test": nil]
         XCTAssertEqual(ComposerForm.fromWords("hana@example.test", aliases), "Work · hana@example.test")
