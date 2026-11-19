@@ -169,6 +169,9 @@ struct OfflineNote: View {
 
 /// A link's button (`.linkbtn`): the primary's ink, bold, underlined.
 struct MeadowLinkStyle: ButtonStyle {
+    /// In the run of a sentence, with no room of its own at its sides, so the words around it sit as they would by a
+    /// word: "in Everything.", not "in Everything ."
+    var inline = false
     @Environment(\.meadow) private var meadow
 
     func makeBody(configuration: Configuration) -> some View {
@@ -176,7 +179,7 @@ struct MeadowLinkStyle: ButtonStyle {
             .font(.meadow(.ui, 12.5, .bold))
             .underline()
             .foregroundStyle(meadow.primaryInk)
-            .padding(.horizontal, 4)
+            .padding(.horizontal, inline ? 0 : 4)
             .padding(.vertical, 2)
             .opacity(configuration.isPressed ? 0.7 : 1)
             .contentShape(Rectangle())
@@ -208,7 +211,7 @@ struct EmptyList: View {
                 said(mailbox.tab == .needs ? Words.needsYou : Words.unread) {
                     HStack(spacing: 0) {
                         Text("Everything else is in ")
-                        Button("Everything") { mailbox.tab = .all }.buttonStyle(MeadowLinkStyle())
+                        Button("Everything") { mailbox.tab = .all }.buttonStyle(MeadowLinkStyle(inline: true))
                         Text(".")
                     }
                 }
