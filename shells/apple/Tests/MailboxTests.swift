@@ -29,6 +29,44 @@ final class MailboxWordsTests: XCTestCase {
         XCTAssertEqual(Words.short("ada@example.test"), "ada")
     }
 
+    func testAPersonIsCalledByTheirFirstNameAndAnOrganisationWhole() {
+        let people = [("Lin Mori", "lin@example.test"), ("Renée Lefèvre", "renee@atelier.example.test"),
+                      ("Ivo Brandt", "ivo@harbor.example.test"), ("Grace Hopper", "grace.hopper@example.test"),
+                      ("Ren Takeda", "rtakeda@example.test")]
+        for (name, address) in people {
+            XCTAssertEqual(Words.calling(name, address: address), String(name.split(separator: " ")[0]), name)
+        }
+        let organisations = [("Parcel Service", "tracking@parcels.example.test"),
+                             ("Prize Desk", "winner@prizes.example.test"), ("Café Lumière", "hello@cafe.example.test"),
+                             ("Old Mailer", "legacy@mailer.example.test"), ("Spindle Deals", "deals@spindle.example.test"),
+                             ("The Weekly Loom", "news@loom.example.test"), ("Thimble & Co", "orders@thimble.example.test"),
+                             ("Build Bot", "noreply@ci.example.test"), ("Example Bank", "alerts@bank.example.test"),
+                             ("Riverside School", "school@example.test"), ("Northwind Traders", "sales@example.test"),
+                             ("Takeda, Ren", "ren@example.test")]
+        for (name, address) in organisations {
+            XCTAssertEqual(Words.calling(name, address: address), name, "\(name) is said whole")
+        }
+        XCTAssertEqual(Words.calling("Ren Takeda"), "Ren", "with no address, a person's name by its shape")
+        XCTAssertEqual(Words.calling("Parcel Service"), "Parcel Service")
+        XCTAssertEqual(Words.calling("Lin"), "Lin")
+        XCTAssertNil(Words.calling("ren@example.test", address: "ren@example.test"), "an address is no name")
+        XCTAssertNil(Words.calling("  ", address: nil))
+
+        // Where the window says it short.
+        let parcel = ("Parcel Service", "tracking@parcels.example.test")
+        XCTAssertEqual(SummaryCard.foot(parcel.0, address: parcel.1),
+                       "Not Parcel Service’s words — the message is the source.")
+        XCTAssertEqual(ReplyBoxWords(name: parcel.0, address: parcel.1, following: false).placeholder,
+                       "Reply to Parcel Service…")
+        XCTAssertEqual(ComposerForm.heading(.reply, to: [Recipient("Parcel Service <tracking@parcels.example.test>")]),
+                       "Reply to Parcel Service")
+        XCTAssertEqual(ContactCard.heading(API.ContactCard(accounts: [], addr: parcel.1, count: 1, known: false,
+                                                           name: parcel.0, ok: true, recent: [], replied: 0)),
+                       "About Parcel Service")
+        XCTAssertEqual(SummaryCard.foot("Lin Mori", address: "lin@example.test"),
+                       "Not Lin’s words — the message is the source.")
+    }
+
     func testAFolderIsNamedByItsRole() {
         XCTAssertEqual(Words.role(Fixture.folder("INBOX", role: "inbox")), "Inbox")
         XCTAssertEqual(Words.role(Fixture.folder("[Gmail]/All Mail", role: "all")), "All mail")

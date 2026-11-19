@@ -197,7 +197,7 @@ final class MeadowRowsTests: XCTestCase {
         let line = BriefLine(needs: needs, waiting: 1, canWait: 5, now: Date(timeIntervalSince1970: 1_790_000_000),
                              locale: Locale(identifier: "en_GB"))
         XCTAssertEqual(line.tally, "3 need you · 1 waiting · 5 can wait")
-        XCTAssertEqual(line.gist, "Grace, Alan and Riverside need you.")
+        XCTAssertEqual(line.gist, "Grace, Alan and Riverside School need you.", "a school is no person called Riverside")
         XCTAssertTrue(line.needs)
         XCTAssertEqual(BriefLine.who([]), "Nothing needs you. The rest can wait.")
         XCTAssertEqual(BriefLine.who(Array(needs.prefix(1))), "Grace needs you.")
