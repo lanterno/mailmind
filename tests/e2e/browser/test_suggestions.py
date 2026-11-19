@@ -157,11 +157,21 @@ def test_ai_off_says_so(page, app, world):
 
 
 def test_a_renumber_leaves_a_tasks_link(page, app, world, ai):
+    marked = []
+    page.pw.on("response", lambda r: marked.append(r.status) if r.url.endswith("/api/seen") else None)
     found(ai, tasks=[{"title": TITLE, "due": ""}])
     opening_the_message(page, world)
     page.locator('[data-ca="extract"]').click()
     page.locator('[data-suggestion="task"]').get_by_role("button", name="Add to tasks").click()
     expect(page.locator('[data-suggestion="task"]')).to_have_count(0)
+    # The open message is marked read after a moment on it. That lands first: after a renumber the sync forgets the folder's
+    # mail and reads it back, and a mark that came between would be answered 404.
+    page.clock.run_for(1_200)
+    for _ in range(100):
+        if marked:
+            break
+        page.wait_for_timeout(50)
+    assert marked == [200], marked
     world.server.renumber(w.ADA, "INBOX")
     app.work("sync", w.ADA, "INBOX")
     page.reload()
