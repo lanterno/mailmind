@@ -99,6 +99,28 @@ final class MeadowShellTests: XCTestCase {
         XCTAssertLessThanOrEqual(folded, ShellLayout.paneLeast)
     }
 
+    /// The top bar keeps the traffic lights' room at its left in a window, not in full screen, where they leave it, and
+    /// hears its window go in and come out.
+    func testTheTopBarKeepsTheLightsRoomOnlyWhereTheyAre() async {
+        XCTAssertEqual(MeadowTopBar.leading(lights: WindowLights.room, fullScreen: false), WindowLights.room)
+        XCTAssertEqual(MeadowTopBar.leading(lights: WindowLights.room, fullScreen: true), 10)
+        XCTAssertEqual(MeadowTopBar.leading(lights: 0, fullScreen: false), 10, "a picture with no window's lights")
+
+        var heard: [Bool] = []
+        let watch = FullScreenWatchView { heard.append($0) }
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 200, height: 100), styleMask: [.titled],
+                              backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        window.contentView?.addSubview(watch)
+        await until { heard == [false] }
+        NotificationCenter.default.post(name: NSWindow.willEnterFullScreenNotification, object: window)
+        NotificationCenter.default.post(name: NSWindow.didExitFullScreenNotification, object: window)
+        XCTAssertEqual(heard, [false, true, false])
+        watch.removeFromSuperview()
+        NotificationCenter.default.post(name: NSWindow.willEnterFullScreenNotification, object: window)
+        XCTAssertEqual(heard, [false, true, false], "out of its window, it hears no more")
+    }
+
     // MARK: The list's width
 
     func testTheListKeepsWithinTheSplittersLimits() {
