@@ -155,7 +155,9 @@ final class DeskWordsTests: XCTestCase {
         XCTAssertTrue(PlanModel.destructive(.trash))
         XCTAssertTrue(PlanModel.destructive(.junk))
         XCTAssertFalse(PlanModel.destructive(.archive))
-        XCTAssertEqual(Snoozing.words(.tomorrow), "Tomorrow 8am")
+        // The page's words, all in its sentence case.
+        XCTAssertEqual(API.SnoozePreset.allCases.map(Snoozing.words),
+                       ["Later today", "Tomorrow 8am", "This weekend", "Next week"])
         XCTAssertEqual(AttentionStack(folder: "__replylater__"), .replyLater)
         XCTAssertNil(AttentionStack(folder: "INBOX"))
         XCTAssertNil(AttentionStack(folder: nil))
