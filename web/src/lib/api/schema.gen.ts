@@ -2460,6 +2460,16 @@ export interface components {
             /** Trying Again */
             trying_again?: boolean | null;
         };
+        /**
+         * Addressee
+         * @description One of the people a message went to, as its To or Cc names them (`kernel.addressees`).
+         */
+        Addressee: {
+            /** Addr */
+            addr: string;
+            /** Name */
+            name: string | null;
+        };
         /** AiCosts */
         AiCosts: {
             batch: components["schemas"]["Batch"];
@@ -3211,6 +3221,10 @@ export interface components {
             safe_to_file: boolean;
             /** Seen */
             seen: boolean;
+            /** Sent To */
+            sent_to: components["schemas"]["Addressee"][];
+            /** Sent To More */
+            sent_to_more: number;
             /** Subject */
             subject: string;
             /** Summary */
@@ -3872,6 +3886,10 @@ export interface components {
             safe_to_file: boolean;
             /** Seen */
             seen: boolean;
+            /** Sent To */
+            sent_to: components["schemas"]["Addressee"][];
+            /** Sent To More */
+            sent_to_more: number;
             /** Snippet */
             snippet: string;
             /** Subject */
@@ -4465,6 +4483,10 @@ export interface components {
             muted: true;
             /** Seen */
             seen: boolean;
+            /** Sent To */
+            sent_to: components["schemas"]["Addressee"][];
+            /** Sent To More */
+            sent_to_more: number;
             /** Snippet */
             snippet: string;
             /** Subject */
@@ -5316,6 +5338,10 @@ export interface components {
             replylater: true;
             /** Seen */
             seen: boolean;
+            /** Sent To */
+            sent_to: components["schemas"]["Addressee"][];
+            /** Sent To More */
+            sent_to_more: number;
             /** Snippet */
             snippet: string;
             /** Subject */
@@ -5739,6 +5765,10 @@ export interface components {
             safe_to_file: boolean;
             /** Seen */
             seen: boolean;
+            /** Sent To */
+            sent_to: components["schemas"]["Addressee"][];
+            /** Sent To More */
+            sent_to_more: number;
             /** Snippet */
             snippet: string;
             /** Subject */
@@ -6032,6 +6062,10 @@ export interface components {
             safe_to_file: boolean;
             /** Seen */
             seen: boolean;
+            /** Sent To */
+            sent_to: components["schemas"]["Addressee"][];
+            /** Sent To More */
+            sent_to_more: number;
             /** Snippet */
             snippet: string;
             /** Snoozed Until */
@@ -6383,6 +6417,10 @@ export interface components {
             key: number;
             /** Seen */
             seen: boolean;
+            /** Sent To */
+            sent_to: components["schemas"]["Addressee"][];
+            /** Sent To More */
+            sent_to_more: number;
             /** Snippet */
             snippet: string;
             /** Subject */
@@ -6668,6 +6706,10 @@ export interface components {
             kind: string;
             /** Seen */
             seen: boolean;
+            /** Sent To */
+            sent_to: components["schemas"]["Addressee"][];
+            /** Sent To More */
+            sent_to_more: number;
             /** Snippet */
             snippet: string;
             /** Subject */
