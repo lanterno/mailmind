@@ -11,6 +11,7 @@ pytestmark = pytest.mark.browser
 
 NEWS = "ada-inbox-03-newsletter.eml"
 RECEIPT = "ada-inbox-05-receipt.eml"
+PROMO = "20% off all yarn this weekend"        # a newsletter the world keeps in Ada's Trash: a lane leaves it out
 
 
 # Axe judges contrast as it finds it, so fade-ins must end first. A looping animation never ends: waiting for one hangs
@@ -33,6 +34,12 @@ def until(page, check, what):
     assert check(), what
 
 
+def another_issue(world):
+    """One more newsletter in Ada's Inbox, so the river holds two whatever sits in the Trash."""
+    world.deliver(w.ADA, "INBOX", w.variant(NEWS, Message_ID="<issue-219@loom.example.test>",
+                                            Subject="Next week: a shawl in three colours"))
+
+
 def lane(page, view):
     page.goto(f"/m/{w.ADA}/INBOX")
     page.locator(f'a.frow[data-view="__lane_{view}__"]').click()
@@ -41,8 +48,10 @@ def lane(page, view):
 
 
 def test_the_feed_reads_as_a_river_and_a_reload_keeps_it(page, world):
+    another_issue(world)
     lane(page, "feed")
     expect(page.locator(".feed-river .fr-card")).to_have_count(2)
+    expect(page.locator(".fr-card", has_text=PROMO)).to_have_count(0)
     card = page.locator(".fr-card", has_text="five new patterns")
     expect(card.locator(".fr-pub")).to_have_text("The Weekly Loom")
     expect(card.locator(".fr-head")).to_have_text("This week: five new patterns")
@@ -64,6 +73,7 @@ def test_a_card_opens_and_says_so(page, world):
 
 
 def test_archiving_a_card_files_it_and_undo_brings_it_back(page, world):
+    another_issue(world)
     lane(page, "feed")
     page.get_by_role("button", name="Archive “This week: five new patterns”").click()
     expect(page.locator(".fr-card", has_text="five new patterns")).to_have_count(0)
