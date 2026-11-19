@@ -153,6 +153,46 @@ final class MessageWindowVerbs {
             await reread()
         }
     }
+
+    /// Snooze's chooser is up over this window, as h asks when.
+    var choosingSnooze = false
+
+    /// The page reader's single keys, on this message alone, as the mail window's list runs them on the message open
+    /// there (`RowKeys`, and the other areas' `Mailbox.keys`): e, d (or # and ⌫), b, m, s, u and z; r, a and f once
+    /// the message has opened, never on a draft; c; and attention's h, w and l. Whether `key` is one of them.
+    func key(_ key: Character) -> Bool {
+        if key == "z" {
+            mailbox.undo()
+            return true
+        }
+        guard acting, !choosingSnooze else { return false }
+        switch key {
+        case "e": file(.archive)
+        case "d", "#", "\u{7F}": file(.trash)
+        case "b": file(.junk)
+        case "m": askMove()
+        case "s": star(on: !Marks(shown).unstars)
+        case "u": setSeen(false)
+        case "c": Composing.shared.newMessage(current: copy.account)
+        case "r", "a", "f":
+            guard let opened = reader.opened(copy), opened.isDraft != true else { return true }
+            let copy = copy
+            Task {
+                switch key {
+                case "r": await Composing.shared.answer(copy)
+                case "a": await Composing.shared.reply(copy, all: true)
+                default: await Composing.shared.forward(copy)
+                }
+            }
+        default:
+            let attending = AttentionCommands.list(copies: [copy], stack: nil, model: attention) { [weak self] _ in
+                self?.choosingSnooze = true
+            }
+            guard let command = attending.first(where: { $0.key == key }) else { return false }
+            command.run()
+        }
+        return true
+    }
 }
 
 /// A message window's head: an empty band the traffic lights stand on, and a press anywhere on it moves the window.
@@ -177,6 +217,7 @@ struct MessageWindowContent: View {
     var room: ToastRoom?
     @State private var ownRoom = ToastRoom()
     private var toastRoom: ToastRoom { room ?? ownRoom }
+    @State private var snoozeMenu = MeadowMenuModel()
     private var status: AppStatus { .shared }
 
     private var opened: API.MessageOpened? {
@@ -196,7 +237,7 @@ struct MessageWindowContent: View {
         }
         .background { ZStack { meadow.paper; MeadowGrain() }.ignoresSafeArea() }
         .background { if let verbs { TypingWatch { verbs.typing = $0 } } }
-        .background { MessageWindowKeys() }
+        .background { MessageWindowKeys(verbs: verbs) }
         .environment(\.toastRoom, toastRoom)
         // What the window's verbs and keys say, with Undo, where the person is as well as in the mail window, clear
         // of the reply box.
@@ -205,6 +246,7 @@ struct MessageWindowContent: View {
                 PlacedToasts(room: toastRoom) { WindowToasts(mailbox: verbs.mailbox, status: status, desk: desk) }
             }
         }
+        .overlay(alignment: .topLeading) { if let verbs { snoozeChooser(verbs) } }
         .overlay { if let verbs { MessageWindowDialog(verbs: verbs) } }
         .ignoresSafeArea()
         .meadowWindowChrome(barHeight: MessageWindow.barHeight)
@@ -221,6 +263,28 @@ struct MessageWindowContent: View {
             MailWriting(replyTo: opened.isDraft == true ? nil : copy, draft: opened.isDraft == true ? copy : nil)
         })
         .focusedSceneValue(\.messageWindow, verbs)
+    }
+
+    /// h's chooser, hung near the middle of the window, as the mail window hangs one with no Snooze button to hang
+    /// it from.
+    @ViewBuilder private func snoozeChooser(_ verbs: MessageWindowVerbs) -> some View {
+        if verbs.choosingSnooze {
+            GeometryReader { window in
+                Color.clear
+                    .frame(width: 0, height: 0)
+                    .meadowPopover(isPresented: Binding(get: { true }, set: { if !$0 { verbs.choosingSnooze = false } }),
+                                   keys: { snoozeMenu.key($0) }) {
+                        SnoozeChooser(copies: [verbs.copy], model: verbs.attention, menu: snoozeMenu) {
+                            verbs.choosingSnooze = false
+                        }
+                    }
+                    .padding(.leading, window.size.width / 2 - 130)
+                    .padding(.top, window.size.height / 3)
+                    .onAppear { snoozeMenu.at = 0 }
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
     }
 
     @ViewBuilder private var content: some View {
@@ -263,14 +327,22 @@ private struct MessageWindowDialog: View {
 
 /// The keyboard in a message's window while nothing else there has it: as it opens, and once a field or a dialog
 /// lets it go. Space, the arrows, Page Up and Down, Home and End scroll the message, as a Mac's reader does; any other
-/// key goes on to the window and its menus.
+/// key goes on to the window and its menus, and a single key nothing took, from here or from the message's frame, is
+/// the reader's (`Catcher`).
 struct MessageWindowKeys: NSViewRepresentable {
+    let verbs: MessageWindowVerbs?
+
     func makeNSView(context: Context) -> Keys { Keys() }
 
-    func updateNSView(_ view: Keys, context: Context) {}
+    func updateNSView(_ view: Keys, context: Context) {
+        view.verbs = verbs
+    }
 
     final class Keys: NSView {
         private var watching: NSKeyValueObservation?
+        weak var verbs: MessageWindowVerbs? {
+            didSet { if let window { Catcher.hang(on: window).verbs = verbs } }
+        }
 
         override var acceptsFirstResponder: Bool { true }
 
@@ -279,6 +351,7 @@ struct MessageWindowKeys: NSViewRepresentable {
             watching = nil
             guard let window else { return }
             window.initialFirstResponder = self
+            Catcher.hang(on: window).verbs = verbs
             watching = window.observe(\.firstResponder, options: [.initial, .new]) { [weak self] _, _ in
                 DispatchQueue.main.async { MainActor.assumeIsolated { self?.takeIfNowhere() } }
             }
@@ -291,6 +364,51 @@ struct MessageWindowKeys: NSViewRepresentable {
 
         override func keyDown(with event: NSEvent) {
             if !ReaderPage.scrolls(event, in: window) { super.keyDown(with: event) }
+        }
+    }
+
+    /// The responder after a message's window, which the window holds: the single keys nothing in the window took,
+    /// run on its message (`MessageWindowVerbs.key`), never while text is typed there.
+    final class Catcher: NSResponder {
+        weak var verbs: MessageWindowVerbs?
+        weak var window: NSWindow?
+        private nonisolated(unsafe) static var held: UInt8 = 0
+
+        /// Stand after `window` in its chain, once.
+        @discardableResult
+        static func hang(on window: NSWindow) -> Catcher {
+            var next = window.nextResponder
+            while let responder = next {
+                if let held = responder as? Catcher { return held }
+                next = responder.nextResponder
+            }
+            let catcher = Catcher()
+            catcher.window = window
+            catcher.nextResponder = window.nextResponder
+            window.nextResponder = catcher
+            objc_setAssociatedObject(window, &held, catcher, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            return catcher
+        }
+
+        override func keyDown(with event: NSEvent) {
+            guard let verbs, let window, let key = Self.single(event, in: window, verbs: verbs), verbs.key(key) else {
+                return super.keyDown(with: event)
+            }
+        }
+
+        /// The single key `event` is, when one of the reader's could be and nothing is typed: a character with no ⌘,
+        /// ⌃ or ⌥ (⇧ only for # and ?), or Delete, never Space, Return, Esc, Tab or the arrows; and only while the
+        /// single keys are on.
+        static func single(_ event: NSEvent, in window: NSWindow, verbs: MessageWindowVerbs) -> Character? {
+            guard verbs.mailbox.singleKeys, !verbs.typing,
+                  !UntakenKeys.Catcher.typesText(window.firstResponder),
+                  event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
+                  let typed = event.charactersIgnoringModifiers, typed.count == 1, let key = typed.first,
+                  let scalar = key.unicodeScalars.first,
+                  (scalar.value > 0x20 && scalar.value < 0x7F) || scalar.value == 0x7F
+            else { return nil }
+            guard !event.modifierFlags.contains(.shift) || "#?".contains(key) else { return nil }
+            return Character(key.lowercased())
         }
     }
 }

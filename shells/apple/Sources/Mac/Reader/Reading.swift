@@ -41,10 +41,10 @@ struct MessageReader: View {
 
     @Environment(\.meadow) private var meadow
 
-    /// Whether the reply box shows R, the key that opens it: not in a message's own window (its mailbox, and no mail
-    /// window around it), which takes no single keys; Reply there is ⌘R.
+    /// Whether the reply box shows R, the key that opens it: under the mail window's pane, and in a message's own
+    /// window (its mailbox, and no mail window around it) while the single keys are on, as r replies there too.
     static func showsReplyKey(app: MailApp?, mailbox: Mailbox?) -> Bool {
-        app != nil || mailbox == nil
+        app != nil || mailbox?.singleKeys != false
     }
 
     private func account(_ place: DocumentPlace) -> Color? {
