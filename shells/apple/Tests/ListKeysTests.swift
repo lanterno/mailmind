@@ -261,6 +261,25 @@ final class ListKeysTests: XCTestCase {
         bare.contentView = nil
     }
 
+    /// Return in the search field leaves the keyboard there, as the page's does, where J would be typed: the empty
+    /// pane says ↓ then, and ↓ goes on to the list, which takes the keyboard and opens its first row.
+    func testTheEmptyPaneSaysTheKeyThatStartsAtTheTopFromWhereTheKeyboardIs() async throws {
+        let (app, controller) = try await table()
+        let window = window()
+        window.contentView = Host()
+        window.contentView?.addSubview(controller.scrollView)
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 100, height: 22))
+        window.contentView?.addSubview(field)
+        XCTAssertTrue(window.makeFirstResponder(field))
+        XCTAssertEqual(PaneEmptyWords.of(app).line, "Or press J to start at the top.")
+        app.mailbox.inSearchField = true
+        XCTAssertEqual(PaneEmptyWords.of(app).line, "Or press ↓ to start at the top.")
+        app.mailbox.enterList(in: window)
+        XCTAssertTrue(window.firstResponder === controller.table, "↓ hands the keyboard to the list")
+        XCTAssertEqual(app.selection.copy, MailCopy(try XCTUnwrap(app.list?.copy(at: 0))), "and opens its first row")
+        window.contentView = nil
+    }
+
     // MARK: Esc
 
     func testEscEndsFocusReadingBeforeTheListsOwnEsc() async throws {
