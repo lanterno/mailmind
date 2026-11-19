@@ -255,7 +255,18 @@
 - Reopening prefers the journal when the copy opened is the one pushed. Where another app changed it, `Drafts._keep_apart`
   gives the waiting save a row of its own, so both stay. `/api/outbox` also answers `drafts` (`Drafts.waiting`), what should
   have reached its server and hasn't and what a read-only run kept here (`kept`), for the tray, and `/api/draft/resume`
-  opens one by `draft_id`.
+  opens one by `draft_id`: from the journal while a save waits there, else from its copy, which a Drafts not caught up
+  since the push lists first (`Drafts._resume_reached`, a full sync of that folder under the gate). A copy gone by then
+  answers 404, and its row answers no message any more (`draft_answers_nothing`).
+- Reply opens the reply already saved to a message, never a second, empty one. Every save writes the Message-ID its
+  In-Reply-To names into `drafts.in_reply_to` (migration 52), which outlives the journal: between a push and Drafts'
+  next catch-up nothing else here says what a pushed draft answers. The message as it opens (`/api/message/body`) names
+  the newest such draft as `reply_draft` (`Drafts.answering`): MailMind's own by `draft_id`, and another app's, listed in
+  Drafts with that In-Reply-To (`thread_links`), by its copy (`in_drafts`), with how many `more` answer it. None a send
+  holds or a discard is taking. Both clients already read that answer for the quote, so knowing costs no request. The
+  page's `reply` and the Mac's `Composing.reply` wait for a closing save, open that draft through `/api/draft/resume`,
+  start afresh on a 404, and on any other refusal say the reply waits in Drafts rather than open an empty one; a quick
+  reply's line starts a reply of its own, and a reply written ahead never replaces the saved words.
 - Reopening a draft (`/api/draft/resume` → `Drafts.resume`) reads the draft's own bytes, never
   the original. At each push `Drafts._push` records beside the `drafts` row what the composer held
   (migration 20: `own_text`, `tail_text`, `tail_html`, `bcc`, `raw_sha`). That record is
