@@ -1,5 +1,5 @@
 #if os(macOS)
-import Foundation
+import AppKit
 
 /// Ways about the mailbox, as the page's app/commands.ts and TopBar.tsx go: to a folder by its role (g then a letter),
 /// up and down the list, a search from the search field, and every command there is, which the palette (⌘K) lists.
@@ -176,6 +176,13 @@ extension Mailbox {
             meant.asked = search.q
             self?.app?.place = .search(meant)
         }
+    }
+
+    /// ↓ from the search field, with no suggestion under it: the keyboard goes to the list in `window`, and the list's
+    /// first row opens unless a message is open, as the empty pane says.
+    func enterList(in window: NSWindow?) {
+        if let window, let table = ListTable.find(in: window.contentView) { window.makeFirstResponder(table) }
+        if app?.selection.copy == nil, !marking { move(by: 1) }
     }
 
     /// Out of a search, back to the Inbox it was asked from (`leave`).

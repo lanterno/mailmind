@@ -84,6 +84,8 @@ final class Mailbox {
     var contact: String?
     /// Whether the search field has the focus: `/` and Search (⌘F) put it there.
     var searchFocus = false
+    /// The search field has the keyboard, as Return leaves it: the empty pane says ↓ in place of J.
+    var inSearchField = false
     /// A text of the window's that can be edited has the keys (the search, the reader's reply box, Find, a dialog's
     /// field), as the window's first responder says (`TypingWatch`).
     var editingText = false

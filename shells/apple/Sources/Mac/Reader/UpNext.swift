@@ -160,15 +160,18 @@ struct PaneEmptyWords: Equatable {
     /// Whether it offers the Inbox's Everything.
     let everything: Bool
 
-    /// With the Inbox's Needs you emptied, with mail to pick from, or with none.
-    static func of(needsDone: Bool, hasMail: Bool) -> PaneEmptyWords {
+    /// With the Inbox's Needs you emptied, with mail to pick from, or with none. With the search field holding the
+    /// keyboard, as Return leaves it, J would be typed there: ↓ goes from it to the list's first row.
+    static func of(needsDone: Bool, hasMail: Bool, inSearchField: Bool = false) -> PaneEmptyWords {
         if needsDone {
             return PaneEmptyWords(title: String(localized: "Nothing needs you."),
                                   line: String(localized: "Everything else can wait."), everything: true)
         }
         if hasMail {
             return PaneEmptyWords(title: String(localized: "Pick a message to read"),
-                                  line: String(localized: "Or press J to start at the top."), everything: false)
+                                  line: inSearchField ? String(localized: "Or press ↓ to start at the top.")
+                                                      : String(localized: "Or press J to start at the top."),
+                                  everything: false)
         }
         return PaneEmptyWords(title: String(localized: "Nothing here."),
                               line: String(localized: "New mail drifts in on its own — no need to refresh."),
@@ -195,7 +198,7 @@ struct PaneEmptyWords: Equatable {
         default: break
         }
         let needsDone = loaded && !hasMail && inInbox && mailbox.tab == .needs
-        return of(needsDone: needsDone, hasMail: hasMail)
+        return of(needsDone: needsDone, hasMail: hasMail, inSearchField: mailbox.inSearchField)
     }
 
     /// Several rows marked: how many, as the bulk bar counts them ("4 selected"), and what that bar over the list

@@ -180,6 +180,8 @@ struct MeadowSearchBox: View {
             if wanted { focused = true }
             mailbox.searchFocus = false
         }
+        // Return leaves the keyboard here, as the page's does: the empty pane says ↓, which goes on to the list.
+        .onChange(of: focused, initial: true) { _, now in mailbox.inSearchField = now }
     }
 
     private var field: some View {
@@ -240,8 +242,14 @@ struct MeadowSearchBox: View {
         .accessibilityLabel("Suggestions")
     }
 
+    /// ↑ and ↓ through the suggestions; with none, ↓ goes on to the list, whose first row opens.
     private func step(_ by: Int) -> KeyPress.Result {
-        guard !offers.isEmpty else { return .ignored }
+        guard !offers.isEmpty else {
+            guard by > 0, (app.list?.total ?? 0) > 0 else { return .ignored }
+            focused = false
+            mailbox.enterList(in: NSApp.keyWindow)
+            return .handled
+        }
         at = at.map { ($0 + by + offers.count) % offers.count } ?? (by > 0 ? 0 : offers.count - 1)
         return .handled
     }
