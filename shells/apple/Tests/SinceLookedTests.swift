@@ -32,6 +32,61 @@ final class SinceLookedTests: XCTestCase {
         XCTAssertEqual(since.inbox, .allInboxes, "mail to two accounts opens every Inbox")
     }
 
+    func testMailAnUndoPutsBackInAnInboxIsNeverNew() {
+        // Answered before the sync finds it: the sync's find is taken off, and only mail beside it is new.
+        since.undoing()
+        since.undone(account: ada, folder: "INBOX", count: 1)
+        since.newMail(arrived(ada), on: .search(Search(q: "paid", account: ada)), ai: false)
+        XCTAssertNil(since.words, "the message deleted and undone is no new mail")
+        since.undoing()
+        since.undone(account: ada, folder: "INBOX", count: 2)
+        since.newMail(arrived(ada, "INBOX", 3), on: .documents, ai: false)
+        XCTAssertEqual(since.words, "▾ 1 new — open the Inbox", "what came beside it is new")
+
+        // Found before the Undo is answered: its answer takes it back off the pill.
+        since.lookedAt(.allInboxes, accounts: [ada, bo])
+        since.undoing()
+        since.newMail(arrived(bo), on: .documents, ai: false)
+        XCTAssertNotNil(since.words)
+        since.undone(account: bo, folder: "INBOX", count: 1)
+        XCTAssertNil(since.words, "the pill goes with it")
+
+        // Put back somewhere else than an Inbox, or long ago, or by an Undo that failed: mail is new as it comes.
+        since.undoing()
+        since.undone(account: ada, folder: "Archive", count: 1)
+        since.undoing()
+        since.undone(account: nil, folder: nil, count: 0)
+        since.newMail(arrived(ada), on: .documents, ai: false)
+        XCTAssertEqual(since.words, "▾ 1 new — open the Inbox")
+        since.lookedAt(.allInboxes, accounts: [ada, bo])
+        since.undoing()
+        since.undone(account: ada, folder: "INBOX", count: 1)
+        clock = clock.addingTimeInterval(SinceLooked.comingBack + 1)
+        since.newMail(arrived(ada), on: .documents, ai: false)
+        XCTAssertEqual(since.words, "▾ 1 new — open the Inbox", "a sync long after is new mail")
+    }
+
+    /// Search, open a result, delete it from the pane, then z: the message back in the Inbox is no new mail.
+    func testTheMailboxsUndoTellsThePillWhatCameBack() async throws {
+        let server = OpenedMessageVerbsTests.server()
+        server.on("POST", API.Post.Undo.path, API.Undone(account: ada, folder: "INBOX", label: "Delete", ok: true,
+                                                         remaining: 0))
+        let app = MailApp()
+        app.mailbox.wire = server.wire
+        await app.mailbox.refresh()
+        let desk = Desk()
+        desk.use(app, routes: server.wire)
+        app.place = .search(Search(q: "paid", account: ada))
+        await waiting(for: "the search's rows") { app.list?.copy(at: 0) != nil }
+        app.mailbox.chose([try XCTUnwrap(app.list?.copy(at: 0))])
+        await app.mailbox.fileNow(.trash, rows: await app.mailbox.paneTargets(standing: false))
+        await app.mailbox.undoNow()
+        await desk.heard(CoreEvent(id: "1", name: "new-mail",
+                                   data: #"{"account": "ada@example.test", "folder": "INBOX", "count": 1, "uid": 7}"#))
+        XCTAssertNil(desk.since.words, "no “1 new — open the Inbox” for the message undone")
+        withExtendedLifetime(desk) {}
+    }
+
     func testMailBackFromASnoozeIsSaidBesideTheNew() {
         since.newMail(arrived(ada), on: .documents, ai: false)
         since.snoozeWake(SinceLooked.Woke(accounts: [ada], count: 2), on: .documents)
