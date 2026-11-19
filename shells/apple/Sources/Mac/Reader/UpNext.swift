@@ -18,6 +18,12 @@ struct UpNextPlace: Equatable {
         let place = tab.map { "\(title) · \($0.title)" } ?? title
         return String(localized: "End of \(place)")
     }
+
+    /// The line under the next message's subject: the AI's summary, or the message's own first words where it has
+    /// none, or while AI is turned off, when the reader shows no summary either.
+    static func gist(of row: API.FolderRow, aiTurnedOff: Bool) -> String {
+        aiTurnedOff || row.summary.isEmpty ? row.snippet : row.summary
+    }
 }
 
 /// Up next (`.upnext`): the message after this one, and File, Delete or Keep, each moving on to it; or, at the end of
@@ -67,7 +73,8 @@ struct UpNext: View {
                     .padding(.bottom, 8)
                     if let next = list.copy(at: position + 1) {
                         NextRow(row: next, account: mailbox.accounts.firstIndex(of: next.account),
-                                mine: RowWords.mine(mailbox.accounts)) {
+                                mine: RowWords.mine(mailbox.accounts),
+                                gist: UpNextPlace.gist(of: next, aiTurnedOff: mailbox.aiTurnedOff)) {
                             mailbox.move(by: 1)
                         }
                     }
@@ -113,6 +120,8 @@ private struct NextRow: View {
     let account: Int?
     /// Your addresses: your own mail is named by whom it went to, as its row in the list is (`RowWords.who`).
     let mine: Set<String>
+    /// The line under its subject (`UpNextPlace.gist`).
+    let gist: String
     let open: () -> Void
     @Environment(\.meadow) private var meadow
     @Environment(\.isFocused) private var focused
@@ -130,7 +139,6 @@ private struct NextRow: View {
                         .font(.meadow(.ui, 14))
                         .foregroundStyle(meadow.ink)
                         .lineLimit(1)
-                    let gist = row.summary.isEmpty ? row.snippet : row.summary
                     if !gist.isEmpty {
                         Text(gist)
                             .font(.meadow(.ui, 13))
