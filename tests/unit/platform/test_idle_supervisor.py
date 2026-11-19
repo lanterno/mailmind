@@ -298,6 +298,29 @@ def test_a_connection_that_serves_starts_the_rests_over(build):
     assert sup.line_of("a").closed_by == ["watch:a"]
 
 
+def test_a_connection_that_served_a_while_and_was_lost_is_followed_by_another_at_once(build):
+    sup = build("a")
+    sup.FIRST_REST = sup.LONGEST_REST = 3600                  # a rest would outlast the test
+    sup.AT_ONCE_AFTER = 0                                      # any connection that serves at all has served a while
+    started(sup)
+    assert wait_until(lambda: sup.serving("a"))
+    sup.line_of("a").drop()
+    assert wait_until(lambda: len(sup.lines) == 2 and sup.line_of("a", 1).waiting)
+    assert sup.said == [("failed", "a", "OSError")]
+    assert sup.next_rest("a") == 3600, "a failure after it rests from the first"
+    assert sup.line_of("a").closed_by == ["watch:a"]
+
+
+def test_a_connection_lost_before_it_served_a_while_rests_first(build):
+    sup = build("a")
+    sup.FIRST_REST = sup.LONGEST_REST = 3600
+    started(sup)
+    assert wait_until(lambda: sup.serving("a"))
+    sup.line_of("a").drop()
+    assert wait_until(lambda: sup.said)
+    assert not wait_until(lambda: len(sup.lines) > 1, timeout=0.2), "resting, it opens no other"
+
+
 def test_a_worker_says_what_failed(build):
     sup = build("a")
     sup.refuse_connect = 1
