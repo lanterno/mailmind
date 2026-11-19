@@ -231,9 +231,14 @@ struct MessageWindowContent: View {
             // head does.
             MessageWindowBar()
             if find.open, opened != nil { ReaderFindBar(find: find) }
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .environment(\.readerFind, find)
+            // The document is laid out as the pane's is at the window's width: its margins, a phone's up to 700
+            // points, and the aside beside the message from 1100.
+            GeometryReader { room in
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .environment(\.meadowPaneWidth, room.size.width)
+            }
+            .environment(\.readerFind, find)
         }
         .background { ZStack { meadow.paper; MeadowGrain() }.ignoresSafeArea() }
         .background { if let verbs { TypingWatch { verbs.typing = $0 } } }
