@@ -8,6 +8,49 @@ export function avatarHue(s: string | null | undefined): number {
   return h;
 }
 
+// Words a person's name doesn't have and an organisation's often does, folded.
+const ORGANISATION_WORDS = new Set([
+  "the", "co", "inc", "ltd", "llc", "gmbh", "corp", "plc", "company", "service", "services", "desk", "team",
+  "support", "bank", "deals", "shop", "store", "club", "library", "school", "university", "college", "news",
+  "newsletter", "weekly", "daily", "bot", "mailer", "notifications", "alerts", "updates", "billing", "help",
+  "info", "group", "foundation", "agency", "studio", "cafe", "restaurant", "bakery", "hotel", "airlines",
+  "labs", "press", "media", "council", "office", "clinic", "insurance", "payments", "delivery", "online",
+]);
+// An address's part before the @, letters only, that a role writes from rather than a person.
+const ROLE_ADDRESSES = new Set([
+  "hello", "hi", "info", "news", "newsletter", "deals", "offers", "orders", "order", "support", "help", "team",
+  "contact", "billing", "notifications", "notification", "alerts", "updates", "tracking", "mailer", "admin",
+  "service", "sales", "marketing", "receipts", "accounts", "mail", "postmaster", "feedback", "store", "shop",
+]);
+const NO_REPLY = ["noreply", "no-reply", "donotreply", "do-not-reply"];
+const folded = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+const letters = (s: string) => s.replace(/[^\p{L}]/gu, "");
+
+// Whether a name of several words is a person's. Never what an organisation's name has: a figure, an ampersand, a comma
+// ("Mori, Ren" is said whole), a word such as Service, Desk, Bank or The. Then, with an address, a person's mostly carries
+// their name (ren@, ren.mori@, rmori@) and a role's doesn't (news@, orders@, noreply@); with none, the name's shape: two to
+// four capitalised words.
+function isPerson(words: string[], address: string | null | undefined): boolean {
+  const fold = words.map((w) => folded(w).replace(/^\p{P}+|\p{P}+$/gu, ""));
+  if (/[\p{N}&+,/|:;()[\]!?]/u.test(words.join(""))) return false;
+  if (fold.some((w) => ORGANISATION_WORDS.has(w))) return false;
+  const at = address ? address.indexOf("@") : -1;
+  if (!address || at < 0) return words.length <= 4 && words.every((w) => /^\p{Lu}[\p{L}\p{M}\-'’.]*$/u.test(w));
+  const local = folded(address.slice(0, at));
+  if (ROLE_ADDRESSES.has(letters(local)) || NO_REPLY.some((p) => local.startsWith(p))) return false;
+  return [fold[0]!, fold[fold.length - 1]!].map(letters).some((end) => end.length >= 2 && local.includes(end));
+}
+
+// What a short line calls someone ("To Ren"): a person by their first name, and an organisation, or a name it can't tell,
+// whole, as "To Parcel" would cut "Parcel Service" short. Null with no name to go by, only an address. The Mac's
+// `Words.calling` says the same.
+export function calling(name: string | null | undefined, address?: string | null): string | null {
+  const said = (name ?? "").replace(/^[\s"']+|[\s"']+$/gu, "");
+  if (!said || said.includes("@")) return null;
+  const words = said.split(/\s+/u);
+  return words.length > 1 && isPerson(words, address) ? words[0]! : said;
+}
+
 export function initialsOf(name: string | null | undefined, addr: string | null | undefined): string {
   const all = /@/.test(name ?? "") ? [] : (String(name ?? "").match(/\p{L}[\p{L}\p{M}]*/gu) ?? []);
   const caps = all.filter((x) => x[0] !== x[0]!.toLowerCase());

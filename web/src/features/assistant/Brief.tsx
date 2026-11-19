@@ -18,8 +18,8 @@ import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import { Scene } from "../../lib/ui/Scene";
 import { SetUpAi } from "../../lib/ui/SetUpAi";
-import { answer, peekCards, useDraftChip } from "../compose";
-import { filing, bulk, fromDigest, needsYou, safeToFile, topicItems, useFoldersAcross, type DigestItem } from "../mailbox";
+import { answer, myAddresses, peekCards, useDraftChip } from "../compose";
+import { filing, bulk, fromDigest, needsYou, safeToFile, topicItems, useFoldersAcross, whoOf, type DigestItem } from "../mailbox";
 import { snoozeAsk } from "../attention";
 import type { Mailbox } from "../mailbox";
 import { LIMIT, useBrief, useSide } from "./data";
@@ -56,12 +56,13 @@ function NeedCard({ it, m, multi, ai }: { it: DigestItem; m: Mailbox; multi: boo
   const chip = ai ? written : undefined;
   const subject = it.subject || "(no subject)";
   const action = String(it.action ?? "").trim();
+  const who = whoOf(fromDigest(it), myAddresses(m.digest));
   return (
     <article className="bf-need" data-key={it.key} data-folder={it.folder} data-uid={it.uid}>
-      <span className="av" style={{ "--h": avatarHue(it.from_addr || it.from_name) } as React.CSSProperties} aria-hidden="true">{initialsOf(it.from_name, it.from_addr)}</span>
+      <span className="av" style={{ "--h": avatarHue(who.avatarAddr || who.avatarName) } as React.CSSProperties} aria-hidden="true">{initialsOf(who.avatarName, who.avatarAddr)}</span>
       <div style={{ minWidth: 0 }}>
         <div className="bf-n1">
-          <b>{it.from_name || it.from_addr || "—"}</b>
+          <b>{who.name || "—"}</b>
           {multi && <span className="acctchip">{it.alias || shortAddress(it.account)}</span>}
           <time>{it.when}</time>
         </div>

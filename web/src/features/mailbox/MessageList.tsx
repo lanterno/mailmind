@@ -7,7 +7,7 @@ import { avatarHue, dayGroup, initialsOf } from "../../lib/text";
 import { Icon } from "../../lib/ui/Icon";
 import { toggleMark, type Filing } from "./actions";
 import { warmBody } from "./data";
-import { inDaySections, type Row } from "./rows";
+import { inDaySections, whoOf, type Row } from "./rows";
 
 // A row's DOM id, from its copy's (`Row.id`): a folder's name can hold a space, which an id can't.
 const rowId = (id: string) => `row-${encodeURIComponent(id)}`;
@@ -24,8 +24,9 @@ function Ract({ icon, title, danger, filled, mark, onPress }: { icon: string; ti
   );
 }
 
-function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile, onSnooze, onStar, onSeen, onFocusRead }: {
+function RowItem({ row, mine, whole, selected, isMarked, showAccount, onOpen, onFile, onSnooze, onStar, onSeen, onFocusRead }: {
   row: Row;
+  mine: ReadonlySet<string>;
   whole: boolean;
   selected: boolean;
   isMarked: boolean;
@@ -38,6 +39,7 @@ function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile, 
   onFocusRead: () => void;
 }) {
   const needs = Boolean(row.action);
+  const who = whoOf(row, mine);
   const what = whole ? " conversation" : "";
   const className = `row cmsg${row.seen ? "" : " unread"}${needs ? " needs" : ""}${selected ? " sel" : ""}${isMarked ? " marked" : ""}`;
   // A moment's rest on a row, before it can be meant: a pointer crossing the list asks for nothing.
@@ -49,12 +51,12 @@ function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile, 
     <div id={rowId(row.id)} role="option" aria-selected={selected} aria-checked={isMarked} className={className} data-key={row.key} data-folder={row.folder} data-uid={row.uid} data-tid={row.threadId || undefined} onClick={() => { stopResting(); onOpen(); }} onDoubleClick={(e) => { if (!(e.target as Element).closest(".cbx,.racts")) onFocusRead(); }}
       onPointerEnter={(e) => { if (e.pointerType === "mouse" && !selected) resting.current = setTimeout(() => void warmBody(row), HOVER_MS); }}
       onPointerLeave={stopResting}>
-      <div className="avwrap"><span className="av" style={{ "--h": avatarHue(row.fromAddr || row.fromName) } as React.CSSProperties} aria-hidden="true">{initialsOf(row.fromName, row.fromAddr)}</span>
+      <div className="avwrap"><span className="av" style={{ "--h": avatarHue(who.avatarAddr || who.avatarName) } as React.CSSProperties} aria-hidden="true">{initialsOf(who.avatarName, who.avatarAddr)}</span>
         <span className={isMarked ? "cbx on" : "cbx"} aria-hidden="true" title="Select (x)" onClick={(e) => { e.stopPropagation(); toggleMark(row.id); }}>{isMarked ? "✓" : ""}</span>
       </div>
       <div className="cmsg-body">
         <div className="r1">
-          <span className="from">{row.fromName}</span>
+          <span className="from">{who.name}</span>
           {row.count > 1 && row.threadCount > 1 && <span className="thr-count" title={`${row.threadCount} messages`}>{row.threadCount}</span>}
           {row.flagged && <span className="rflag" style={{ color: "var(--gold)" }}><Icon name="star" className="fill" /></span>}
           {row.hasAttach && <span className="rflag" style={{ color: "var(--mute)" }}><Icon name="clip" /></span>}
@@ -79,9 +81,10 @@ function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile, 
   );
 }
 
-export function MessageList({ above, rows, openId, marks, label, folder, isWhole, accountChip, onOpen, onFile, onSnooze, onStar, onSeen, onFocusRead, empty, footer }: {
+export function MessageList({ above, rows, mine, openId, marks, label, folder, isWhole, accountChip, onOpen, onFile, onSnooze, onStar, onSeen, onFocusRead, empty, footer }: {
   above?: React.ReactNode;
   rows: Row[];
+  mine: ReadonlySet<string>;   // your addresses: a row of your own mail names whom it went to
   openId: string | null;
   marks: ReadonlySet<string>;
   label: string;
@@ -113,7 +116,7 @@ export function MessageList({ above, rows, openId, marks, label, folder, isWhole
     const here = sections && row.ts !== null ? dayGroup(row.ts, new Date(now)) : "";
     if (here && here !== section) items.push(<div key={`g-${here}`} className="rgrp" role="presentation">{here}</div>);
     if (here) section = here;
-    items.push(<RowItem key={row.id} row={row} whole={isWhole(row)} selected={row.id === openId} isMarked={marks.has(row.id)} showAccount={accountChip(row)} onOpen={() => onOpen(row)} onFile={(kind) => onFile(row, kind)} onSnooze={(anchor) => onSnooze(row, anchor)} onStar={() => onStar(row)} onSeen={() => onSeen(row)} onFocusRead={onFocusRead} />);
+    items.push(<RowItem key={row.id} row={row} mine={mine} whole={isWhole(row)} selected={row.id === openId} isMarked={marks.has(row.id)} showAccount={accountChip(row)} onOpen={() => onOpen(row)} onFile={(kind) => onFile(row, kind)} onSnooze={(anchor) => onSnooze(row, anchor)} onStar={() => onStar(row)} onSeen={() => onSeen(row)} onFocusRead={onFocusRead} />);
   }
   return (
     <div id="rows">

@@ -26,6 +26,8 @@ export function fromDigest(it: DigestItem): Row {
     folder: it.folder,
     fromName: it.from_name,
     fromAddr: it.from_addr,
+    sentTo: it.sent_to,
+    sentToMore: it.sent_to_more,
     subject: it.subject,
     snippet: "",
     when: it.when,

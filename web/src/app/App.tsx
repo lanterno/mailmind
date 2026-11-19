@@ -3,7 +3,7 @@ import { useEffect, useEffectEvent, useRef } from "react";
 import { EMPTY } from "../lib/emptyWords";
 import { post, refusalOf } from "../lib/api/client";
 import { copyId, copyOf } from "../lib/copy";
-import { composing } from "../features/compose/compose";
+import { composing, myAddresses } from "../features/compose/compose";
 import { asking, keepLiteral, stopAsking, translating } from "../features/assistant/ask";
 import { AskPane } from "../features/assistant/AskPane";
 import { DoPanel } from "../features/assistant/Do";
@@ -375,6 +375,7 @@ export function App() {
           {asked ? <AskPane at={asked} m={m} /> : documents ? <Hub m={m} /> : screening ? <ScreenerPane account={m.account} /> : lane === "feed" ? <FeedRiver m={m} footer={footer} /> : lane === "papertrail" ? <PaperTrail m={m} footer={footer} /> : <MessageList
             above={inInbox && !searching ? <BriefRow m={m} /> : null}
             rows={rows}
+            mine={myAddresses(m.digest)}
             openId={m.openId}
             marks={m.marks}
             label={title}

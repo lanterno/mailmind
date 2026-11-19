@@ -2,11 +2,15 @@
 // you (`needsYou`); the page reads that and never works it out.
 import type { AnyOf, GetAnswers } from "../../lib/api/types";
 import { copyId } from "../../lib/copy";
+import { isMine } from "../../lib/mine";
+import { calling } from "../../lib/text";
 
 // A row of any of a folder's lists: a folder's own, Snoozed, Muted, Waiting or Reply later.
 export type FolderRow = AnyOf<GetAnswers["/api/messages"]["items"][number]>;
 export type SearchRow = Extract<GetAnswers["/api/search"], { items: unknown }>["items"][number];
 export type FolderInfo = GetAnswers["/api/folders"]["folders"][number];
+// One of the people a message went to, as its To or Cc names them.
+export type Addressee = FolderRow["sent_to"][number];
 
 // A row is a copy: its key, folder and uid name it to the server, and `id` (`copyId`) on the page.
 export interface Row {
@@ -17,6 +21,8 @@ export interface Row {
   folder: string;
   fromName: string | null;
   fromAddr: string | null;
+  sentTo: Addressee[];  // the first two its To, then its Cc, name, which a row of your own names
+  sentToMore: number;   // and how many more
   subject: string;
   snippet: string;
   when: string;
@@ -45,6 +51,8 @@ export function fromFolder(it: FolderRow): Row {
     folder: it.folder,
     fromName: it.from_name,
     fromAddr: it.from_addr,
+    sentTo: it.sent_to,
+    sentToMore: it.sent_to_more,
     subject: it.subject,
     snippet: it.snippet,
     when: it.waiting_label || it.when,
@@ -74,6 +82,8 @@ export function fromSearch(it: SearchRow): Row {
     folder: it.folder,
     fromName: it.from_name,
     fromAddr: it.from_addr,
+    sentTo: it.sent_to,
+    sentToMore: it.sent_to_more,
     subject: it.subject,
     snippet: it.snippet,
     when: it.when,
@@ -92,6 +102,21 @@ export function fromSearch(it: SearchRow): Row {
     summary: (it as { summary?: string }).summary ?? "",
     needsYou: Boolean(it.needs_you),
   };
+}
+
+// Whom a row names, and the avatar beside it: for mail from one of your own addresses, the people it went to ("To Ada",
+// "To Ada, Lin +2"), each by first name or an organisation whole (`calling`), else by address, and the first of them in the
+// avatar; else who sent it. Your own that went to no one else is named by who wrote it, as the reader names it.
+export interface Who { name: string; avatarName: string | null; avatarAddr: string | null }
+
+export function whoOf(r: Pick<Row, "fromName" | "fromAddr" | "sentTo" | "sentToMore">, mine: ReadonlySet<string>): Who {
+  const sender = { name: r.fromName || r.fromAddr || "", avatarName: r.fromName, avatarAddr: r.fromAddr };
+  if (!r.fromAddr || !isMine(r.fromAddr.toLowerCase(), mine)) return sender;
+  const others = r.sentTo.filter((p) => !isMine(p.addr.toLowerCase(), mine));
+  const first = others[0];
+  if (!first) return sender;
+  const names = others.map((p) => calling(p.name, p.addr) ?? p.addr).join(", ");
+  return { name: `To ${names}${r.sentToMore ? ` +${r.sentToMore}` : ""}`, avatarName: first.name, avatarAddr: first.addr };
 }
 
 // A row that stands for a whole conversation: it opens in the conversation view, and files whole.

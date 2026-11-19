@@ -3,7 +3,8 @@ import { useEffect } from "react";
 import { EMPTY } from "../../lib/emptyWords";
 import type { Copy } from "../../lib/copy";
 import { shortAddress } from "../../lib/text";
-import type { Row, Mailbox } from "../mailbox";
+import { myAddresses } from "../compose";
+import { whoOf, type Row, type Mailbox } from "../mailbox";
 import { fmtMoney, ledger, monthName } from "./model";
 
 const accountOf = (m: Mailbox, r: Row) => m.aliases[r.account] || shortAddress(r.account);
@@ -19,6 +20,7 @@ function useOpenInView(open: Copy | null) {
 export function FeedRiver({ m, footer }: { m: Mailbox; footer: React.ReactNode }) {
   useOpenInView(m.openCopy);
   if (!m.rows.length && m.list.isSuccess) return <div id="rows"><div className="nores">{EMPTY.feed}</div></div>;
+  const mine = myAddresses(m.digest);
   return (
     <div id="rows">
       <div className="feed-river">
@@ -26,7 +28,7 @@ export function FeedRiver({ m, footer }: { m: Mailbox; footer: React.ReactNode }
           // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- the pointer's shortcut: the button in its heading is the keyboard's way in
           <article key={r.id} className={`fr-card${r.seen ? "" : " unread"}${r.id === m.openId ? " reading" : ""}`} data-key={r.key} data-folder={r.folder} data-uid={r.uid} onClick={() => m.open(r)}>
             <div className="fr-kicker">
-              <span className="fr-pub">{r.fromName || r.fromAddr}</span><span className="fr-dot">·</span><span className="fr-when">{r.when}</span>
+              <span className="fr-pub">{whoOf(r, mine).name}</span><span className="fr-dot">·</span><span className="fr-when">{r.when}</span>
               <span className="fr-dot">·</span><span className="fr-acct">{accountOf(m, r)}</span>
             </div>
             <h2 className="fr-head"><button className="fr-open" onClick={(e) => { e.stopPropagation(); m.open(r); }}>{r.subject || "(no subject)"}</button></h2>
@@ -43,6 +45,7 @@ export function FeedRiver({ m, footer }: { m: Mailbox; footer: React.ReactNode }
 export function PaperTrail({ m, footer }: { m: Mailbox; footer: React.ReactNode }) {
   useOpenInView(m.openCopy);
   if (!m.rows.length && m.list.isSuccess) return <div id="rows"><div className="nores">{EMPTY.receipts}</div></div>;
+  const mine = myAddresses(m.digest);
   return (
     <div id="rows">
       <div className="paper-trail">
@@ -59,7 +62,7 @@ export function PaperTrail({ m, footer }: { m: Mailbox; footer: React.ReactNode 
             {month.lines.map(({ row, amount, refund, shown }) => (
               <button key={row.id} className={`pt-row${row.seen ? "" : " unread"}${row.id === m.openId ? " reading" : ""}`} data-key={row.key} data-folder={row.folder} data-uid={row.uid} onClick={() => m.open(row)}>
                 <div className="pt-main">
-                  <div className="pt-merch">{row.fromName || row.fromAddr} <span className="fr-acct" style={{ fontSize: 10 }}>· {accountOf(m, row)}</span></div>
+                  <div className="pt-merch">{whoOf(row, mine).name} <span className="fr-acct" style={{ fontSize: 10 }}>· {accountOf(m, row)}</span></div>
                   <div className="pt-desc">{refund ? "↩ " : ""}{row.subject || "(no subject)"}</div>
                 </div>
                 <div>

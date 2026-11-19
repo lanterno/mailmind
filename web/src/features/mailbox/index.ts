@@ -5,5 +5,5 @@ export { fromDigest, needsYou, safeToFile, topicItems, type DigestItem } from ".
 export { leavesOrganisation } from "./linkRisk";
 export { MailFrame, QuoteFrame, type MailBody } from "./MailFrame";
 export { FONTS, readPrefs, setReadPref, type ReadPrefs } from "./readPrefs";
-export type { Row } from "./rows";
+export { whoOf, type Row } from "./rows";
 export type { Mailbox } from "./useMailbox";

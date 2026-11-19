@@ -13,7 +13,7 @@ import { READ_ONLY_REFUSED, refusedReadOnly } from "../../lib/readOnly";
 import { fileSize } from "../../lib/text";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
-import { armDwell, cancelDwell, leavesOrganisation, MailFrame, markOpenedRead, useBody, useReadOnly, useThread, warmMembers, type MailBody, type Mailbox, type Opened } from "../mailbox";
+import { armDwell, cancelDwell, leavesOrganisation, MailFrame, markOpenedRead, useBody, useReadOnly, useThread, warmMembers, whoOf, type MailBody, type Mailbox, type Opened } from "../mailbox";
 import { AiCard, summarize } from "./AiCard";
 import { MoreMenu } from "./MoreMenu";
 import { ReadMenu } from "./ReadMenu";
@@ -149,7 +149,7 @@ function UpNext({ m, canArchive }: { m: Mailbox; canArchive: boolean }) {
     <div className="rd-next">
       <div className="rdn-t">
         <span className="rdn-k">Up next</span>
-        <span className="rdn-who">{next.fromName || next.fromAddr}</span>
+        <span className="rdn-who">{whoOf(next, myAddresses(m.digest)).name}</span>
         <span className="rdn-sj">{next.subject || "(no subject)"}</span>
       </div>
       {canArchive && <button className="cab" title="Archive this one and open the next (e)" onClick={() => m.fileOpen("archive")}><span><Icon name="archive" /></span> Archive &amp; next</button>}
