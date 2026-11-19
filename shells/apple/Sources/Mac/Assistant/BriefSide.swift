@@ -48,8 +48,8 @@ struct BriefSide: View {
                         }
                     }
                 }
-                if waiting.count > 3 {
-                    Button("See all \(waiting.count)") { actions.goToStack(.waiting) }.deskLink()
+                if let seeAll = BriefWords.seeAllWaiting(listed: waiting.count, held: model.waitingCount) {
+                    Button(seeAll) { actions.goToStack(.waiting) }.deskLink()
                 }
             }
         }
