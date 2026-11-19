@@ -196,12 +196,15 @@ class Folders:
 
     def of_account(self, account: str) -> dict[str, Any]:
         """Folder list with roles + unread counts for one account. The live-IMAP part
-        is TTL-cached + pooled; the DB-derived counts (snoozed/muted/…) are always fresh."""
+        is TTL-cached + pooled; the DB-derived counts (snoozed/muted/…) are always fresh, and so is what a folder a sync
+        has read holds, counted as its list counts it."""
         try:
             acct = self._accounts.get(account)
         except KeyError:
             raise Refused("unknown account")
-        out = self._folders_list_cached(account, acct)
+        listed = self._folders_list_cached(account, acct)
+        with self._uow.read() as c:
+            out = folder_roles.counted(listed, self._store.stored_folder_counts(c, account))
         return {"ok": True, "account": account, "folders": [{**f, "takes_filing": destination.takes_filing(f["role"])} for f in out],
                 **self._view_counts(account)}
 

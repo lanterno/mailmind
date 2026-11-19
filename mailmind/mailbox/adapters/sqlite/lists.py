@@ -138,10 +138,11 @@ def inboxes_count(c, accounts):
 
 
 def stored_folder_counts(c, account):
-    """{folder: (unseen, total)} of what is stored for the account, each folder a sync has read among them."""
+    """{folder: (unseen, total)} of what is stored for the account, each folder a sync has read among them: of the rows its
+    list shows, so none on its way out, snoozed or muted, which the rail's count would have beside a list without them."""
     counts = {r["folder"]: (r["unseen"], r["total"]) for r in c.execute(
-        "SELECT folder, SUM(seen=0) AS unseen, COUNT(*) AS total FROM messages WHERE account=? "
-        "AND pending_removal IS NULL GROUP BY folder", (account,))}
+        f"SELECT m.folder, SUM(m.seen=0) AS unseen, COUNT(*) AS total FROM messages m WHERE m.account=? "
+        f"AND m.pending_removal IS NULL AND {not_snoozed_sql()} {_MUTED_EXCL.format(t='m')} GROUP BY m.folder", (account,))}
     for r in c.execute("SELECT folder FROM sync_state WHERE account=?", (account,)):
         counts.setdefault(r["folder"], (0, 0))
     return counts

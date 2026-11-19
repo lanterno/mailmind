@@ -167,6 +167,14 @@ def playing(folders: Collection[Folder]) -> dict[str | None, str]:
     return {find(folders, r): r for r in ROLES}
 
 
+def counted(rail: Iterable[RailFolder], counts: Mapping[str, tuple[int | None, int]]) -> list[RailFolder]:
+    """The rail counted as each list counts: a folder a sync has read gives the unread and total of what is stored of it
+    (`counts`, as `stored_rail` takes them), the rows its list shows, in place of what the server's STATUS said, which counts
+    mail snoozed, muted or on its way out too. A folder never read keeps the server's."""
+    return [{**f, "unseen": counts[f["name"]][0] or 0, "total": counts[f["name"]][1]} if f["name"] in counts else f
+            for f in rail]
+
+
 def stored_rail(counts: Mapping[str, tuple[int | None, int]]) -> list[RailFolder]:
     """The rail from what is stored alone, with no server to ask, from {folder: (unseen, total)}. INBOX is always on it. Roles
     go by name, as a live list's do: a stored name carries no delimiter, so "/" and "." both mark its depth, and of two
