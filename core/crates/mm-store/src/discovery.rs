@@ -219,7 +219,9 @@ const COLUMNS: &str = "m.pk,m.message_key,m.uid,m.account,m.folder,m.from_addr,m
                        m.snippet,m.seen,m.flagged,m.has_attach,m.is_junk,m.bucket,m.thread_id,s.importance,s.category,\
                        s.action";
 
-/// What the search asked runs as, run: an error SQLite gives is the query's, which the index rejects.
+/// What the search asked runs as, run: an error SQLite gives is the query's, which the index rejects. The copies in
+/// the folders playing the parts in `apart` are left out.
+#[allow(clippy::too_many_arguments)]
 fn search_in(
     c: &Connection,
     spec: &QuerySpec,
@@ -227,6 +229,7 @@ fn search_in(
     limit: i64,
     offset: i64,
     thread: Option<&str>,
+    apart: &[&str],
     roles: &dyn FolderRoles,
 ) -> rusqlite::Result<Vec<Found>> {
     let (matched, wheres, mut params) = to_sql(spec);
@@ -240,6 +243,11 @@ fn search_in(
     if let Some(thread) = thread {
         wheres.push("m.thread_id = ?".to_owned());
         params.push(Sql::Text(thread.to_owned()));
+    }
+    if !apart.is_empty() {
+        let (in_apart, apart_params) = in_folders_playing(c, roles, apart)?;
+        wheres.push(format!("NOT {in_apart}"));
+        params.extend(apart_params);
     }
     let where_sql: String = wheres.iter().map(|w| format!(" AND {w}")).collect();
     let (in_all, in_all_params) = in_folders_playing(c, roles, &["all"])?;
@@ -314,9 +322,10 @@ impl SearchIndex for DiscoveryStore {
         limit: i64,
         offset: i64,
         thread: Option<&str>,
+        apart: &[&str],
         roles: &dyn FolderRoles,
     ) -> Result<Option<Vec<Found>>, Fault> {
-        self.db.read(|c| Ok(search_in(c, spec, account, limit, offset, thread, roles).ok()))
+        self.db.read(|c| Ok(search_in(c, spec, account, limit, offset, thread, apart, roles).ok()))
     }
 }
 

@@ -15,6 +15,9 @@ use crate::ports::{AccountNames, FolderRoles, Found, SearchIndex};
 use crate::query::QuerySpec;
 
 pub const NO_SUBJECT: &str = "(no subject)";
+/// The folders a lane's list leaves out, by the part they play: a lane is the mail kept, as a folder's list is, and
+/// what was deleted or is junk isn't.
+pub const LANE_LEAVES_OUT: [&str; 2] = ["trash", "junk"];
 
 /// What a request asks once something is typed (`search.Asked`).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -27,6 +30,8 @@ pub struct Asked {
     pub offset: i64,
     /// Only this conversation of `account`.
     pub thread: Option<String>,
+    /// A lane's list (Feed, Paper trail), which leaves out the Trash and Junk.
+    pub lane: bool,
 }
 
 impl Asked {
@@ -39,6 +44,7 @@ impl Asked {
         limit: i64,
         offset: i64,
         thread: Option<&str>,
+        lane: Option<&str>,
     ) -> Asked {
         let scope = scope.unwrap_or("account").to_owned();
         Asked {
@@ -48,6 +54,7 @@ impl Asked {
             limit: limit.clamp(1, 200),
             offset: offset.max(0),
             thread: thread.filter(|t| !t.is_empty()).map(str::to_owned),
+            lane: lane.is_some_and(|l| !l.is_empty()),
         }
     }
 }
@@ -88,9 +95,18 @@ impl Search {
     pub fn answer(&self, want: &Asked) -> Result<Value, Failure> {
         let spec = QuerySpec::parse(&want.q, |wall| placed(&*self.zone, wall));
         let aliases = self.accounts.aliases()?;
+        let apart: &[&str] = if want.lane { &LANE_LEAVES_OUT } else { &[] };
         let rows = self
             .index
-            .search(&spec, want.account.as_deref(), want.limit, want.offset, want.thread.as_deref(), &*self.roles)?
+            .search(
+                &spec,
+                want.account.as_deref(),
+                want.limit,
+                want.offset,
+                want.thread.as_deref(),
+                apart,
+                &*self.roles,
+            )?
             .ok_or_else(|| Problem::refused("bad query"))?;
         let now = self.clock.now();
         let limit = usize::try_from(want.limit).unwrap_or(0);

@@ -35,8 +35,9 @@ fn refused(problem: Problem, method: &Method, uri: &Uri) -> Response<Body> {
     answer::failure(&Failure::Problem(problem), method.as_str(), uri.path())
 }
 
-/// Local full-text and operator search across the synced mail. A limit or an offset that won't read is refused only
-/// once something has been typed, so an empty box answers whatever else the request holds.
+/// Local full-text and operator search across the synced mail; a lane's (`lane`) leaves out the Trash and Junk. A limit
+/// or an offset that won't read is refused only once something has been typed, so an empty box answers whatever else
+/// the request holds.
 async fn search(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Response<Body> {
     let given = query(&uri);
     let q = mm_kernel::text::strip(given.text("q").unwrap_or_default()).to_owned();
@@ -48,7 +49,15 @@ async fn search(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Respon
         Ok(read) => read,
         Err(problem) => return refused(problem, &method, &uri),
     };
-    let asked = Asked::new(&q, given.text("scope"), given.text("account"), limit, offset, given.text("thread"));
+    let asked = Asked::new(
+        &q,
+        given.text("scope"),
+        given.text("account"),
+        limit,
+        offset,
+        given.text("thread"),
+        given.text("lane"),
+    );
     super::run(&app, &method, &uri, move |app| app.discovery.search.answer(&asked)).await
 }
 

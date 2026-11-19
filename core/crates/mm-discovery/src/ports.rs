@@ -45,7 +45,9 @@ pub trait FolderRoles: Send + Sync + fmt::Debug {
 /// Stored mail as a query finds it (`adapters.sqlite.StoredMail.search`).
 pub trait SearchIndex: Send + Sync + fmt::Debug {
     /// What `spec` finds, a message once however many folders hold it, up to one more than `limit` after `offset`:
-    /// None for a query the index rejects. `in_all` says which folders play All Mail, whose copy shows last.
+    /// None for a query the index rejects. `roles` says which folders play All Mail, whose copy shows last, and
+    /// which play the parts in `apart`, whose copies it leaves out.
+    #[allow(clippy::too_many_arguments)]
     fn search(
         &self,
         spec: &QuerySpec,
@@ -53,6 +55,7 @@ pub trait SearchIndex: Send + Sync + fmt::Debug {
         limit: i64,
         offset: i64,
         thread: Option<&str>,
+        apart: &[&str],
         roles: &dyn FolderRoles,
     ) -> Result<Option<Vec<Found>>, Fault>;
 }
