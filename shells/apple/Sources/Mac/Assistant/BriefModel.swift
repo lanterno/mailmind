@@ -27,9 +27,15 @@ final class BriefModel {
     private(set) var upcoming: [API.UpcomingEvent] = []
     private(set) var waiting: [API.WaitingRow] = []
     private(set) var tidyRun: API.TidyRun?
-    /// How many wait in the Waiting and Reply Later stacks, every account's together.
-    private(set) var waitingCount = 0
-    private(set) var replyLaterCount = 0
+    /// How many wait in the Waiting and Reply Later stacks the brief's tallies open (`stacksAccount`): one account's,
+    /// or every account's together. Nil until read.
+    private(set) var waitingCount: Int?
+    private(set) var replyLaterCount: Int?
+    /// The account whose stacks the tallies open, and so count: the one whose Inbox the brief stands beside, or nil
+    /// for every account's, as the page counts them where its `goToFolder` opens them.
+    @ObservationIgnored var stacksAccount: () -> String? = { nil }
+    /// The account the stacks were last counted for, "" for every account's; nil before they were.
+    @ObservationIgnored private var counted: String?
     /// Rows on their way out: a read that lands meanwhile can't bring one back.
     private(set) var filing: Set<MailCopy> = []
     /// The Tidy run a person dismissed, kept as the page keeps it in its storage.
@@ -119,6 +125,8 @@ final class BriefModel {
         let writes = !glancing
         glancing = false
         deliberate = writes
+        // Opened beside another account's Inbox: the stacks counted for the last one aren't this one's.
+        if counted != (stacksAccount() ?? "") { (waitingCount, replyLaterCount) = (nil, nil) }
         let first = !opened
         opened = true
         await reread()?.value
@@ -246,14 +254,16 @@ final class BriefModel {
     }
 
     private func readStacks(_ routes: any RouteCaller) async {
+        let whose = stacksAccount()
         var (waiting, later) = (0, 0)
-        for account in digest?.accounts ?? [] {
+        for account in whose.map({ [$0] }) ?? digest?.accounts ?? [] {
             if let folders = try? await routes.get(API.Get.Folders.self, ["account": account]) {
                 waiting += folders.waiting
                 later += folders.replylater
             }
         }
         (waitingCount, replyLaterCount) = (waiting, later)
+        counted = whose ?? ""
     }
 
     /// Write the brief, or write it again from the mail as it is now (`again`), on a person's press. Both run the AI,

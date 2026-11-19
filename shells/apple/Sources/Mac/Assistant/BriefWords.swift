@@ -249,10 +249,11 @@ enum BriefWords {
     }
 
     /// The link under who you're waiting on, once there are more than its card shows: it opens Waiting, which holds
-    /// what others wait on you for too, so it says how many Waiting holds (`held`, as the tally beside it does), not
-    /// how many of them wait on others (`listed`). Waiting holds every one listed, so a count not read yet says those.
-    static func seeAllWaiting(listed: Int, held: Int) -> String? {
-        listed > 3 ? String(localized: "See all \(max(listed, held))") : nil
+    /// what others wait on you for too, so it says how many the Waiting it opens holds (`held`: one account's beside
+    /// that account's Inbox, as the tally beside it says), not how many of every account's wait on others (`listed`),
+    /// which a count not read yet (nil) says instead, as the page does.
+    static func seeAllWaiting(listed: Int, held: Int?) -> String? {
+        listed > 3 ? String(localized: "See all \(held ?? listed)") : nil
     }
 
     /// How long you've waited on a reply: "today", "1 day", "4 days".

@@ -173,8 +173,8 @@ struct BriefScreen: View {
 
     private var tallies: [BriefWords.Tally] {
         let commitments = BriefWords.commitments(model.items).count + (tasks?.open ?? 0)
-        return BriefWords.tallies(needs: model.needs.count, waiting: model.waitingCount,
-                                  replyLater: model.replyLaterCount, worthARead: model.worthARead.count,
+        return BriefWords.tallies(needs: model.needs.count, waiting: model.waitingCount ?? 0,
+                                  replyLater: model.replyLaterCount ?? 0, worthARead: model.worthARead.count,
                                   canWait: model.tidy.count, commitments: commitments, week: !model.aiTurnedOff)
     }
 

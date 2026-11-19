@@ -90,6 +90,8 @@ final class Desk {
         curate.changed = readAgain
         curate.openPage = { NSWorkspace.shared.open($0) }
         brief.paperTrailQuery = { [weak self] in self?.paperTrail?.search?.q }
+        // The tallies count the stacks they open (`goToStack`).
+        brief.stacksAccount = { [weak self] in self?.stacksAccount }
     }
 
     /// Reach the window's core once it is open, and hear what changes; and hang the desk's hooks on the mailbox, again
@@ -253,7 +255,14 @@ final class Desk {
     /// A stack as the brief's tallies open it: the account the window is in, else every account's.
     func goToStack(_ stack: AttentionStack) {
         guard let folder = VirtualFolder(rawValue: stack.rawValue) else { return }
-        go(.virtual(folder, account: app?.place?.account))
+        go(.virtual(folder, account: stacksAccount))
+    }
+
+    /// The account the window is in, for the brief's stacks: the brief is a place of no account, so it is the one
+    /// whose Inbox it stands beside (`MailApp.listed`), as the page's `goToFolder` opens one account's from beside its
+    /// Inbox; nil beside All Inboxes, for every account's.
+    var stacksAccount: String? {
+        app?.place?.account ?? app?.listed?.account
     }
 
     /// Read the lists, the sidebar and what is open here again, as the page's `readAgain` does after a change.
