@@ -61,6 +61,9 @@ export function useRealtime() {
       onSnoozeWake(JSON.parse((e as MessageEvent<string>).data) as { accounts?: string[]; count?: number }, currentRoute(), digest?.accounts ?? []);
     });
     es.addEventListener("resync", () => again("digest"));
+    // An account's server didn't answer, to a sync or to a connection outside one: the status says it is trying again,
+    // or can't connect, rather than synced, so the digest that holds it is read again. Nothing else changed.
+    es.addEventListener("sync-trouble", () => again("digest"));
     // With the stream down nothing says what changed, so the counts and the tray are read on a timer until it reconnects.
     let up = false;
     es.onopen = () => { up = true; };
