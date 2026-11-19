@@ -41,6 +41,8 @@ struct Entries: View {
     let close: @MainActor () -> Void
     @State private var query = ""
     @State private var selection: TextSelection?
+    /// The field chose all it opened on as the focus landed, and the cursor was put after it instead.
+    @State private var cursorPlaced = false
     @State private var picked = 0
     @FocusState private var typing: Bool
     @Environment(\.meadow) private var meadow
@@ -83,6 +85,12 @@ struct Entries: View {
         return (mode, String(trimmed.dropFirst()).trimmingCharacters(in: .whitespaces))
     }
 
+    /// Whether `selection` chooses all of `text`, as a field's focus does.
+    static func choosesAll(_ selection: TextSelection?, of text: String) -> Bool {
+        guard case .selection(let range)? = selection?.indices else { return false }
+        return !text.isEmpty && range == text.startIndex..<text.endIndex
+    }
+
     var body: some View {
         let moded = Self.mode(of: query, in: modes)
         let rows = moded == nil ? Self.rows(query, entries: entries, starters: starters, typed: typed) : []
@@ -90,6 +98,15 @@ struct Entries: View {
         VStack(spacing: 0) {
             MeadowPaletteField(prompt: placeholder, text: $query, selection: $selection, focus: $typing)
                 .onChange(of: query) { picked = 0 }
+                // A field chooses all it holds as the focus lands, whenever that is: after the cursor was put at
+                // the end as it opened, it can be. The first time it does, before anything is typed, the cursor goes
+                // after the words again, so a key typed after Ask's "? " asks rather than replacing it.
+                .onChange(of: selection) { _, now in
+                    guard !cursorPlaced, !initial.isEmpty, query == initial,
+                          Self.choosesAll(now, of: query) else { return }
+                    cursorPlaced = true
+                    selection = TextSelection(insertionPoint: query.endIndex)
+                }
                 .onKeyPress(.downArrow) { step(1, of: rows.count) }
                 .onKeyPress(.upArrow) { step(-1, of: rows.count) }
                 .onKeyPress(.tab) { .handled }
