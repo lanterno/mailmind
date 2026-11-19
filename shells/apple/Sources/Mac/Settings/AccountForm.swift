@@ -56,6 +56,7 @@ struct AccountForm: View {
                             }
                             presetWords
                             if let note = draft.note { NoteWords(text: note) }
+                            if let taken = draft.alreadySetUp(among: known) { NoteWords(text: taken) }
                         }
                     }
                     if draft.kind != nil, !draft.unsupported {
@@ -289,9 +290,12 @@ struct AccountForm: View {
         }
     }
 
+    /// The addresses MailMind has accounts for.
+    private var known: [String] { status.accounts.compactMap(\.email) }
+
     private func save() async {
         problem = ""
-        if let said = draft.problem {
+        if let said = draft.alreadySetUp(among: known) ?? draft.problem {
             problem = said
             focusTheFix()
             return

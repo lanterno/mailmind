@@ -365,6 +365,16 @@ struct AccountDraft: Equatable {
         Gmail turned down the password: paste an App Password made with the steps above.
         """)
 
+    /// What an address being added says when MailMind has an account for it already (`accounts`): both servers would
+    /// turn it down, so it isn't sent, and it is said as it is typed.
+    func alreadySetUp(among accounts: [String]) -> String? {
+        let typed = address.lowercased()
+        guard editing == nil, typed.contains("@"), accounts.contains(where: { $0.trimmed.lowercased() == typed }) else {
+            return nil
+        }
+        return String(localized: "\(address) is already set up in MailMind.")
+    }
+
     /// Why Test can't run yet, said where it would: a new Proton account is tested once it is added.
     var testsOnceAdded: String? {
         editing == nil && type == .proton ? String(localized: "Add the account, then test it.") : nil
