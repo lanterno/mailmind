@@ -1083,6 +1083,62 @@ final class OpenedMessageVerbsTests: XCTestCase {
         XCTAssertEqual(world.app.selection.copy, Self.away, "a notification's message stays open in its folder")
     }
 
+    /// A message's own window closes once its message is sent away from any window: the mail window's Message menu,
+    /// its keys, the pane's bar, a snooze. Undo opens it again in a window of its own, found by its key in the folder
+    /// it left, as the mail window's Undo opens its pane's message again. A verb on another message keeps it open.
+    func testAMessagesWindowClosesWhenItsMessageIsSentAwayFromAnyWindowAndUndoOpensIt() async throws {
+        enum From: String, CaseIterable { case menu, key, pane, snooze, ownMenu }
+        for from in From.allCases {
+            let server = Self.server()
+            let world = await world(server)
+            let mailbox = world.mailbox
+            await inbox(world.app)
+            let row = try XCTUnwrap(world.app.list?.copy(at: 2))
+            let copy = MailCopy(row)
+            // A double-click: the row chosen, and its message in a window of its own.
+            mailbox.chose([row])
+            let window = await window(on: copy, head: Self.head(copy, thread: nil), in: world)
+            var opened: [MailCopy] = []
+            mailbox.opensWindow = { opened.append($0) }
+            mailbox.file(.archive, rows: [try XCTUnwrap(world.app.list?.copy(at: 4))])
+            await waiting(for: "\(from): another message filed") { !server.asked(API.Post.Archive.path).isEmpty }
+            try await Task.sleep(for: .milliseconds(20))
+            XCTAssertFalse(window.left, "\(from): a verb on another message keeps the window open")
+
+            switch from {
+            case .menu: mailbox.file(.trash)
+            case .key: key("#", mailbox)
+            case .pane: mailbox.fileOpen(.trash)
+            case .snooze: await world.desk.attention.snooze([copy], .preset(.tomorrow))
+            case .ownMenu: MessageMenuVerbs(window: window, mailbox: mailbox).file(.trash)
+            }
+            await waiting(for: "\(from) closes the window") { window.left }
+            await waiting(for: "\(from) offers Undo") { mailbox.toast?.undo != nil }
+            // Back with a new uid: found by its key in the folder it left.
+            var back = Self.rows
+            back[2].uid = 103
+            server.on("GET", API.Get.Messages.path, Self.listing(back))
+            await mailbox.undoNow()
+            await waiting(for: "\(from)'s Undo opens the window again") { !opened.isEmpty }
+            XCTAssertEqual(opened, [MailCopy(key: copy.key, folder: "INBOX", uid: 103, account: copy.account)],
+                           "\(from)")
+        }
+
+        // Nothing undoable closed it: the next Undo opens no window.
+        let world = await world()
+        await inbox(world.app)
+        let copy = MailCopy(try XCTUnwrap(world.app.list?.copy(at: 2)))
+        let window = await window(on: copy, head: Self.head(copy, thread: nil), in: world)
+        var opened: [MailCopy] = []
+        world.mailbox.opensWindow = { opened.append($0) }
+        await window.mailbox.fileNow(.trash, rows: window.shown)
+        XCTAssertTrue(window.left)
+        await world.mailbox.fileNow(.archive, rows: [try XCTUnwrap(world.app.list?.copy(at: 4))])
+        await world.mailbox.undoNow()
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(opened, [], "the Undo is the later verb's, which closed no window")
+    }
+
     // MARK: The reader's row
 
     /// A message opened from outside the list reads by the row the server has for it: its folder's listing says
