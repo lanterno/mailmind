@@ -302,6 +302,43 @@ final class MeadowRowsTests: XCTestCase {
         XCTAssertEqual(app.mailbox.chosenRows.count, 1, "and takes it out again")
     }
 
+    func testACheckBoxMarksItsRowAloneAndOpensNothing() async throws {
+        let (app, list, controller) = try await table(brief: nil)
+        controller.press(.check, row: 2)
+        XCTAssertEqual(app.mailbox.marked, [MailCopy(try XCTUnwrap(list.copy(at: 2)))])
+        XCTAssertTrue(app.mailbox.marking, "one row checked is marked, and the bulk bar shows for it")
+        XCTAssertNil(app.selection.copy, "and nothing opens")
+        XCTAssertEqual(controller.table.selectedRowIndexes, IndexSet(integer: 2))
+        controller.press(.check, row: 2)
+        XCTAssertFalse(app.mailbox.marking)
+        XCTAssertTrue(app.mailbox.chosenRows.isEmpty)
+        XCTAssertTrue(controller.table.selectedRowIndexes.isEmpty)
+    }
+
+    func testMarkedRowsShowTheirChecksAndTheRowOpenBesideThemShowsAsChosen() async throws {
+        let (app, _, controller) = try await table(brief: nil)
+        let window = shown(controller)
+        defer { window.close() }
+        let table = controller.table
+        func state(_ row: Int) throws -> RowState {
+            try XCTUnwrap(table.view(atColumn: 0, row: row, makeIfNecessary: false) as? MailRowCell).state
+        }
+        table.selectRowIndexes(IndexSet(integer: 1), byExtendingSelection: false)
+        XCTAssertTrue(try state(1).chosen)
+        XCTAssertFalse(try state(1).checked)
+        app.mailbox.markOpen()
+        controller.follow(app.mailbox.marked, scroll: false)
+        XCTAssertTrue(try state(1).checked, "a row marked alone shows its check")
+        XCTAssertTrue(try state(3).selecting, "and every row its box")
+        app.mailbox.move(by: 1)
+        // As the window passes the row open to the table as it draws again.
+        controller.setCursor(app.selection.copy)
+        XCTAssertTrue(try state(2).chosen, "the row the keyboard is on shows as the open one does")
+        XCTAssertFalse(try state(2).checked)
+        XCTAssertTrue(try state(1).checked)
+        XCTAssertFalse(try state(1).chosen, "and the marked row only as marked")
+    }
+
     func testWithoutTheBriefRowsArePositions() async throws {
         let (_, list, controller) = try await table(brief: nil)
         XCTAssertEqual(controller.table.numberOfRows, list.total)

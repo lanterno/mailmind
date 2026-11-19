@@ -23,10 +23,12 @@ final class ListKeysTests: XCTestCase {
     }
 
     /// The Inbox's first six rows in the list's table, the desk joined to its window.
-    private func table(brief: Bool = false) async throws -> (MailApp, MailboxTableController) {
+    private func table(brief: Bool = false, server: FakeServer = Fixture.server(rows: Array(Fixture.inbox.prefix(6))))
+        async throws -> (MailApp, MailboxTableController)
+    {
         let app = MailApp()
         self.app = app
-        app.mailbox.wire = Fixture.server(rows: Array(Fixture.inbox.prefix(6))).wire
+        app.mailbox.wire = server.wire
         await app.mailbox.refresh()
         app.mailbox.tab = .all
         let desk = Desk()
@@ -69,7 +71,7 @@ final class ListKeysTests: XCTestCase {
         table.selectRowIndexes(IndexSet(integer: 3), byExtendingSelection: false)
         let open = try XCTUnwrap(app.selection.copy)
         let place = app.place
-        for (typed, held) in [("7", []), ("x", []), ("q", []), ("Q", .shift), (" ", []), ("~", .shift)]
+        for (typed, held) in [("7", []), ("y", []), ("q", []), ("Q", .shift), (" ", []), ("~", .shift)]
             as [(String, NSEvent.ModifierFlags)]
         {
             press(typed, table, held: held)
@@ -204,6 +206,100 @@ final class ListKeysTests: XCTestCase {
         XCTAssertEqual(app.selection.copy?.key, 4, "the row clicked last stays, open")
         press("j", table)
         XCTAssertEqual(app.selection.copy?.key, 5, "and j goes on from it, not from the top")
+    }
+
+    // MARK: Marks
+
+    func testXMarksTheRowOpenAndJAndKMoveOnWithoutLosingTheMarks() async throws {
+        let (app, controller) = try await table()
+        let table = controller.table, mailbox = app.mailbox
+        table.selectRowIndexes(IndexSet(integer: 1), byExtendingSelection: false)
+        XCTAssertFalse(mailbox.marking, "a row clicked is open, not marked")
+        press("x", table)
+        XCTAssertTrue(mailbox.marking, "x marks the row open, and the bulk bar shows for it")
+        XCTAssertEqual(mailbox.marked.map(\.key), [2])
+        XCTAssertEqual(app.selection.copy?.key, 2, "the message stays open")
+        XCTAssertEqual(table.selectedRowIndexes, IndexSet(integer: 1))
+
+        press("j", table)
+        XCTAssertEqual(app.selection.copy?.key, 3, "j opens the next row")
+        XCTAssertEqual(mailbox.marked.map(\.key), [2], "and the mark stays")
+        press("\u{F701}", table, code: 125, held: [.numericPad, .function])
+        XCTAssertEqual(app.selection.copy?.key, 4, "↓ goes on as j does")
+        press("x", table)
+        XCTAssertEqual(mailbox.marked.map(\.key), [2, 4], "x marks the next one too")
+        XCTAssertEqual(table.selectedRowIndexes, IndexSet([1, 3]), "and the table checks both")
+        let targets = await mailbox.targets(standing: false)
+        XCTAssertEqual(targets.map(\.key), [2, 4], "a verb acts on the marks")
+
+        press("k", table)
+        press("k", table)
+        XCTAssertEqual(app.selection.copy?.key, 2)
+        XCTAssertEqual(mailbox.marked.map(\.key), [2, 4], "k keeps the marks too")
+        press("x", table)
+        XCTAssertEqual(mailbox.marked.map(\.key), [4], "x on a marked row takes its mark off")
+        XCTAssertTrue(mailbox.marking, "and the other stays marked, alone")
+        let left = await mailbox.targets(standing: false)
+        XCTAssertEqual(left.map(\.key), [4], "a verb acts on the one marked, not the message open")
+
+        press("j", table)
+        press("j", table)
+        press("x", table)
+        XCTAssertFalse(mailbox.marking, "with the last mark gone, no bulk bar")
+        XCTAssertEqual(mailbox.chosenRows.map(\.key), [4], "and the row open is chosen alone, as before")
+        XCTAssertEqual(table.selectedRowIndexes, IndexSet(integer: 3))
+    }
+
+    func testXOnTheOpenRowAgainTakesItsMarkOff() async throws {
+        let (app, controller) = try await table()
+        let table = controller.table, mailbox = app.mailbox
+        table.selectRowIndexes(IndexSet(integer: 2), byExtendingSelection: false)
+        press("x", table)
+        XCTAssertTrue(mailbox.marking)
+        press("x", table)
+        XCTAssertFalse(mailbox.marking)
+        XCTAssertEqual(mailbox.chosenRows.map(\.key), [3])
+        XCTAssertEqual(app.selection.copy?.key, 3, "the message stays open throughout")
+    }
+
+    func testXWithNothingOpenSaysSo() async throws {
+        let (app, controller) = try await table()
+        press("x", controller.table)
+        XCTAssertFalse(app.mailbox.marking)
+        XCTAssertEqual(app.mailbox.toast?.text, "Choose a message first")
+    }
+
+    func testEscTakesTheMarksOffAndKeepsTheMessageOpen() async throws {
+        let (app, controller) = try await table()
+        let table = controller.table, mailbox = app.mailbox
+        table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+        press("x", table)
+        press("j", table)
+        press("x", table)
+        press("j", table)
+        XCTAssertEqual(mailbox.marked.map(\.key), [1, 2])
+        press("\u{1b}", table, code: 53)
+        XCTAssertFalse(mailbox.marking, "Esc takes every mark off")
+        XCTAssertEqual(app.selection.copy?.key, 3, "and the message open beside them stays open")
+        XCTAssertEqual(table.selectedRowIndexes, IndexSet(integer: 2))
+    }
+
+    func testFilingTheMarksTakesThemOffAndKeepsTheMessageOpen() async throws {
+        let server = Fixture.server(rows: Array(Fixture.inbox.prefix(6)))
+        server.on("POST", API.Post.BulkFile.path, API.RowsFiled(count: 2, failed: 0, filed: [], msg: "", ok: true,
+                                                                partial: false, queued: 0, rowsFailed: 0, undoable: true))
+        let (app, controller) = try await table(server: server)
+        let table = controller.table, mailbox = app.mailbox
+        table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+        press("x", table)
+        press("j", table)
+        press("j", table)
+        press("x", table)
+        press("j", table)
+        press("e", table)
+        await until { !mailbox.marking }
+        XCTAssertEqual(app.selection.copy?.key, 4, "the message open wasn't among them, and stays")
+        XCTAssertEqual(mailbox.chosenRows.map(\.key), [4])
     }
 
     // MARK: The ends of the list
