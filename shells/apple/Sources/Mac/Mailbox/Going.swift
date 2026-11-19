@@ -29,14 +29,22 @@ extension Mailbox {
         if let role = Self.roleKeys[key] { go(role: role) }
     }
 
-    /// The folder that plays `role` on this account.
+    /// The folder that plays `role` on this account. Over every account, the first account's, as the page's g chords
+    /// go (`account ?? accounts[0]`): All accounts brings only the inboxes together, and no route lists another
+    /// folder across accounts, so the window says whose folder it went to and why.
     func go(role: String) {
         guard let account = goingAccount else { return }
         guard let found = folder(playing: role, on: account) else {
             say("No \(role) folder on this account", refused: true)
             return
         }
-        app?.place = .folder(account: account, folder: found.name)
+        let fromEveryAccount = overEveryAccount && accounts.count > 1
+        let place = Place.folder(account: account, folder: found.name)
+        app?.place = place
+        if fromEveryAccount {
+            let title = place.title(folders: folders(of: account))
+            say(String(localized: "\(name(of: account))’s \(title): All accounts brings only the inboxes together"))
+        }
     }
 
     /// A virtual folder: over every account from All Inboxes, else the account's own (`goToFolder`).
