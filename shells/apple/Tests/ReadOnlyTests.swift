@@ -8,6 +8,8 @@ import XCTest
 final class ReadOnlyTests: XCTestCase {
     /// A test's run has no switch for read only, so its words name none: the page's.
     private static let refused = "Read only is on, so nothing was changed."
+    /// Send's: what didn't happen is the message going.
+    private static let notSent = "Read only is on, so nothing was sent."
     nonisolated private static let detail = "MailMind is running read-only"
 
     /// The read-only 409 as both servers answer it.
@@ -24,6 +26,9 @@ final class ReadOnlyTests: XCTestCase {
         XCTAssertEqual(ReadOnlyWords.note(switchable: false), note)
         XCTAssertEqual(ReadOnlyWords.refused(switchable: true), Self.refused + " Turn it off in Settings › General.")
         XCTAssertEqual(ReadOnlyWords.refused(switchable: false), Self.refused)
+        XCTAssertEqual(ReadOnlyWords.notSent(switchable: true), Self.notSent + " Turn it off in Settings › General.")
+        XCTAssertEqual(ReadOnlyWords.notSent(switchable: false), Self.notSent)
+        XCTAssertEqual(ReadOnlyWords.notSent, Self.notSent)
         XCTAssertFalse(ReadOnlyRun.switchable, "a test's run has no switch in Settings")
         XCTAssertEqual(ReadOnlyWords.note, note, "so its words name none")
         XCTAssertEqual(ReadOnlyWords.refused, Self.refused)
@@ -217,7 +222,7 @@ final class ReadOnlyTests: XCTestCase {
         XCTAssertEqual(composer.subject, "Re: Plans")
         XCTAssertEqual(composer.body, "Yes, Thursday.")
         XCTAssertEqual(composer.to.map(\.address), ["bo@example.test"])
-        XCTAssertEqual(composer.notice, Self.refused, "said in the composer")
+        XCTAssertEqual(composer.notice, Self.notSent, "said in the composer: it wasn't sent")
         XCTAssertNil(composing.notice, "not in the main window")
         XCTAssertNil(composing.float, "no countdown and no Sent")
         XCTAssertTrue(routes.calls(to: API.Post.Send.path).isEmpty, "nothing was asked to go")
@@ -239,7 +244,7 @@ final class ReadOnlyTests: XCTestCase {
         XCTAssertEqual(back.subject, "Re: Plans")
         XCTAssertEqual(back.body, "Yes, Thursday.")
         XCTAssertEqual(back.to.map(\.address), ["bo@example.test"])
-        XCTAssertEqual(back.notice, Self.refused, "said in its composer")
+        XCTAssertEqual(back.notice, Self.notSent, "said in its composer: it wasn't sent")
         XCTAssertNil(composing.notice, "not in the main window")
         XCTAssertNil(composing.float, "no countdown and no Sent: nothing was queued")
         await eventually("the run read again") { composing.readOnly }
