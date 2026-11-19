@@ -339,9 +339,9 @@ final class Composing: ComposeHost {
                 // why, and the run is read again so the next Send is turned down where it is.
                 showFloat(nil)
                 if let back = open(snapshot, edited: true) {
-                    back.say(ReadOnlyWords.refused, for: 5)
+                    back.say(ReadOnlyWords.notSent, for: 5)
                 } else {
-                    say(ReadOnlyWords.refused, for: 5, refused: true)
+                    say(ReadOnlyWords.notSent, for: 5, refused: true)
                 }
                 await readDigest()
             } catch {

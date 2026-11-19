@@ -1015,7 +1015,7 @@ final class Composer: Identifiable {
         if host.readOnly {
             // Nothing can go: the composer stays open as it is, and says why where the person is looking.
             hideGuard()
-            return say(ReadOnlyWords.refused, for: 5)
+            return say(ReadOnlyWords.notSent, for: 5)
         }
         if let problem = recipientProblem() { return showGuard([problem], sendAfter: after) }
         let warnings: [GuardWarning] = runChecks(after)

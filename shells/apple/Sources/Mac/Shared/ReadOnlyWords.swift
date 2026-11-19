@@ -13,6 +13,9 @@ enum ReadOnlyWords {
     /// What a person is told of something read only turned down.
     static var refused: String { refused(switchable: switchable) }
 
+    /// What Send says while read only is on: the message didn't go, and stays to keep.
+    static var notSent: String { notSent(switchable: switchable) }
+
     static func note(switchable: Bool) -> String {
         let note = String(localized: """
             Read only is on: MailMind changes nothing on your mail servers, so sending, filing and starring are turned \
@@ -23,6 +26,13 @@ enum ReadOnlyWords {
 
     static func refused(switchable: Bool) -> String {
         let refused = String(localized: "Read only is on, so nothing was changed.")
+        return switchable ? refused + " " + turnOff : refused
+    }
+
+    /// The refusal's words, said of a send: the page has none of its own for it, so its sentence names what didn't
+    /// happen, as the note names sending among what is turned off.
+    static func notSent(switchable: Bool) -> String {
+        let refused = String(localized: "Read only is on, so nothing was sent.")
         return switchable ? refused + " " + turnOff : refused
     }
 
