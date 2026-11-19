@@ -106,6 +106,11 @@ final class Mailbox {
     /// (`undoNow`), and whether what was said last offered an Undo, so a verb that can't be undone never sets it.
     @ObservationIgnored var reopens: MailCopy?
     @ObservationIgnored var reopenable = false
+    /// The messages open in windows of their own, each of which closes once a verb from any window sends its message
+    /// away (`sentAway`); and the message of the one the last thing that can be undone closed, which its Undo opens
+    /// in a window of its own again.
+    @ObservationIgnored private var ownWindows: [OwnWindow] = []
+    @ObservationIgnored var reopensWindow: MailCopy?
     /// The assistant's (area D): what `?words` in the search field asks, and what `!words` plans.
     @ObservationIgnored var asks: ((String) -> Void)?
     @ObservationIgnored var plans: ((String) -> Void)?
@@ -510,6 +515,31 @@ final class Mailbox {
         Task { _ = await readOutside(copy) }
     }
 
+    // MARK: Windows of their own
+
+    /// A message's own window, held weakly: it goes when the window does.
+    private struct OwnWindow {
+        weak var verbs: MessageWindowVerbs?
+    }
+
+    /// A message opened in a window of its own, whose window closes once its message is sent away from any window.
+    func opened(window verbs: MessageWindowVerbs) {
+        ownWindows.removeAll { $0.verbs == nil || $0.verbs === verbs }
+        ownWindows.append(OwnWindow(verbs: verbs))
+    }
+
+    /// `copies` were sent away from where they were (filed, deleted, junked, moved, snoozed, done with), by a verb
+    /// from any window: the windows of their own that show one close, and the last that can be undone opens again
+    /// on its Undo, as the pane's message does.
+    func sentAway(_ copies: [MailCopy]) {
+        let gone = Set(copies)
+        ownWindows.removeAll { $0.verbs == nil }
+        for window in ownWindows.compactMap(\.verbs) where gone.contains(window.copy) && !window.left {
+            window.sentAway()
+            if reopenable { reopensWindow = window.copy }
+        }
+    }
+
     /// Open a message where a notification named it: its folder's list, and the message in it.
     func openInItsFolder(_ copy: MailCopy) {
         app?.place = .folder(account: copy.account, folder: copy.folder)
@@ -716,7 +746,10 @@ final class Mailbox {
     /// no) shows the alert, never the tick that says something was done.
     func say(_ text: String, detail: String? = nil, undo: String? = nil, refused: Bool = false) {
         // Something new to undo opens nothing again on its Undo, unless it moves the pane on next (`moveOn`).
-        if undo != nil { reopens = nil }
+        if undo != nil {
+            reopens = nil
+            reopensWindow = nil
+        }
         reopenable = undo != nil
         toastNumber += 1
         let number = toastNumber

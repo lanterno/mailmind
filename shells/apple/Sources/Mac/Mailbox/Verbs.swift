@@ -293,8 +293,9 @@ extension Mailbox {
     func undoNow() async {
         guard let calls else { return }
         dismissToast()
-        let back = reopens
+        let back = reopens, window = reopensWindow
         reopens = nil
+        reopensWindow = nil
         var undone = false
         let answered = undoing?()
         var answer: API.Undone?
@@ -313,6 +314,7 @@ extension Mailbox {
             say(ReadOnlyWords.refused, refused: true)
             // Taking it back would reach a server: it stays to be undone, and so does what it reopens.
             reopens = back
+            reopensWindow = window
         } catch let problem as Problem where problem.isRefusal {
             say(problem.more["empty"] == .bool(true) ? String(localized: "Nothing to undo")
                                                      : problem.detail ?? String(localized: "Couldn’t undo"),
@@ -322,6 +324,21 @@ extension Mailbox {
         }
         readAgain()
         if undone, let back { reopen(back) }
+        if undone, let window { reopenWindow(window) }
+    }
+
+    /// Open again, in a window of its own, the message whose window closed as the undone verb sent it away: as it is
+    /// back, found by its key in the folder it left, since a move's Undo gives the copy a new uid.
+    private func reopenWindow(_ copy: MailCopy) {
+        guard let opens = opensWindow else { return }
+        Task { [weak self] in
+            guard let calls = self?.calls else { return }
+            var row = await Lists.row(calls, account: copy.account, folder: copy.folder, uid: copy.uid, key: copy.key)
+            if row == nil {
+                row = await Lists.row(calls, account: copy.account, folder: copy.folder, uid: nil, key: copy.key)
+            }
+            opens(row.map(MailCopy.init) ?? copy)
+        }
     }
 
     /// Open again the message an undone verb moved the pane on from, as it is back: once the list or the lane has been
@@ -498,6 +515,7 @@ extension Mailbox {
     }
 
     private func moveOn(_ after: MailCopy??, leaving: [MailCopy]) {
+        sentAway(leaving)
         guard let after else { return unmark(Set(leaving)) }
         if reopenable, let left = app?.selection.copy { reopens = left }
         // The message in the pane left on its own (the pane's bar) while other rows stay marked: they keep their

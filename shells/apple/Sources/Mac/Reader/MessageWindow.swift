@@ -70,7 +70,8 @@ final class MessageWindowVerbs {
     /// Text is being typed in the window (the reply box, Find's field, a dialog's), where ⌘⌫ deletes text and not
     /// the message: its window's `TypingWatch` says.
     var typing = false
-    /// The message has left (filed, deleted, junked, moved, snoozed): the window closes.
+    /// The message has left (filed, deleted, junked, moved, snoozed), from this window or any other: the window
+    /// closes, and Undo opens it again (`Mailbox.sentAway`).
     private(set) var left = false
 
     init(copy: MailCopy, mailbox: Mailbox, reader: ReaderModel, routes: (any RouteCaller)?) {
@@ -91,6 +92,12 @@ final class MessageWindowVerbs {
                 self?.left = true
             }
         }
+        mailbox.opened(window: self)
+    }
+
+    /// A verb from any window sent its message away: the window closes.
+    func sentAway() {
+        left = true
     }
 
     /// Whether a verb acts now: not once the message has left, nor while a dialog asks something of the window.
