@@ -280,6 +280,51 @@ final class ListKeysTests: XCTestCase {
         window.contentView = nil
     }
 
+    /// Ask, then Esc: back to where the question was asked, as the page's Esc stops asking, whether Esc comes from the
+    /// window (the answer has no list to take it), the search field, or the palette that asked. A message the answer
+    /// cites, opened from the palette, keeps the answer beside it. The list placed again takes the keyboard.
+    func testEscOnAnAnswerGoesBackToWhereTheQuestionWasAsked() async throws {
+        let (app, controller) = try await table()
+        let desk = try XCTUnwrap(self.desk)
+        let inbox = app.place
+        let cited = MailCopy(try XCTUnwrap(app.list?.copy(at: 0)))
+        desk.goToAnswer()
+        XCTAssertEqual(app.place, .desk(.ask))
+        XCTAssertTrue(app.mailbox.leaveAsk())
+        XCTAssertEqual(app.place, inbox, "Esc goes back to where the question was asked")
+        XCTAssertFalse(app.mailbox.leaveAsk(), "and only from an answer")
+        XCTAssertEqual(app.place, inbox)
+
+        // From a folder, asked again on the answer, then the search field's Esc.
+        let sent = Place.folder(account: Fixture.ada, folder: "Sent")
+        app.place = sent
+        desk.goToAnswer()
+        desk.goToAnswer()
+        app.mailbox.leaveSearch()
+        XCTAssertEqual(app.place, sent, "back where the first question was asked")
+
+        // The palette that asked goes back as it goes; one that came up over an answer, or that a cited message
+        // was opened from, leaves the answer; and another dialog's going leaves it too.
+        XCTAssertTrue(WindowOverlays.leavesAnswer(palette: true, overAnswer: false, place: .desk(.ask), open: nil))
+        XCTAssertFalse(WindowOverlays.leavesAnswer(palette: true, overAnswer: true, place: .desk(.ask), open: nil))
+        XCTAssertFalse(WindowOverlays.leavesAnswer(palette: true, overAnswer: false, place: .desk(.ask), open: cited))
+        XCTAssertFalse(WindowOverlays.leavesAnswer(palette: false, overAnswer: false, place: .desk(.ask), open: nil))
+        XCTAssertFalse(WindowOverlays.leavesAnswer(palette: true, overAnswer: false, place: inbox, open: nil))
+        desk.openCited(cited)
+        XCTAssertEqual(app.place, .desk(.ask))
+        XCTAssertEqual(app.selection.copy, cited)
+        XCTAssertTrue(app.mailbox.leaveAsk())
+        XCTAssertEqual(app.place, sent, "Esc later still goes back")
+
+        // The answer's window held the keyboard: the list that comes back takes it.
+        let window = window()
+        window.contentView = Host()
+        XCTAssertTrue(window.makeFirstResponder(window.contentView))
+        window.contentView?.addSubview(controller.scrollView)
+        await until { window.firstResponder === controller.table }
+        window.contentView = nil
+    }
+
     // MARK: Esc
 
     func testEscEndsFocusReadingBeforeTheListsOwnEsc() async throws {
