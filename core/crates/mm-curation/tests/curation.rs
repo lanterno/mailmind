@@ -3,7 +3,7 @@
 
 use mm_curation::cleanup::{BUCKETS, LIMIT, MIN_COUNT, age_in_days, noise_score, ranked};
 use mm_curation::ports::NoisySender;
-use mm_curation::rulebook::{Rules, decided, is_token, token_of};
+use mm_curation::rulebook::{Rules, decided, is_token, names_a_sender, token_of};
 use serde_json::json;
 
 const NOW: f64 = 1_800_000_000.0;
@@ -54,6 +54,42 @@ fn a_token_is_an_address_or_a_domain() {
     assert_eq!(token_of("  Lin@Example.test "), "lin@example.test");
     assert!(is_token("lin@example.test") && is_token("example.test"));
     assert!(!is_token("lin") && !is_token(""));
+}
+
+/// A keep or block names one address or one domain, as `rulebook.names_a_sender` holds them: a number pasted before an
+/// address, two addresses, a name in brackets or a space inside would make a rule that never matches a sender.
+#[test]
+fn a_keep_or_block_names_one_address_or_one_domain_and_nothing_beside_it() {
+    for named in
+        ["lin@example.test", "lin.mori+news@mail.example.test", "ada@local", "example.test", "bücher.example.test"]
+    {
+        assert!(names_a_sender(named), "{named}");
+    }
+    for not in [
+        "50506 spam@lottery.example.test",
+        "spam@lottery.example.test 50506",
+        "lin",
+        "",
+        "lin@",
+        "@example.test",
+        "a@b@example.test",
+        "example",
+        "example..test",
+        ".example.test",
+        "example.test.",
+        "lin@example..test",
+        "lin@example.test,bo@example.test",
+        "<lin@example.test>",
+        "lin mori <lin@example.test>",
+        "\"lin\"@example.test",
+        "lin@[127.0.0.1]",
+        "lin\u{a0}@example.test",
+        "lin\u{7}@example.test",
+        "lin@exa\u{2003}mple.test",
+        "lin@example.test;",
+    ] {
+        assert!(!names_a_sender(not), "{not:?}");
+    }
 }
 
 #[test]
