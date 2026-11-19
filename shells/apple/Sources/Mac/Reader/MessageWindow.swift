@@ -328,7 +328,7 @@ private struct MessageWindowDialog: View {
 /// The keyboard in a message's window while nothing else there has it: as it opens, and once a field or a dialog
 /// lets it go. Space, the arrows, Page Up and Down, Home and End scroll the message, as a Mac's reader does; any other
 /// key goes on to the window and its menus, and a single key nothing took, from here or from the message's frame, is
-/// the reader's (`Catcher`).
+/// the reader's (`Catcher`). The window opens clear of the message windows already open (`OwnWindowPlace`).
 struct MessageWindowKeys: NSViewRepresentable {
     let verbs: MessageWindowVerbs?
 
@@ -352,6 +352,7 @@ struct MessageWindowKeys: NSViewRepresentable {
             guard let window else { return }
             window.initialFirstResponder = self
             Catcher.hang(on: window).verbs = verbs
+            OwnWindowPlace.opened(window)
             watching = window.observe(\.firstResponder, options: [.initial, .new]) { [weak self] _, _ in
                 DispatchQueue.main.async { MainActor.assumeIsolated { self?.takeIfNowhere() } }
             }
@@ -410,6 +411,44 @@ struct MessageWindowKeys: NSViewRepresentable {
             guard !event.modifierFlags.contains(.shift) || "#?".contains(key) else { return nil }
             return Character(key.lowercased())
         }
+    }
+}
+
+/// Where a message's own window opens: a step down and to the right of any message window already open where it
+/// would stand, as a Mac cascades its windows, so the second never hides the first.
+@MainActor
+enum OwnWindowPlace {
+    /// How far each window stands from the one it would cover.
+    static let step: CGFloat = 22
+    private static var windows: [Weak] = []
+
+    private struct Weak {
+        weak var window: NSWindow?
+    }
+
+    /// `window` has opened: it moves clear of the others, now and once SwiftUI has placed it.
+    static func opened(_ window: NSWindow) {
+        windows.removeAll { $0.window == nil || $0.window === window }
+        place(window)
+        DispatchQueue.main.async { MainActor.assumeIsolated { place(window) } }
+        windows.append(Weak(window: window))
+    }
+
+    private static func place(_ window: NSWindow) {
+        let others = windows.compactMap(\.window).filter { $0 !== window && $0.isVisible }.map(\.frame)
+        let at = topLeft(of: window.frame, among: others)
+        if at != NSPoint(x: window.frame.minX, y: window.frame.maxY) { window.setFrameTopLeftPoint(at) }
+    }
+
+    /// Where a window with `frame` stands its top left: where it is, else a step down and right of each window
+    /// already standing there.
+    static func topLeft(of frame: NSRect, among others: [NSRect]) -> NSPoint {
+        var at = NSPoint(x: frame.minX, y: frame.maxY)
+        func covers(_ other: NSRect) -> Bool { abs(other.minX - at.x) < 4 && abs(other.maxY - at.y) < 4 }
+        while others.contains(where: covers) {
+            at = NSPoint(x: at.x + step, y: at.y - step)
+        }
+        return at
     }
 }
 #endif
