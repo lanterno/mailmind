@@ -396,8 +396,8 @@ enum ToastPlace {
     }
 }
 
-/// The toasts in their place (`ToastPlace`).
-private struct PlacedToasts<Toasts: View>: View {
+/// The toasts in their place (`ToastPlace`): the mail window's, and a message's own window's.
+struct PlacedToasts<Toasts: View>: View {
     let room: ToastRoom
     @ViewBuilder let toasts: () -> Toasts
 

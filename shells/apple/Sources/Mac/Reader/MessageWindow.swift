@@ -60,7 +60,8 @@ extension FocusedValues {
 /// The verbs on a message in a window of its own, as the Message menu and its keys reach them there: the mailbox's
 /// (`fileNow`, `moveNow`, `setSeenNow`, `starNow`) given this message as their rows, and attention's on it alone, so
 /// the mail window's open or chosen message is never read or acted on. What they say, and the Undo they offer, the
-/// mail window's toast shows. The message stands for itself, as the window shows it, never a whole conversation.
+/// window's toast shows, and the mail window's. The message stands for itself, as the window shows it, never a whole
+/// conversation.
 @MainActor
 @Observable
 final class MessageWindowVerbs {
@@ -164,13 +165,18 @@ struct MessageWindowBar: View {
     }
 }
 
-private struct MessageWindowContent: View {
+struct MessageWindowContent: View {
     let core: Core
     let copy: MailCopy
     let reader: ReaderModel
     let find: ReaderFind
     let verbs: MessageWindowVerbs?
     @Environment(\.meadow) private var meadow
+    @Environment(Desk.self) private var desk: Desk?
+    /// Where the window's reply box stands, so its toasts stand clear of it: a test's own, else the window's.
+    var room: ToastRoom?
+    @State private var ownRoom = ToastRoom()
+    private var toastRoom: ToastRoom { room ?? ownRoom }
     private var status: AppStatus { .shared }
 
     private var opened: API.MessageOpened? {
@@ -191,6 +197,14 @@ private struct MessageWindowContent: View {
         .background { ZStack { meadow.paper; MeadowGrain() }.ignoresSafeArea() }
         .background { if let verbs { TypingWatch { verbs.typing = $0 } } }
         .background { MessageWindowKeys() }
+        .environment(\.toastRoom, toastRoom)
+        // What the window's verbs and keys say, with Undo, where the person is as well as in the mail window, clear
+        // of the reply box.
+        .overlay {
+            if let verbs {
+                PlacedToasts(room: toastRoom) { WindowToasts(mailbox: verbs.mailbox, status: status, desk: desk) }
+            }
+        }
         .overlay { if let verbs { MessageWindowDialog(verbs: verbs) } }
         .ignoresSafeArea()
         .meadowWindowChrome(barHeight: MessageWindow.barHeight)
