@@ -36,8 +36,10 @@ final class MeadowRowsTests: XCTestCase {
             for gist in [false, true] {
                 for chips in [false, true] {
                     for oneLine in [false, true] {
-                        let shape = RowShape(head: head, gist: gist, chips: chips, oneLine: oneLine)
-                        XCTAssertEqual(RowShape(packed: shape.packed), shape)
+                        for bare in [false, true] {
+                            let shape = RowShape(head: head, gist: gist, chips: chips, oneLine: oneLine, bare: bare)
+                            XCTAssertEqual(RowShape(packed: shape.packed), shape)
+                        }
                     }
                 }
             }
@@ -70,6 +72,27 @@ final class MeadowRowsTests: XCTestCase {
         XCTAssertEqual(RowShape.of(row, head: false, rowWidth: 420).gistWidth, short)
         let snippet = Fixture.row(2)
         XCTAssertNil(RowShape.of(snippet, head: false, rowWidth: 420).gistWidth, "a snippet has one line anyway")
+    }
+
+    /// A row with no summary and an empty snippet (spam the classifier tagged, read before any summary) leaves no
+    /// empty line under its subject: its chips stand right under it, as the page's empty line takes no room.
+    func testARowWithNothingUnderItsSubjectClosesUp() {
+        let comfortable = RowMeasure(.comfortable)
+        // 10 + 20.3 + 2 + 20.3 + 7 + 22 + 11
+        XCTAssertEqual(comfortable.height(RowShape(chips: true, bare: true)), 93)
+        let stops = comfortable.stops(RowShape(chips: true, bare: true))
+        XCTAssertEqual(stops.chips ?? 0, stops.subject + RowMeasure.line + RowMeasure.chipsGap, accuracy: 0.001)
+        // 10 + 20.3 + 2 + 20.3 + 11, which the avatar's 10 + 34 + 11 fits in.
+        XCTAssertEqual(comfortable.height(RowShape(bare: true)), 64)
+        XCTAssertFalse(RowShape(gist: true, bare: true).bare, "a summary is something under it")
+
+        var spam = Fixture.row(3, junk: true)
+        spam.snippet = ""
+        XCTAssertEqual(RowShape(spam, head: false), RowShape(chips: true, bare: true))
+        spam.snippet = "  \n"
+        XCTAssertTrue(RowShape(spam, head: false).bare, "white space is nothing to show")
+        spam.snippet = "Claim your prize"
+        XCTAssertEqual(RowShape(spam, head: false), RowShape(chips: true), "a snippet keeps its line")
     }
 
     /// A summary that fits on one line of a row 420 wide, and needs two in a row 300 wide.
