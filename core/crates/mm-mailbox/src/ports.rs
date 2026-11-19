@@ -30,7 +30,8 @@ pub struct ViewCounts {
 
 /// The mail MailMind keeps, as the Mailbox reads it.
 pub trait StoredMail: Send + Sync + fmt::Debug {
-    /// (folder, unseen, total) of what is stored for the account, each folder a sync has read among them.
+    /// (folder, unseen, total) of what is stored for the account, each folder a sync has read among them: of the
+    /// rows its list shows, so none on its way out, snoozed or muted.
     fn stored_folder_counts(&self, account: &str) -> Result<Vec<(String, Option<i64>, i64)>, Fault>;
 
     /// The name of each folder the account has mail stored in, or a sync has read: what a LIST that leaves one out

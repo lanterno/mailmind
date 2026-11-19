@@ -297,6 +297,18 @@ pub fn stored_rail(counts: &[(String, Option<i64>, i64)]) -> Vec<RailFolder> {
     )
 }
 
+/// The rail counted as each list counts: a folder a sync has read gives the unread and total of what is stored of it
+/// (`counts`, as `stored_rail` takes them), the rows its list shows, in place of what the server's STATUS said, which
+/// counts mail snoozed, muted or on its way out too. A folder never read keeps the server's.
+pub fn counted(rail: Vec<RailFolder>, counts: &[(String, Option<i64>, i64)]) -> Vec<RailFolder> {
+    rail.into_iter()
+        .map(|folder| match counts.iter().find(|(name, _, _)| *name == folder.name) {
+            Some((_, unseen, total)) => RailFolder { unseen: unseen.unwrap_or(0), total: *total, ..folder },
+            None => folder,
+        })
+        .collect()
+}
+
 /// The parts a folder may play and a person still not file mail into (`destination.CLOSED_TO_FILING`).
 pub fn takes_filing(role: &str) -> bool {
     !matches!(role, "drafts" | "sent" | "all")

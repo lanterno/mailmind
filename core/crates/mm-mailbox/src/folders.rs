@@ -127,13 +127,14 @@ impl Folders {
         Ok(caught_up.get(&(account.to_owned(), folder.to_owned())).map(|at| now - at))
     }
 
-    /// The folders with their roles and counts for one account, and the views that aren't folders counted.
+    /// The folders with their roles and counts for one account, and the views that aren't folders counted. The list
+    /// is kept a few seconds; what a folder a sync has read holds is counted fresh, as its list counts it.
     pub fn of_account(&self, account: &str) -> Result<AccountFolders, Failure> {
         if !self.accounts.known(account)? {
             return Err(Problem::refused("unknown account").into());
         }
-        let folders =
-            self.kept_or_live(account)?.into_iter().map(|f| (roles::takes_filing(f.role), f)).map(|(t, f)| (f, t));
+        let rail = roles::counted(self.kept_or_live(account)?, &self.stored.stored_folder_counts(account)?);
+        let folders = rail.into_iter().map(|f| (roles::takes_filing(f.role), f)).map(|(t, f)| (f, t));
         Ok(AccountFolders {
             account: account.to_owned(),
             folders: folders.collect(),

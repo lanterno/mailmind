@@ -19,9 +19,14 @@ impl StoredMail for Database {
     fn stored_folder_counts(&self, account: &str) -> Result<Vec<(String, Option<i64>, i64)>, Fault> {
         self.read(|c| {
             let mut counts: Vec<(String, Option<i64>, i64)> = c
+                // Of the rows its list shows, so none on its way out, snoozed or muted, which the rail's count would
+                // have beside a list without them.
                 .prepare_cached(
-                    "SELECT folder, SUM(seen=0) AS unseen, COUNT(*) AS total FROM messages WHERE account=? \
-                     AND pending_removal IS NULL GROUP BY folder",
+                    "SELECT m.folder, SUM(m.seen=0) AS unseen, COUNT(*) AS total FROM messages m WHERE m.account=? \
+                     AND m.pending_removal IS NULL \
+                     AND NOT EXISTS (SELECT 1 FROM snoozes z WHERE z.message_key=m.message_key AND z.folder=m.folder) \
+                     AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id) \
+                     GROUP BY m.folder",
                 )?
                 .query_map([account], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
                 .collect::<Result<_, _>>()?;
