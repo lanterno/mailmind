@@ -467,6 +467,62 @@ final class MeadowDeskTests: XCTestCase {
         XCTAssertEqual(adaRoutes.sent("POST", "/api/rules").first?["verdict"], .string("block"))
     }
 
+    /// The gate holding the keyboard for Y and N draws no button's focus ring: Screen out, which never has the keyboard
+    /// as the gate shows, stands with no ring round it, as the mockup draws it (only a button that has the keyboard
+    /// draws one, Let in where keyboard navigation is on).
+    func testTheGateHoldingTheKeysRingsNoButtonThatHasNotGotThem() async throws {
+        let routes = DeskRoutes()
+        routes.answer("GET", "/api/screener", DeskFixture.screener)
+        routes.answer("GET", "/api/search", API.SearchAnswer.searchPage(API.SearchPage(
+            generated: "2026-11-15T09:00:00Z", hasMore: false, items: [], offset: 0, ok: true, query: "",
+            scope: "account")))
+        let model = ScreenerModel(account: "ada@example.test", link: CoreLink(routes), notices: DeskNotices())
+        await model.load()
+        _ = NSApplication.shared
+        MeadowVoiceOverTests.assistive(true)
+        defer { MeadowVoiceOverTests.assistive(false) }
+        let host = NSHostingView(rootView: ScreenerScreen(model: model).meadowLight(.day))
+        host.sizingOptions = []
+        host.frame = CGRect(x: 0, y: 0, width: 1200, height: 900)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.alphaValue = 0
+        window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
+        window.makeKeyAndOrderFront(nil)
+        defer {
+            window.orderOut(nil)
+            window.contentView = nil
+        }
+        for _ in 0..<30 {
+            host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let read = MeadowVoiceOverTests.read(host)
+        let button = try XCTUnwrap(read.first { $0.role == NSAccessibility.Role.button.rawValue
+            && $0.label.hasPrefix("Screen out") }, MeadowVoiceOverTests.said(read))
+        // Where it stands in the window, from where VoiceOver says the window and it stand.
+        let onScreen = try XCTUnwrap((button.element as AnyObject).accessibilityFrame?())
+        let whole = try XCTUnwrap((host as AnyObject).accessibilityFrame?())
+        let frame = CGRect(x: onScreen.minX - whole.minX, y: whole.maxY - onScreen.maxY, width: onScreen.width,
+                           height: onScreen.height)
+        let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        let scale = CGFloat(bitmap.pixelsWide) / host.bounds.width
+        // The gate has had the keyboard since it showed. Where a ring would stand: across the button's left edge, a
+        // little either side of it, down its middle, where no other button is. The ring's indigo, as its stroke
+        // draws over the paper, is well bluer than it is red, and dark; the button's paper and border are neither.
+        var ringed = 0
+        for y in stride(from: frame.minY + 12, to: frame.maxY - 12, by: 2) {
+            for x in stride(from: frame.minX - 8, to: frame.minX + 4, by: 0.5) {
+                guard let colour = bitmap.colorAt(x: Int(x * scale), y: Int(y * scale))?.usingColorSpace(.sRGB)
+                else { continue }
+                if colour.blueComponent - colour.redComponent > 0.15, colour.redComponent < 0.6 { ringed += 1 }
+            }
+        }
+        XCTAssertEqual(ringed, 0, "Screen out ringed down its left edge")
+    }
+
     private static func views(in view: NSView) -> [NSView] {
         [view] + view.subviews.flatMap(views(in:))
     }
