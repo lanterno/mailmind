@@ -8,7 +8,9 @@
 //! A folder another client deleted or renamed is forgotten (`gone`) once MailMind is sure the server no longer has it:
 //! a LIST that worked doesn't name it, or a SELECT said so (`session::NO_SUCH_FOLDER`). Its mail leaves the lists, the
 //! syncs stop asking for it, and a change queued for it is given back. A server that can't be reached, or a refusal
-//! that says neither, never forgets a folder, and the Inbox is never forgotten.
+//! that says neither, never forgets a folder, and the Inbox is never forgotten. Nor is one while MailMind renames a
+//! folder of that account (`changing`): the server has the new name before the rows go by it, and a LIST or a SELECT
+//! in between would take the old one for gone, and its rows' state with it.
 
 use std::collections::{BTreeSet, HashMap};
 use std::fmt;
@@ -46,6 +48,31 @@ struct Listed {
     at: f64,
 }
 
+/// The changes MailMind has made to one account's folders: how many it has begun, and how many are not done yet.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Changes {
+    begun: u64,
+    open: usize,
+}
+
+/// A change MailMind is making to an account's folders, until it drops (`Folders::changing`).
+#[derive(Debug)]
+#[must_use = "the change is done as soon as this drops"]
+pub struct Changing<'a> {
+    folders: &'a Folders,
+    account: String,
+}
+
+impl Drop for Changing<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut changes) = self.folders.changes.lock()
+            && let Some(changes) = changes.get_mut(&self.account)
+        {
+            changes.open = changes.open.saturating_sub(1);
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Folders {
     accounts: Arc<dyn Accounts>,
@@ -61,6 +88,8 @@ pub struct Folders {
     caught_up: Mutex<HashMap<(String, String), f64>>,
     /// What forgets a folder found gone; until it is bound, nothing is forgotten.
     forgets: OnceLock<Arc<dyn ForgetsFolders>>,
+    /// The changes MailMind makes to each account's folders (`changing`).
+    changes: Mutex<HashMap<String, Changes>>,
 }
 
 impl Folders {
@@ -82,6 +111,7 @@ impl Folders {
             refreshing: Mutex::new(HashMap::new()),
             caught_up: Mutex::new(HashMap::new()),
             forgets: OnceLock::new(),
+            changes: Mutex::new(HashMap::new()),
         }
     }
 
@@ -93,9 +123,10 @@ impl Folders {
 
     /// The server no longer has `folder`: another client deleted or renamed it. Forget it, so its mail leaves the
     /// lists, no sync asks for it again and a change queued for it is given back, and let the rail kept for the
-    /// account go. How many stored copies went; never the Inbox, which a server always has.
+    /// account go. How many stored copies went; never the Inbox, which a server always has, nor any folder while
+    /// MailMind renames one of the account's (`changing`).
     pub fn gone(&self, account: &str, folder: &str) -> Result<usize, Fault> {
-        if folder.eq_ignore_ascii_case("INBOX") {
+        if folder.eq_ignore_ascii_case("INBOX") || self.changes_of(account)?.open > 0 {
             return Ok(0);
         }
         let Some(forgets) = self.forgets.get() else { return Ok(0) };
@@ -103,6 +134,23 @@ impl Folders {
         self.caught_up.lock().map_err(|_| POISONED)?.remove(&(account.to_owned(), folder.to_owned()));
         self.invalidate(Some(account))?;
         Ok(forgotten)
+    }
+
+    /// MailMind is renaming a folder of `account`'s, on its server and then in the store, until what this answers
+    /// drops: meanwhile no folder of the account is forgotten, and a refresh of its rail that overlapped it forgets
+    /// none either. The server has the new name before the rows go by it, so a LIST or a SELECT in between would take
+    /// the old name for a folder another client deleted, and forget its rows, their snoozes and marks with them, where
+    /// the rename would have kept them.
+    pub fn changing(&self, account: &str) -> Result<Changing<'_>, Fault> {
+        let mut changes = self.changes.lock().map_err(|_| POISONED)?;
+        let changes = changes.entry(account.to_owned()).or_default();
+        changes.begun += 1;
+        changes.open += 1;
+        Ok(Changing { folders: self, account: account.to_owned() })
+    }
+
+    fn changes_of(&self, account: &str) -> Result<Changes, Fault> {
+        Ok(self.changes.lock().map_err(|_| POISONED)?.get(account).copied().unwrap_or_default())
     }
 
     /// MailMind put mail in `folder` (a draft saved there, a message moved there): its next open catches it up at
@@ -227,8 +275,14 @@ impl Folders {
             return Ok(hit.folders);
         }
         // What is stored before the LIST asks: a folder a sync stores into afterwards is none of this one's.
+        let changes = self.changes_of(account).map_err(failed)?;
         let stored = self.stored.stored_folders(account).map_err(failed)?;
         let (folders, listed) = self.live(account)?;
+        // A rename of MailMind's own that overlapped the LIST may have left the old name out of it, stored still or
+        // as it was stored: nothing is forgotten, and the list isn't kept, so the next load asks again.
+        if changes.open > 0 || self.changes_of(account).map_err(failed)? != changes {
+            return Ok(folders);
+        }
         for folder in stored.iter().filter(|name| !listed.contains(name.as_str())) {
             if let Err(fault) = self.gone(account, folder) {
                 log::warning(TAG, "a folder the server no longer has wasn't forgotten", &[], Some(fault.class));

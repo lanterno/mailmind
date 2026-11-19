@@ -163,6 +163,8 @@ impl FolderChanges {
             return Err(Problem::refused("account and folder required").into());
         };
         let (trash, _) = self.trash(account)?;
+        // From before the server has the new name until the rows go by it, nothing takes the old one for gone.
+        let changing = self.folders.changing(account)?;
         let (to, delimiter) = self.on_server(account, |s| {
             let folders = s.folders()?;
             let found = folder_change::changeable(&folders, folder, Some(&trash))?;
@@ -176,6 +178,7 @@ impl FolderChanges {
         if to != folder {
             self.store.rename_folder(account, folder, &to, delimiter.as_deref())?;
         }
+        drop(changing);
         self.folders.invalidate(Some(account))?;
         Ok(json!({"ok": true, "folder": to}))
     }
