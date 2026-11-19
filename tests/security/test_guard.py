@@ -99,6 +99,26 @@ def test_a_name_given_with_a_directory_is_judged_where_it_is_not_where_the_test_
     assert (guarded / "mailmind.db").exists() and len(refused) == 2
 
 
+def test_a_relative_name_given_no_directory_is_judged_where_the_test_runs(tmp_path, refused, monkeypatch):
+    """A call given no directory raises its audit event with -1 for one, which names no descriptor: the stand-in keychain
+    kept in a file named relative to where the test runs saves through `os.replace` as any other file does."""
+    import fake_keychain
+    monkeypatch.chdir(tmp_path)
+    assert guard._at("keychain.json", -1) == "keychain.json"
+    monkeypatch.setenv(fake_keychain.VARIABLE, "keychain.json")
+    kept = fake_keychain.FakeKeychain()
+    kept.add("account:ada@example.test", "app-password", replace=True)
+    assert kept.items() == {"account:ada@example.test": "app-password"} and not refused
+    assert (tmp_path / "keychain.json").exists()
+    # Kept nowhere again before the test leaves for the repo, where emptying the stand-in as it ends would write it.
+    monkeypatch.delenv(fake_keychain.VARIABLE)
+    (tmp_path / "x.json").write_text("{}")
+    monkeypatch.chdir(ROOT)
+    with pytest.raises(guard.Tripwire):
+        os.replace(os.path.join(tmp_path, "x.json"), "mailmind.config.json")
+    assert len(refused) == 1
+
+
 def test_reading_the_owners_bridge_password_file_is_refused(refused):
     """The Bridge password's last source, read only when the Keychain holds none: a test that reaches it fails, whether or
     not this computer has one. The Python server the served suites start reads one in its own data directory instead."""
