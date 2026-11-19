@@ -218,18 +218,10 @@ private struct OpenReply: View {
     let words: ReplyBoxWords
     let drafted: Bool
     let messages: Int
-    @State private var translating = false
-    @State private var language = ""
     @Environment(\.meadow) private var meadow
     @Environment(\.meadowLight) private var light
 
     private var composing: Composing { .shared }
-
-    /// The rewrites the box offers, as the mockup names them.
-    private static let rewrites: [(op: API.RewriteOp, label: LocalizedStringKey)] = [
-        (.shorten, "Shorter"), (.friendly, "Warmer"), (.formal, "More formal"), (.fix, "Fix grammar"),
-        (.translate, "Translate"),
-    ]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -254,7 +246,7 @@ private struct OpenReply: View {
             if let check = composer.check {
                 GuardStrip(composer: composer, check: check) { composing.fixInBox($0, field: $1) }
             }
-            if composing.aiOn { rewriteRow }
+            if composing.aiOn { ReplyRewrites(composer: composer) }
             foot
         }
         .background(meadow.paperRaised)
@@ -334,65 +326,6 @@ private struct OpenReply: View {
             .accessibilityLabel("Your reply")
     }
 
-    /// Rewrite with MailMind (`.rw`): on the selection, or the whole reply.
-    private var rewriteRow: some View {
-        HStack(spacing: 4) {
-            MeadowAIMark(composer.busy == .rewrite ? "Rewriting…" : "Rewrite")
-                .padding(.leading, 4)
-                .padding(.trailing, 6)
-            ForEach(Self.rewrites, id: \.op) { rewrite in
-                Button(rewrite.label) {
-                    if rewrite.op == .translate {
-                        translating = true
-                    } else {
-                        Task { await composer.rewrite(rewrite.op) }
-                    }
-                }
-                .meadowButton(.quiet, small: true)
-                .disabled(composer.busy != .none)
-                .popover(isPresented: rewrite.op == .translate ? $translating : .constant(false), arrowEdge: .bottom) {
-                    translateAsk
-                }
-            }
-            if composer.undoRewrite != nil {
-                Button("Undo") { composer.undoTheRewrite() }
-                    .meadowButton(.quiet, small: true)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(meadow.paper2)
-        .overlay(alignment: .top) { Rectangle().fill(meadow.line).frame(height: 1) }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Rewrite with MailMind (acts on the selection, or the whole reply)")
-    }
-
-    private var translateAsk: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Translate to which language?")
-            TextField("Language", text: $language)
-                .frame(width: 200)
-                .onSubmit(translate)
-            HStack {
-                Spacer()
-                Button("Cancel") { translating = false }
-                    .keyboardShortcut(.cancelAction)
-                Button("Translate", action: translate)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(language.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-        }
-        .padding(14)
-    }
-
-    private func translate() {
-        let to = language.trimmingCharacters(in: .whitespaces)
-        translating = false
-        guard !to.isEmpty else { return }
-        Task { await composer.rewrite(.translate, language: to) }
-    }
-
     /// Send, Send later, attach, and whether it's saved (`.ir-f`).
     private var foot: some View {
         HStack(spacing: 8) {
@@ -452,6 +385,79 @@ private struct OpenReply: View {
         } else {
             take(panel.runModal())
         }
+    }
+}
+
+/// Rewrite with MailMind (`.rw`): on the selection, or the whole reply. Its mark keeps to one line and the rewrites
+/// wrap under it where the box is narrow, as the mockup's row wraps.
+struct ReplyRewrites: View {
+    let composer: Composer
+    @State private var translating = false
+    @State private var language = ""
+    @Environment(\.meadow) private var meadow
+
+    /// The rewrites the box offers, as the mockup names them.
+    private static let rewrites: [(op: API.RewriteOp, label: LocalizedStringKey)] = [
+        (.shorten, "Shorter"), (.friendly, "Warmer"), (.formal, "More formal"), (.fix, "Fix grammar"),
+        (.translate, "Translate"),
+    ]
+
+    var body: some View {
+        ChipFlow(spacing: 4, stretchesLast: false) {
+            MeadowAIMark(composer.busy == .rewrite ? "Rewriting…" : "Rewrite")
+                .fixedSize()
+                .padding(.leading, 4)
+                .padding(.trailing, 6)
+            ForEach(Self.rewrites, id: \.op) { rewrite in
+                Button(rewrite.label) {
+                    if rewrite.op == .translate {
+                        translating = true
+                    } else {
+                        Task { await composer.rewrite(rewrite.op) }
+                    }
+                }
+                .meadowButton(.quiet, small: true)
+                .disabled(composer.busy != .none)
+                .popover(isPresented: rewrite.op == .translate ? $translating : .constant(false), arrowEdge: .bottom) {
+                    translateAsk
+                }
+            }
+            if composer.undoRewrite != nil {
+                Button("Undo") { composer.undoTheRewrite() }
+                    .meadowButton(.quiet, small: true)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(meadow.paper2)
+        .overlay(alignment: .top) { Rectangle().fill(meadow.line).frame(height: 1) }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Rewrite with MailMind (acts on the selection, or the whole reply)")
+    }
+
+    private var translateAsk: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Translate to which language?")
+            TextField("Language", text: $language)
+                .frame(width: 200)
+                .onSubmit(translate)
+            HStack {
+                Spacer()
+                Button("Cancel") { translating = false }
+                    .keyboardShortcut(.cancelAction)
+                Button("Translate", action: translate)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(language.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(14)
+    }
+
+    private func translate() {
+        let to = language.trimmingCharacters(in: .whitespaces)
+        translating = false
+        guard !to.isEmpty else { return }
+        Task { await composer.rewrite(.translate, language: to) }
     }
 }
 
