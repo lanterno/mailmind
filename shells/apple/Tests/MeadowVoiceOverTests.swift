@@ -72,6 +72,34 @@ final class MeadowVoiceOverTests: XCTestCase {
         XCTAssertEqual(again.value, "348 points wide")
     }
 
+    /// What is done on Curate is said on its sheet, which covers the window's toast and holds its Undo out of reach:
+    /// a rule's words, and Undo where the toast offers one.
+    func testCuratesSheetSaysWhatWasDoneThereWithItsUndo() async throws {
+        let mailbox = MailApp().mailbox
+        let sheet = CurateSheet(model: Desk().curate, nameOf: { $0 }, open: { _ in }, part: .rules, mailbox: mailbox)
+        let host = NSHostingView(rootView: sheet.meadowLight(.day))
+        host.sizingOptions = []
+        host.frame = CGRect(x: 0, y: 0, width: 620, height: 600)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        self.window = window
+
+        mailbox.say("Blocked deals@spindle.example.test")
+        try await Task.sleep(for: .milliseconds(400))
+        var read = Self.read(host)
+        XCTAssertTrue(read.contains { $0.value == "Blocked deals@spindle.example.test" }, Self.said(read))
+        XCTAssertFalse(read.contains { $0.role == NSAccessibility.Role.button.rawValue && $0.label == "Undo" },
+                       "a rule has no Undo, as on the page:\n\(Self.said(read))")
+
+        mailbox.say("Blocked · swept 3", undo: "Undo")
+        try await Task.sleep(for: .milliseconds(400))
+        read = Self.read(host)
+        XCTAssertTrue(read.contains { $0.value == "Blocked · swept 3" }, Self.said(read))
+        XCTAssertTrue(read.contains { $0.role == NSAccessibility.Role.button.rawValue && $0.label == "Undo" },
+                      "a cleanup's Undo:\n\(Self.said(read))")
+    }
+
     /// The mail window at the mockup's 1440 by 900 on the fixture's mail, its first message open under the pane's bar
     /// with its summary, as VoiceOver reads it.
     private func windowRead() async throws -> [Read] {
