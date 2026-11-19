@@ -13,6 +13,8 @@ final class LaneModel {
     private(set) var hasMore = false
     /// Set once the first read has come.
     private(set) var loaded = false
+    /// It held hits and holds none now: what was there was filed or deleted, so it isn't empty "yet".
+    private(set) var emptied = false
     private(set) var problem: String?
     /// Run once, as the first read is done or refused: what waits on knowing which hits the lane holds.
     @ObservationIgnored var onceLoaded: (@MainActor () -> Void)?
@@ -53,6 +55,7 @@ final class LaneModel {
                 return
             }
             guard number == reading else { return }
+            emptied = hits.isEmpty && (emptied || !self.hits.isEmpty)
             self.hits = hits
             hasMore = more
             problem = nil

@@ -115,6 +115,14 @@ enum Words {
     static let unread = String(localized: "Nothing unread.")
     static let feed = String(localized: "Your Feed is clear — no newsletters waiting.")
     static let receipts = String(localized: "No receipts or invoices yet.")
+    /// A place emptied as you went through it (the page's digest's words): the paper trail once its last receipt
+    /// is filed or deleted, which has had receipts, so none "yet" would be wrong.
+    static let left = String(localized: "Nothing left here.")
+
+    /// What an empty lane says: Feed is clear however it came to be; the paper trail has none yet, or none left.
+    static func emptyLane(_ lane: Lane?, emptied: Bool) -> String {
+        lane == .feed ? feed : emptied ? left : receipts
+    }
     static let noFile = String(localized: "No files match.")
     static let noDocuments = String(localized: "No documents found in your synced mail.")
 }

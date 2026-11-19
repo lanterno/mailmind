@@ -278,7 +278,7 @@ struct LaneColumn: View {
         } else if model.hits.isEmpty {
             VStack {
                 DeskEmpty(icon: model.search.lane == .feed ? .book : .receipt,
-                          title: model.search.lane == .feed ? Words.feed : Words.receipts)
+                          title: Words.emptyLane(model.search.lane, emptied: model.emptied))
                 Spacer(minLength: 0)
             }
         } else if model.search.lane == .feed {
