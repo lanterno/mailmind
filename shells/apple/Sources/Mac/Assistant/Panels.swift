@@ -225,6 +225,26 @@ struct DeskSheetFoot: View {
     }
 }
 
+/// What the window last said, on a sheet over it: a sheet covers the window's foot, where its toast stands, and holds
+/// the window's Undo out of reach while it is up, so what is done on the sheet is said on the sheet, with its Undo,
+/// as the page's toasts show beside its drawer. The window's toast, under the sheet, has already been read out.
+struct DeskSheetToast: View {
+    let mailbox: Mailbox?
+
+    var body: some View {
+        if let mailbox, let toast = mailbox.toast {
+            MeadowToast(icon: MailboxToast.icon(toast.text, refused: toast.refused), text: Text(toast.text),
+                        detail: toast.detail) {
+                if toast.undo != nil {
+                    MeadowToastButton(title: String(localized: "Undo"), icon: .undo) { mailbox.undo() }
+                }
+            }
+            .id(toast.id)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+}
+
 /// A row on a sheet: raised paper while hovered, as the list's rows are.
 struct DeskSheetRow<Content: View>: View {
     @ViewBuilder let content: Content

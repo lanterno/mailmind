@@ -24,6 +24,8 @@ struct CurateSheet: View {
     let nameOf: (String) -> String
     let open: (String) -> Void
     @State var part: Part = .senders
+    /// The window's mailbox, whose toast says on the sheet what was done there (`DeskSheetToast`).
+    var mailbox: Mailbox?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.meadow) private var meadow
 
@@ -44,6 +46,11 @@ struct CurateSheet: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .overlay(alignment: .bottom) {
+                DeskSheetToast(mailbox: mailbox)
+                    .padding(.bottom, 16)
+                    .animation(.snappy(duration: 0.2), value: mailbox?.toast)
+            }
             DeskSheetFoot(words: "", done: { dismiss() })
         }
         .frame(width: 620, height: 600)

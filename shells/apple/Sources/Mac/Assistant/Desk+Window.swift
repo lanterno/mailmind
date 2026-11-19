@@ -488,9 +488,9 @@ private struct DeskSheetView: View {
             CommitmentsSheet(tasks: desk.tasks, brief: desk.brief, attention: desk.attention, open: desk.open)
                 .task { if !desk.brief.opened { await desk.brief.refresh() } }
         case .curate:
-            CurateSheet(model: desk.curate, nameOf: desk.nameOf) { account in
+            CurateSheet(model: desk.curate, nameOf: desk.nameOf, open: { account in
                 desk.go(.folder(account: account, folder: "INBOX"))
-            }
+            }, mailbox: desk.app?.mailbox)
         case .filter(let form):
             FilterSheet(form: form, model: desk.curate)
         }
