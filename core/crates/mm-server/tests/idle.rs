@@ -392,7 +392,10 @@ fn world(emails: &[&str], profile: &str) -> World {
 
 /// A worker that fails rests moments rather than seconds, so it has every chance to try again.
 fn quick() -> Pace {
-    Pace { rests: Rests { first: Duration::from_millis(10), longest: Duration::from_millis(20) }, ..Pace::default() }
+    Pace {
+        rests: Rests { first: Duration::from_millis(10), longest: Duration::from_millis(20), ..Rests::default() },
+        ..Pace::default()
+    }
 }
 
 fn object(value: Value) -> Map<String, Value> {
@@ -512,6 +515,46 @@ fn an_idle_whose_server_went_away_says_so_at_once_and_clears_once_it_answers() {
         heard(&mut tab, &mut frames);
         frames.contains("event: sync-done\ndata: {\"account\": \"ada@example.test\"")
     });
+}
+
+#[test]
+fn an_idle_lost_after_serving_finds_its_server_gone_at_once_and_a_try_finds_it_back_before_idle_does() {
+    let w = world(&[ADA], "full");
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_time().build().unwrap();
+    let _entered = runtime.enter();
+    let mut tab = TabStream::new(w.app.events.listen(None).unwrap(), "b1");
+    // A worker that fails rests an hour; one whose connection served at all connects again at once.
+    let an_hour = Duration::from_secs(3600);
+    w.start(Pace {
+        rests: Rests { first: an_hour, longest: an_hour, at_once_after: Duration::ZERO },
+        ..Pace::default()
+    });
+    w.all_idling(&[ADA]);
+    w.imap.drop_idle(ADA, true);
+    // No rest before the next connection, which can't log in: trying again, at once.
+    until(|| w.app.syncing.status().unwrap().get(ADA).is_some_and(|s| s.trying_again));
+    let mut frames = String::new();
+    until(|| {
+        heard(&mut tab, &mut frames);
+        frames.contains("event: sync-trouble")
+    });
+    // The worker rests its hour. A try while the server is still away changes nothing, and says nothing.
+    let before = w.app.syncing.status().unwrap()[ADA].clone();
+    w.app.syncing.try_unreached();
+    assert_eq!(w.app.syncing.status().unwrap()[ADA], before);
+    heard(&mut tab, &mut frames);
+    let troubles = frames.matches("event: sync-trouble").count();
+    // The server answers again: the next try ends the trouble, an hour before IDLE would have.
+    w.imap.back(ADA);
+    w.app.syncing.try_unreached();
+    let synced = w.app.syncing.status().unwrap()[ADA].clone();
+    assert!(synced.health == "ok" && !synced.trying_again, "{synced:?}");
+    until(|| {
+        heard(&mut tab, &mut frames);
+        frames.contains("event: sync-done\ndata: {\"account\": \"ada@example.test\"")
+    });
+    assert_eq!(frames.matches("event: sync-trouble").count(), troubles, "a try says no trouble");
+    assert!(!w.imap.idling(ADA, 2), "IDLE rests on");
 }
 
 #[test]

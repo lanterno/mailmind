@@ -465,7 +465,7 @@ fn a_worker_rests_twice_as_long_each_time_up_to_the_longest() {
     let b = build(&["a"]);
     // As 5 seconds is to 300.
     *b.w.refuse_connect.lock().unwrap() = 8;
-    started(&b, Rests { first: TICK, longest: TICK * 60 });
+    started(&b, Rests { first: TICK, longest: TICK * 60, ..Rests::default() });
     until(|| b.w.serving("a"));
     let rests: Vec<u32> = b.w.rests.lock().unwrap().iter().map(|r| (r.as_micros() / TICK.as_micros()) as u32).collect();
     assert_eq!(rests, [1, 2, 4, 8, 16, 32, 60, 60]);
@@ -475,7 +475,7 @@ fn a_worker_rests_twice_as_long_each_time_up_to_the_longest() {
 fn a_connection_that_serves_starts_the_rests_over() {
     let b = build(&["a"]);
     *b.w.refuse_connect.lock().unwrap() = 3;
-    started(&b, Rests { first: TICK, longest: TICK * 60 });
+    started(&b, Rests { first: TICK, longest: TICK * 60, ..Rests::default() });
     until(|| b.w.serving("a"));
     assert_eq!(b.sup.next_rest("a"), Some(TICK));
     b.w.line_of("a", 0).drop_it();
@@ -487,10 +487,36 @@ fn a_connection_that_serves_starts_the_rests_over() {
 }
 
 #[test]
+fn a_connection_that_served_a_while_and_was_lost_is_followed_by_another_at_once() {
+    let b = build(&["a"]);
+    // Any connection that serves at all has served a while, and a rest would be an hour.
+    started(&b, Rests { first: AN_HOUR.first, longest: AN_HOUR.longest, at_once_after: Duration::ZERO });
+    until(|| b.w.serving("a"));
+    b.w.line_of("a", 0).drop_it();
+    until(|| b.w.count("a") == 2 && b.w.line_of("a", 1).waiting.load(Ordering::SeqCst));
+    assert_eq!(b.w.rests.lock().unwrap().as_slice(), [Duration::ZERO], "it says so, and rests not at all");
+    assert_eq!(b.w.said(), ["failed a OSError"]);
+    assert_eq!(b.sup.next_rest("a"), Some(AN_HOUR.first), "a failure after it rests from the first");
+    assert_eq!(b.w.line_of("a", 0).closed_by(), ["watch:a"]);
+}
+
+#[test]
+fn a_connection_lost_before_it_served_a_while_rests_first() {
+    let b = build(&["a"]);
+    started(&b, AN_HOUR);
+    until(|| b.w.serving("a"));
+    b.w.line_of("a", 0).drop_it();
+    until(|| b.w.rests.lock().unwrap().len() == 1);
+    assert_eq!(b.w.rests.lock().unwrap().as_slice(), [AN_HOUR.first]);
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(b.w.count("a"), 1, "resting, it opens no other");
+}
+
+#[test]
 fn a_worker_says_what_failed() {
     let b = build(&["a"]);
     *b.w.refuse_connect.lock().unwrap() = 1;
-    started(&b, Rests { first: TICK, longest: TICK });
+    started(&b, Rests { first: TICK, longest: TICK, ..Rests::default() });
     until(|| b.w.said() == ["failed a ConnectionRefusedError"]);
 }
 
@@ -511,7 +537,7 @@ fn a_worker_whose_connect_or_wait_panics_says_so_rests_and_connects_again() {
     let b = build(&["a"]);
     b.w.panic_connect.store(1, Ordering::SeqCst);
     b.w.panic_serve.store(1, Ordering::SeqCst);
-    started(&b, Rests { first: TICK, longest: TICK });
+    started(&b, Rests { first: TICK, longest: TICK, ..Rests::default() });
     until(|| b.w.serving("a"));
     assert_eq!(b.w.said(), ["failed a Panic", "failed a Panic"]);
     // The connection whose wait panicked was closed by its worker, and the worker serves a new one.
@@ -521,7 +547,11 @@ fn a_worker_whose_connect_or_wait_panics_says_so_rests_and_connects_again() {
 }
 
 /// One left to rest is still resting when the test gives up on it.
-const AN_HOUR: Rests = Rests { first: Duration::from_secs(3600), longest: Duration::from_secs(3600) };
+const AN_HOUR: Rests = Rests {
+    first: Duration::from_secs(3600),
+    longest: Duration::from_secs(3600),
+    at_once_after: Duration::from_secs(3600),
+};
 
 #[test]
 fn a_worker_resting_is_woken_at_once_when_retired() {

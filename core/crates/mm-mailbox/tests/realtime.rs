@@ -295,7 +295,7 @@ fn world(emails: &[&str]) -> World {
 fn quick() -> Pace {
     Pace {
         debounce: Duration::from_millis(20),
-        rests: Rests { first: Duration::from_millis(2), longest: Duration::from_millis(4) },
+        rests: Rests { first: Duration::from_millis(2), longest: Duration::from_millis(4), ..Rests::default() },
         ..Pace::default()
     }
 }
@@ -456,7 +456,7 @@ fn a_worker_resting_stops_at_once_when_its_account_goes() {
     let w = world(&[ADA]);
     w.servers.refusing.lock().unwrap().insert(ADA.to_owned(), usize::MAX);
     let an_hour = Duration::from_secs(3600);
-    w.realtime.start(Pace { rests: Rests { first: an_hour, longest: an_hour }, ..quick() });
+    w.realtime.start(Pace { rests: Rests { first: an_hour, longest: an_hour, at_once_after: an_hour }, ..quick() });
     until(|| w.servers.opened(ADA).len() == 1);
     w.accounts.remove(ADA);
     w.realtime.reconcile();
