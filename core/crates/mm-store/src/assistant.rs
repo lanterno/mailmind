@@ -434,15 +434,18 @@ fn week_in(
         .query_map(params_from_iter(with(since(), &ap)), |r| Ok((r.get(0)?, r.get(1)?)))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let (mac, map) = among(accounts, "m.account");
-    let needs_sql = format!(
-        "SELECT m.pk, m.message_key, m.uid, m.folder, m.account, m.thread_id, m.from_name, m.from_addr, m.subject, m.ts, \
-         s.importance, s.action, s.category \
-         FROM messages m JOIN assessments s ON s.message_key=m.message_key \
+    // The mail that needs the person: the first `top` listed, and every one counted.
+    let needing = format!(
+        "FROM messages m JOIN assessments s ON s.message_key=m.message_key \
          WHERE m.folder='INBOX' AND m.is_junk=0 AND {} AND m.answered=0 AND m.pending_removal IS NULL \
-         AND (s.importance>=4 OR s.category='action-needed' OR TRIM(COALESCE(s.action,''))!='') AND {NOT_MUTED}{mac} \
-         ORDER BY s.importance DESC, m.ts DESC LIMIT ?",
+         AND (s.importance>=4 OR s.category='action-needed' OR TRIM(COALESCE(s.action,''))!='') AND {NOT_MUTED}{mac}",
         not_snoozed_sql("m")
     );
+    let needs_sql = format!(
+        "SELECT m.pk, m.message_key, m.uid, m.folder, m.account, m.thread_id, m.from_name, m.from_addr, m.subject, m.ts, \
+         s.importance, s.action, s.category {needing} ORDER BY s.importance DESC, m.ts DESC LIMIT ?"
+    );
+    let needs_you = counted(c, &format!("SELECT COUNT(*) {needing}"), map.clone())?;
     let needs = c
         .prepare(&needs_sql)?
         .query_map(params_from_iter(map.iter().cloned().chain([Sql::Integer(top)])), |r| {
@@ -460,8 +463,14 @@ fn week_in(
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    // Attention's: whom the person waits on, the threads they wrote in last with no answer yet.
+    // Attention's: whom the person waits on, the threads they wrote in last with no answer yet, the first `top` listed,
+    // and every one counted, a row each.
     let (fac, fap) = among(accounts, "f.account");
+    let waiting_on = counted(
+        c,
+        &format!("SELECT COUNT(*) FROM followups f WHERE f.state='due' AND f.kind='sent'{fac}"),
+        fap.clone(),
+    )?;
     let waiting = c
         .prepare(&format!(
             "SELECT f.account, f.thread_id, m.pk, m.message_key, m.uid, m.folder, f.first_sent_ts, m.subject, m.recipients \
@@ -513,7 +522,7 @@ fn week_in(
         ),
         with(Sql::Text(since_iso.to_owned()), &ap),
     )?;
-    Ok(WeekRows { sent, received, by_bucket, needs, waiting, reply_later, cleaned, handled })
+    Ok(WeekRows { sent, received, by_bucket, needs, needs_you, waiting, waiting_on, reply_later, cleaned, handled })
 }
 
 impl Overview for Database {

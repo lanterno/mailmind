@@ -536,8 +536,12 @@ pub struct WeekRows {
     pub received: i64,
     /// What kind of mail came in: each bucket, and how many.
     pub by_bucket: Vec<(Option<String>, i64)>,
+    /// The first of the mail that needs the person, and how many need them in all.
     pub needs: Vec<Needing>,
+    pub needs_you: i64,
+    /// The first of the threads they wait on, and how many they wait on in all.
     pub waiting: Vec<Awaiting>,
+    pub waiting_on: i64,
     pub reply_later: i64,
     /// None where the unsubscribes can't be counted.
     pub cleaned: Option<i64>,

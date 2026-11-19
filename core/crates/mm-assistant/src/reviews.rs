@@ -144,8 +144,9 @@ impl Reviews {
         stats.insert("sent".into(), json!(rows.sent));
         stats.insert("received".into(), json!(rows.received));
         stats.insert("by_bucket".into(), Value::Object(by_bucket));
-        stats.insert("needs_you".into(), json!(needs.len()));
-        stats.insert("waiting_on".into(), json!(waiting.len()));
+        // Each list holds the first `TOP_OPEN`, and its number counts them all.
+        stats.insert("needs_you".into(), json!(rows.needs_you));
+        stats.insert("waiting_on".into(), json!(rows.waiting_on));
         stats.insert("reply_later".into(), json!(rows.reply_later));
         stats.insert("cleaned".into(), json!(rows.cleaned.unwrap_or(0)));
         stats.insert("handled".into(), json!(rows.handled));
