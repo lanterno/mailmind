@@ -448,10 +448,11 @@ private struct KeysLegendGroup: View {
                         HStack(spacing: 3) {
                             ForEach(Array(key.keys.enumerated()), id: \.offset) { _, cap in MeadowKey(cap) }
                         }
+                        // A long line wraps under itself, never cut short in its column.
                         Text(key.words)
                             .font(.meadow(.ui, 13.5))
                             .foregroundStyle(meadow.ink2)
-                            .lineLimit(1)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     .accessibilityElement(children: .combine)
                 }
