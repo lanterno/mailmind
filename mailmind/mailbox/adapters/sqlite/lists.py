@@ -118,6 +118,17 @@ def folder_count(c, account, folder):
     return _message_count(c, _IN_FOLDER, (account, folder))
 
 
+def copy_row(c, account, folder, uid=None, key=None):
+    """The row a folder lists for one copy, by its UID there, its key, or both: of a key's two copies in one folder, the
+    newer. None where the folder lists none, as for mail snoozed, muted or on its way out."""
+    where, params = _IN_FOLDER, (account, folder)
+    if uid is not None:
+        where, params = f"{where} AND m.uid=?", (*params, uid)
+    if key is not None:
+        where, params = f"{where} AND m.message_key=?", (*params, key)
+    return next(iter(_message_rows(c, where, params, 1, 0)), None)
+
+
 def inboxes_conversation_rows(c, accounts, limit, offset):
     """Those accounts' Inboxes collapsed to conversations, as one list. A thread id means something within its account."""
     return _conversation_rows(c, _in_inboxes(accounts), tuple(accounts), "m.account, m.thread_id", limit, offset)

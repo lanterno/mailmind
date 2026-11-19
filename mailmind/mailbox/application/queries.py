@@ -2,7 +2,7 @@
 Each read is of the database alone, but that a folder opening may start its sync."""
 from typing import Any
 
-from mailmind.kernel.errors import Refused
+from mailmind.kernel.errors import NotFound, Refused
 from mailmind.kernel.ids import INBOX, AccountId, FolderName, MessageKey, ThreadRef
 from mailmind.kernel.when import ago, rel_time, rel_time_future
 from mailmind.mailbox.application.folders import Folders
@@ -116,6 +116,19 @@ class Queries:
         return {"ok": True, "account": account, "folder": folder, "items": items, "grouped": group,
                 **listing.window(items, total, offset), **scan}
 
+
+    def listed_copy(self, account: str | None, folder: str, uid: int | None, key: int | None) -> dict[str, Any]:
+        """One message's row as its folder lists it, from what is stored alone, by its UID there, or by its key where that
+        isn't known: what a shell shows of a message it didn't come to from a list (a notification, a move's Undo), with no
+        folder read a page at a time for it. NotFound where the folder lists none, as for mail snoozed, muted or on its way
+        out."""
+        if not account or (uid is None and key is None):
+            raise Refused("account and uid or key required")
+        with self._uow.read() as c:
+            row = self._store.copy_row(c, AccountId(account), folder, uid, key)
+        if row is None:
+            raise NotFound("not listed")
+        return {"ok": True, "row": listing.listed_item(row, False, rel_time)}
 
     def labels(self, account: str | None) -> dict[str, Any]:
         """A Gmail account's own labels and how many messages carry each: its lanes in the rail. None on any other account."""

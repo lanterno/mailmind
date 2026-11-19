@@ -26,6 +26,8 @@ from mailmind.http.schemas.mailbox import (
     FolderListing,
     Folders,
     Labels,
+    ListedCopy,
+    ListedCopyArgs,
     FoldersArgs,
     FoldersRefused,
     InboxesListing,
@@ -167,6 +169,10 @@ def router(mailbox):
     @r.get("/api/message/attachment", responses=answers(NotJson))
     def copy_attachment(args: Annotated[PartArgs, Query()]):
         return _part(named.copy_pk(mailbox, args.key, args.folder, args.uid), args.part_id)
+
+    @r.get("/api/message/row", responses=answers(ListedCopy))     # one message's row, as its folder lists it
+    def listed_copy(args: Annotated[ListedCopyArgs, Query()]):
+        return mailbox.queries.listed_copy(args.account, args.folder, args.uid, args.key)
 
     @r.get("/api/message/body", responses=answers(MessageOpened | Prefetched))
     def copy_body(args: Annotated[CopyBodyArgs, Query()]):

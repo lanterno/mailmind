@@ -37,6 +37,14 @@ class CopyArgs(QueryArgs):
     uid: Number | None = None
 
 
+class ListedCopyArgs(QueryArgs):
+    """One message's row as its folder lists it: by its UID there, or its key where the UID isn't known."""
+    account: str | None = None              # left out, or both uid and key, is the use case's refusal
+    folder: str = "INBOX"
+    uid: Number | None = None
+    key: Number | None = None
+
+
 class CopyBodyArgs(CopyArgs):
     prefetch: str | None = None             # "1" warms the store and shows nothing
 
@@ -170,6 +178,11 @@ class FolderRow(_Listed, _Verdict):
     account: str
     count: int | None = None                # one row a conversation: how many of it this list holds
     thread_count: int | None = None         # and all of it, every folder's, each message once: what opening it shows
+
+
+class ListedCopy(Answer):
+    ok: Literal[True]
+    row: FolderRow                          # as its folder's list gives it, one message alone
 
 
 class SnoozedRow(_Listed, _Verdict):

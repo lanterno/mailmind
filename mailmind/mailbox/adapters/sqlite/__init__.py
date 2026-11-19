@@ -15,7 +15,7 @@ from mailmind.mailbox.adapters.sqlite.contents import (attachment_of, bodies_to_
     set_ingested_headers, set_labels, set_recipients, set_recipients_text, still_without_body, store_body)
 from mailmind.mailbox.adapters.sqlite.flags import (classified_from_address, classified_from_domain, flag_rows_newest,
     flag_rows_of, set_classification, set_flags_if_still, set_local_flags)
-from mailmind.mailbox.adapters.sqlite.lists import (digest, folder_conversation_count, folder_conversation_rows, folder_count,
+from mailmind.mailbox.adapters.sqlite.lists import (copy_row, digest, folder_conversation_count, folder_conversation_rows, folder_count,
     folder_rows, inboxes_conversation_count, inboxes_conversation_rows, inboxes_count, inboxes_rows, snoozed_count,
     snoozed_rows, stats, stored_folder_counts, thread_rows)
 from mailmind.mailbox.adapters.sqlite.messages import (copy_in_folder, copy_now, copy_pk, delete_by_uids,
@@ -32,8 +32,8 @@ __all__ = [
     "bind_merges", "bodies_to_fetch", "brief_rows", "classified_from_address", "classified_from_domain", "clear_sync_error",
     "command_forget_finished", "command_get", "command_insert", "command_latest_move", "command_mark_begun",
     "command_mark_reversed", "command_never_begun", "command_open", "command_open_counts", "command_queued_for_folder",
-    "command_ran_under",
-    "command_record", "command_set_params", "conn", "conversation_rows", "copy_in_folder", "copy_now", "copy_pk",
+    "command_ran_under", "command_record", "command_set_params", "conn", "conversation_rows", "copy_in_folder", "copy_now",
+    "copy_pk", "copy_row",
     "delete_attachments", "delete_by_uids", "delete_message", "delta_rows", "digest", "draft_candidates",
     "flag_changes_waiting", "flag_command", "flag_rows_newest", "flag_rows_of", "folder_conversation_count", "forget_folder",
     "folder_conversation_rows", "folder_count", "folder_rows", "forget_account", "forget_gone_messages", "fts_set_body", "get_body",
