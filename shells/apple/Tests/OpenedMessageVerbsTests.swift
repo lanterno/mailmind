@@ -1139,6 +1139,56 @@ final class OpenedMessageVerbsTests: XCTestCase {
         XCTAssertEqual(opened, [], "the Undo is the later verb's, which closed no window")
     }
 
+    /// At the gate, "Read it whole" and then Delete in the pane: the gate reads its queue again, so the card goes with
+    /// its sender's last message; with mail of theirs left, the card reads their next message in its place. A message
+    /// the gate doesn't show reads nothing again.
+    func testTheGatesCardGoesWithItsMessageWhenItIsSentAway() async throws {
+        for left in [false, true] {
+            let server = Self.server()
+            let shop = API.ScreenerItem(count: left ? 2 : 1, domain: "example.test", fromAddr: "shop@example.test",
+                                        fromName: "Shop", when: "Nov 2")
+            let other = API.ScreenerItem(count: 1, domain: "example.test", fromAddr: "cy@example.test",
+                                         fromName: "Cy Young", when: "Mon")
+            // Once the letter has gone: the sender is gone from the gate, or their other message is their latest.
+            server.on("GET", API.Get.Screener.path) { [server] _ in
+                let gone = !server.asked(API.Post.Trash.path).isEmpty
+                let items = gone && !left ? [other] : [shop, other]
+                return FakeServer.ok(try! JSONEncoder().encode(API.ScreenerQueue(account: Fixture.ada, items: items,
+                                                                                 ok: true, total: items.count)))
+            }
+            let hits = Self.hits
+            server.on("GET", API.Get.Search.path) { [server] _ in
+                let gone = !server.asked(API.Post.Trash.path).isEmpty
+                return FakeServer.ok(try! JSONEncoder().encode(API.SearchAnswer.searchPage(API.SearchPage(
+                    generated: "", hasMore: false, items: [gone ? hits[1] : hits[0]], offset: 0, ok: true,
+                    query: "", scope: "account"))))
+            }
+            let world = await world(server)
+            let gate = world.desk.screener(for: Fixture.ada)
+            world.app.place = .desk(.screener(account: Fixture.ada))
+            await gate.load()
+            await gate.readLetter("shop@example.test")
+            XCTAssertEqual(gate.visitor?.fromAddr, "shop@example.test")
+            let letter = try XCTUnwrap(gate.letters["shop@example.test"] ?? nil)
+            await world.mailbox.fileNow(.archive, rows: [API.FolderRow(Fixture.hit(77, subject: "Elsewhere"))])
+            try await Task.sleep(for: .milliseconds(20))
+            XCTAssertEqual(server.asked(API.Get.Search.path).count, 1, "a message the gate doesn't show reads nothing")
+
+            // Read it whole, then the pane's Delete.
+            world.desk.open(.named(key: letter.key, folder: letter.folder, uid: letter.uid, account: letter.account))
+            await world.mailbox.fileNow(.trash, rows: await world.mailbox.paneTargets(standing: false))
+            if left {
+                await waiting(for: "the card reads the sender's next message") {
+                    (gate.letters["shop@example.test"] ?? nil)?.key == Self.hits[1].key
+                }
+                XCTAssertEqual(gate.visitor?.fromAddr, "shop@example.test")
+            } else {
+                await waiting(for: "the card goes with the sender") { gate.visitor?.fromAddr == "cy@example.test" }
+                XCTAssertEqual(gate.rows.map(\.fromAddr), ["cy@example.test"])
+            }
+        }
+    }
+
     /// A notification's message is chosen in its row once its folder's rows come, as a click on it would choose it,
     /// so the list shows which it is. One the list doesn't hold stays open with no row chosen, and a message opened
     /// before the rows come stays open.
