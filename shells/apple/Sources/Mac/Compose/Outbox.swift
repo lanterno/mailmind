@@ -260,7 +260,10 @@ struct OutboxList: View {
 }
 
 /// One thing waiting: how it stands on a chip, sun's when it failed, what it is and why it waits, and its buttons.
-private struct OutboxRow<Actions: View>: View {
+/// The title keeps to one line, cut short if it must, as the page's `.ob-sub` does; the line under it says the whole of
+/// why it waits, wrapping as the page's `.ob-why` does, since its end (when it goes, that it goes only while MailMind is
+/// open, what failed) is what a person opened the outbox to read.
+struct OutboxRow<Actions: View>: View {
     let state: String
     let failed: Bool
     let title: String
@@ -275,11 +278,12 @@ private struct OutboxRow<Actions: View>: View {
                 Text(title)
                     .font(.meadow(.ui, 13.5, .semibold))
                     .foregroundStyle(meadow.ink)
+                    .lineLimit(1)
+                    .help(title)
                 Text(detail)
                     .font(.meadow(.ui, 12))
                     .foregroundStyle(failed ? meadow.rust : meadow.ink3)
             }
-            .lineLimit(2)
             .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 6)
             HStack(spacing: 4) { actions() }.fixedSize()
