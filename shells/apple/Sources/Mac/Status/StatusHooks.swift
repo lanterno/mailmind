@@ -64,7 +64,7 @@ struct StatusHooks: ViewModifier {
                         Task { await status.syncNow() }
                     },
                     MailCommand(id: "reconcile", group: .commands,
-                                label: String(localized: "Check Mail Against the Server")) {
+                                label: String(localized: "Check mail against the server")) {
                         Task { await status.reconcile() }
                     },
                 ]

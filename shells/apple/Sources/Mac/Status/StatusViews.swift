@@ -74,7 +74,7 @@ struct StatusMenu: View {
     @State private var notAsked = false
 
     var body: some View {
-        // Check Mail Against the Server says what it does on a second line, under Check for mail now: its items keep
+        // Check mail against the server says what it does on a second line, under Check for mail now: its items keep
         // room for the ring the keys put on one, so it never crosses the title of the next.
         MeadowMenu(parts: parts, width: 280, model: model, close: close, label: String(localized: "Sync status"),
                    ringRoom: true)
@@ -102,7 +102,8 @@ struct StatusMenu: View {
         }
     }
 
-    private var parts: [MeadowMenu.Part] {
+    /// What the popover lists, top to bottom. Each item says what it does in sentence case, as the page's menus do.
+    var parts: [MeadowMenu.Part] {
         let digest = status.digest
         let bad = StatusWords.bad(status.addresses, digest: digest, health: status.health)
         var parts: [MeadowMenu.Part] = []
@@ -117,7 +118,7 @@ struct StatusMenu: View {
         }
         parts.append(.item(MeadowMenuItem(id: "sync", title: String(localized: "Check for mail now"), icon: .refresh,
                                           disabled: status.syncing) { [status] in Task { await status.syncNow() } }))
-        parts.append(.item(MeadowMenuItem(id: "reconcile", title: String(localized: "Check Mail Against the Server"),
+        parts.append(.item(MeadowMenuItem(id: "reconcile", title: String(localized: "Check mail against the server"),
                                           detail: String(localized: "Drop mail deleted elsewhere"), icon: .restore,
                                           disabled: status.reconciling) {
             [status] in Task { await status.reconcile() }
