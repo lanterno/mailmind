@@ -23,8 +23,8 @@ const HTML_SINKS = [
 ].map((selector) => ({ selector, message: HTML_SINK }));
 
 // The modules with no DOM, no stores and no fetch, which run anywhere and are tested without a page. model.ts is here
-// because the composer's machine stands on it.
-const PURE = ["src/**/*.machine.ts", "src/features/compose/machine.ts", "src/features/compose/model.ts", "src/features/compose/sendGuard.ts", "src/features/compose/draftResume.ts", "src/features/compose/linkClean.ts", "src/features/mailbox/linkRisk.ts"];
+// because the composer's machine stands on it, and lib/mine.ts because the send guard does.
+const PURE = ["src/**/*.machine.ts", "src/features/compose/machine.ts", "src/features/compose/model.ts", "src/features/compose/sendGuard.ts", "src/features/compose/draftResume.ts", "src/features/compose/linkClean.ts", "src/features/mailbox/linkRisk.ts", "src/lib/mine.ts"];
 const IMPURE_GLOBALS = [
   "window", "self", "globalThis", "document", "navigator", "location", "history", "screen", "alert", "confirm", "prompt", "getComputedStyle", "matchMedia",
   "requestAnimationFrame", "cancelAnimationFrame", "requestIdleCallback", "ResizeObserver", "MutationObserver", "IntersectionObserver", "DOMParser", "Element", "HTMLElement", "Node",
@@ -61,7 +61,7 @@ export default defineConfig([
       "no-restricted-globals": ["error", ...IMPURE_GLOBALS],
       "@typescript-eslint/no-restricted-imports": ["error", {
         patterns: [{
-          regex: "^(?!\\./(machine|model|sendGuard|draftResume|linkClean|linkRisk)$)",
+          regex: "^(?!(\\./(machine|model|sendGuard|draftResume|linkClean|linkRisk)|\\.\\./\\.\\./lib/mine)$)",
           allowTypeImports: true,
           message: "A pure module imports only other pure modules, and types: this could bring in the DOM, a store or a fetch.",
         }],

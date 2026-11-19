@@ -1,4 +1,6 @@
 // The composer's send-time checks: pure, with no DOM and no app state, so they run anywhere.
+import { isMine, mineSet, untagged } from "../../lib/mine";
+
 export interface GuardSnapshot {
   mode: string; subject: string; subject0: string; body: string; sigBlock: string;
   nAttach: number; fwdAttach: number; reading: string[]; sendAfter: number; now: number;
@@ -34,11 +36,8 @@ export interface GuardSwap { from: string; to: string }
 export interface GuardText { text: string; fix: GuardFix | null }
 
 export const GUARD_FANOUT=5, GUARD_ARM_MS=700, GUARD_SCAN_MAX=50000;
-// you+tag@host names the mailbox you@host does, on every server that reads a tag at all.
-export function untagged(a:string):string{ const at=a.lastIndexOf("@"), plus=a.indexOf("+"); return plus>0&&plus<at?a.slice(0,plus)+a.slice(at):a; }
-export function isMine(a:string,mine:ReadonlySet<string>):boolean{ return mine.has(a)||mine.has(untagged(a)); }
-// Your addresses as a set to ask isMine of. An account that is itself tagged has its plain mailbox along with it.
-export function mineSet(addrs:string[]):Set<string>{ return new Set(addrs.map(a=>a.toLowerCase()).flatMap(a=>[a,untagged(a)])); }
+// Which addresses are yours is the list's question too, so it is lib's.
+export { isMine, mineSet, untagged };
 // Sources are in folded form (NFD, marks removed, lowercase). Strong words present a file of your
 // own ("attached", "ci-joint", "te adjunto"), so they fire in every mode. Weak ones are the bare
 // nouns ("the attachment", "la pièce jointe", "l'allegato"), which in a reply are usually about the
