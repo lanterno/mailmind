@@ -7,6 +7,10 @@
 //! program calls `reconcile` when an account is added, changed or removed, and a worker that finds its account changed
 //! under it after an IDLE cycle leaves on its own, so an edit of the file, which says nothing, still reaches it.
 //!
+//! A worker whose connection failed asks for a sync of its account once its next one is ready: the server answers
+//! again, so the sync ends the trouble its status shows, lets go of the changes waiting for it, and fetches what came
+//! while nothing listened. One connection dropped that comes back at once costs a sync that says nothing new.
+//!
 //! Bounded: one IDLE connection an account, and `Pace::most` accounts at most; the rest wait for the periodic sync.
 
 use std::collections::BTreeSet;
@@ -65,6 +69,8 @@ struct Idle {
     pace: Mutex<Pace>,
     /// The accounts whose INBOX changed since the dispatcher last looked.
     dirty: Mutex<BTreeSet<String>>,
+    /// The accounts whose worker's connection failed, until its next one is ready.
+    lost: Mutex<BTreeSet<String>>,
     kick: Arc<Kick>,
     stopped: AtomicBool,
 }
@@ -144,13 +150,17 @@ impl Watched for Idle {
         }
     }
 
-    fn ready(&self, _account: &Reached, session: &mut Box<dyn IdleSession>) -> Result<bool, &'static str> {
+    fn ready(&self, account: &Reached, session: &mut Box<dyn IdleSession>) -> Result<bool, &'static str> {
         if !session.capabilities().iter().any(|c| c == "IDLE") {
             log::warning(TAG, "an account's server has no IDLE; the periodic sync has it", &[], None);
             // The worker logs out as it ends, as it does of any connection.
             return Ok(false);
         }
         session.select("INBOX", false).map_err(|e| e.class())?;
+        if held(&self.lost).remove(&account.email) {
+            // Connected again after a connection that failed: the server answers, and a sync now says so.
+            self.trigger_sync(&account.email);
+        }
         Ok(true)
     }
 
@@ -181,7 +191,8 @@ impl Watched for Idle {
         log::info(TAG, "an account was removed, disabled or changed; its worker stops", &[]);
     }
 
-    fn say_failed(&self, _account: &Reached, class: &'static str, rest: Duration) {
+    fn say_failed(&self, account: &Reached, class: &'static str, rest: Duration) {
+        held(&self.lost).insert(account.email.clone());
         let rest = rest.as_secs().to_string();
         log::warning(
             TAG,
@@ -218,6 +229,7 @@ impl Realtime {
             news,
             pace: Mutex::new(Pace::default()),
             dirty: Mutex::new(BTreeSet::new()),
+            lost: Mutex::new(BTreeSet::new()),
             kick: Arc::new(Kick::default()),
             stopped: AtomicBool::new(false),
         });
