@@ -19,9 +19,9 @@ extension Wire: RouteCaller, Routes {
 /// verb but Snooze and Later do nothing at all, as only the list's rows were looked in.
 ///
 /// Each surface is pressed through the function it calls: the pane's bar, the Message menu and the palette as their
-/// buttons run them (`Mailbox.file`, `askMove`, `star(on:)`, `setSeen`, the desk's `paneCommands` and `commands()`),
-/// the single keys through the list's own `keyDown`, and a row's menu through its items. SwiftUI's buttons and the
-/// menu bar themselves can't be pressed from a test.
+/// buttons run them (`Mailbox.fileOpen`, `file`, `askMove`, `star(on:)`, `setSeen`, the desk's `paneCommands` and
+/// `commands()`), the single keys through the list's own `keyDown`, and a row's menu through its items. SwiftUI's
+/// buttons and the menu bar themselves can't be pressed from a test.
 @MainActor
 final class OpenedMessageVerbsTests: XCTestCase {
     // MARK: The mail
@@ -326,8 +326,10 @@ final class OpenedMessageVerbsTests: XCTestCase {
             fire(item.submenu?.items.first ?? item)
         }
         switch verb {
-        case .paneFile, .menuArchive: mailbox.file(.archive)
-        case .paneDelete, .menuDelete: mailbox.file(.trash)
+        case .paneFile: mailbox.fileOpen(.archive)
+        case .paneDelete: mailbox.fileOpen(.trash)
+        case .menuArchive: mailbox.file(.archive)
+        case .menuDelete: mailbox.file(.trash)
         case .menuJunk: mailbox.file(.junk)
         case .menuMoveTo: mailbox.askMove()
         case .menuUnread: mailbox.setSeen(Marks(mailbox.shownRows).unread)
@@ -643,6 +645,79 @@ final class OpenedMessageVerbsTests: XCTestCase {
         }
     }
 
+    /// With rows marked and another message open beside them (as j, k or a click opens one), the pane's bar and Up
+    /// next's buttons act on the message in the pane alone, as the page's reader does: the marks stay marked for the
+    /// bulk bar, and the next message opens beside them. Undo opens it again beside them too. The list's keys still
+    /// act on the marks.
+    func testThePanesVerbsActOnTheMessageInThePaneNotTheMarks() async throws {
+        enum Pane: String, CaseIterable { case file, delete, snooze, later }
+        for pane in Pane.allCases {
+            let world = await world()
+            let app = world.app, mailbox = world.mailbox, desk = world.desk
+            await inbox(app)
+            let marks = [try XCTUnwrap(app.list?.copy(at: 0)), try XCTUnwrap(app.list?.copy(at: 4))]
+            mailbox.chose(marks)
+            let shown = try XCTUnwrap(app.list?.copy(at: 2))
+            mailbox.openBeside(shown)
+            XCTAssertTrue(mailbox.marking, "\(pane)")
+            let copy = MailCopy(shown)
+            // The bar's File and Delete, and Up next's File & next and Delete & next, which run the same.
+            switch pane {
+            case .file: mailbox.fileOpen(.archive)
+            case .delete: mailbox.fileOpen(.trash)
+            case .snooze:
+                try XCTUnwrap(desk.paneCommands.first { $0.id == "snooze" }, "the bar's Snooze").run()
+                guard case .snoozeUntil(let copies, _)? = desk.sheet else { return XCTFail("Snooze asks when") }
+                XCTAssertEqual(copies, [copy], "Snooze asks for the message in the pane")
+                await desk.attention.snooze(copies, .preset(.tomorrow))
+            case .later:
+                try XCTUnwrap(desk.paneCommands.first { $0.id == "later" }, "the bar's Later").run()
+            }
+            let path = switch pane {
+            case .file: API.Post.Archive.path
+            case .delete: API.Post.Trash.path
+            case .snooze: API.Post.Snooze.path
+            case .later: API.Post.Replylater.path
+            }
+            await waiting(for: "\(pane) asks") { !world.server.asked(path).isEmpty }
+            let asked = world.server.asked.filter { Self.verbs.contains($0.path) }
+            XCTAssertEqual(asked.count, 1, "\(pane): one request, for one message")
+            let body = try JSONSerialization.jsonObject(with: try XCTUnwrap(asked.first).body) as? [String: Any]
+            XCTAssertEqual(body?["key"] as? Int, copy.key, "\(pane) acts on the message in the pane")
+            XCTAssertNil(body?["copies"], "\(pane) names no marks")
+            await waiting(for: "\(pane) says so") { mailbox.toast != nil }
+            XCTAssertEqual(mailbox.marked, marks.map(MailCopy.init), "\(pane): the marks stay marked")
+            XCTAssertTrue(mailbox.marking, "\(pane): and are still the bulk bar's")
+            guard pane != .later else {
+                XCTAssertEqual(app.selection.copy, copy, "Later keeps it open")
+                continue
+            }
+            await waiting(for: "\(pane) moves on beside the marks") { app.selection.copy == MailCopy(Self.rows[3]) }
+            XCTAssertEqual(mailbox.marked, marks.map(MailCopy.init), "\(pane): moving on keeps the marks")
+            guard pane != .snooze else { continue }
+            await mailbox.undoNow()
+            await waiting(for: "\(pane)'s Undo opens it again") { app.selection.copy == copy }
+            XCTAssertEqual(mailbox.marked, marks.map(MailCopy.init), "\(pane): beside the marks, which stay")
+        }
+
+        // The list's keys still act on the marks, as one request for them all.
+        let server = Self.server()
+        server.on("POST", API.Post.BulkFile.path, API.RowsFiled(count: 2, failed: 0, filed: [], msg: "", ok: true,
+                                                                partial: false, queued: 0, rowsFailed: 0,
+                                                                undoable: true))
+        let world = await world(server)
+        await inbox(world.app)
+        let marks = [try XCTUnwrap(world.app.list?.copy(at: 0)), try XCTUnwrap(world.app.list?.copy(at: 4))]
+        world.mailbox.chose(marks)
+        world.mailbox.openBeside(try XCTUnwrap(world.app.list?.copy(at: 2)))
+        key("#", world.mailbox)
+        await waiting(for: "# asks") { !server.asked(API.Post.BulkFile.path).isEmpty }
+        let body = try JSONDecoder().decode(API.BulkFileBody.self,
+                                            from: try XCTUnwrap(server.asked(API.Post.BulkFile.path).first).body)
+        XCTAssertEqual(Set(body.rows?.map(\.key) ?? []), Set(marks.map(\.key)), "# deletes the marks")
+        XCTAssertTrue(server.asked(API.Post.Trash.path).isEmpty, "and not the message in the pane")
+    }
+
     /// The pane over a message no list holds, filed already or in Trash, takes it back to its account's Inbox.
     func testMoveToInboxAndRestoreTakeTheMessageOpenBack() async throws {
         for folder in ["Archive", "Trash"] {
@@ -651,7 +726,7 @@ final class OpenedMessageVerbsTests: XCTestCase {
             world.app.place = .desk(.brief)
             world.desk.open(copy)
             // The bar's Move to Inbox and Restore.
-            world.mailbox.restore(await world.mailbox.targets())
+            world.mailbox.restoreOpen()
             await waiting(for: "\(folder) restores") { !world.server.asked(API.Post.Move.path).isEmpty }
             let body = try JSONDecoder().decode(API.MoveToBody.self,
                                                 from: try XCTUnwrap(world.server.asked(API.Post.Move.path).first).body)
