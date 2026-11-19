@@ -19,7 +19,7 @@ import { Icon } from "../../lib/ui/Icon";
 import { Scene } from "../../lib/ui/Scene";
 import { SetUpAi } from "../../lib/ui/SetUpAi";
 import { answer, peekCards, useDraftChip } from "../compose";
-import { filing, bulk, fromDigest, needsYou, safeToFile, topicItems, type DigestItem } from "../mailbox";
+import { filing, bulk, fromDigest, needsYou, safeToFile, topicItems, useFoldersAcross, type DigestItem } from "../mailbox";
 import { snoozeAsk } from "../attention";
 import type { Mailbox } from "../mailbox";
 import { LIMIT, useBrief, useSide } from "./data";
@@ -83,9 +83,17 @@ function NeedCard({ it, m, multi, ai }: { it: DigestItem; m: Mailbox; multi: boo
   );
 }
 
+// Waiting and Reply later counted where the brief opens them (`goToFolder`): every account's on All inboxes, else the
+// account's own. Waiting holds what others wait on you for as well as what waits on them.
+function useStacks(m: Mailbox) {
+  const across = useFoldersAcross(m.allInboxes).data;
+  return m.allInboxes ? across : m.folders;
+}
+
 function Side({ m, multi }: { m: Mailbox; multi: boolean }) {
   const { data } = useSide();
   const now = new Date(minute.useValue());
+  const held = useStacks(m)?.waiting;
   const upcoming = data?.upcoming.slice(0, 4) ?? [], waiting = data?.waiting ?? [];
   if (!upcoming.length && !waiting.length) return null;
   return (
@@ -120,7 +128,8 @@ function Side({ m, multi }: { m: Mailbox; multi: boolean }) {
               </button>
             );
           })}
-          {waiting.length > 3 && <button className="bs-more" onClick={() => m.goToFolder("__waiting__")}>See all {waiting.length}</button>}
+          {/* It opens Waiting, so it says how many Waiting holds, as the tally does, not how many wait on others. */}
+          {waiting.length > 3 && <button className="bs-more" onClick={() => m.goToFolder("__waiting__")}>See all {held ?? waiting.length}</button>}
         </section>
       )}
     </aside>
@@ -179,7 +188,8 @@ export function BriefPane({ m }: { m: Mailbox }) {
   const { data: tasks } = useTasks();
   const commits = commitments(items).length + (tasks?.filter((t) => !t.done).length ?? 0);
   const multi = m.accounts.length > 1;
-  const waiting = m.folders?.waiting ?? 0, later = m.folders?.replylater ?? 0;
+  const stacks = useStacks(m);
+  const waiting = stacks?.waiting ?? 0, later = stacks?.replylater ?? 0;
   const topics = (offered ? brief?.groups ?? [] : []).map((g) => ({ label: g.label, items: topicItems(g.messages, items) })).filter((g) => g.items.length);
   const peekList = shown.map((x) => copyId(x)).join("\n");
   useEffect(() => {
