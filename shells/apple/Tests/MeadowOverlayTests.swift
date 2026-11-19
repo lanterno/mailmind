@@ -602,6 +602,7 @@ final class MeadowOverlayTests: XCTestCase {
         XCTAssertEqual(MailboxToast.icon("Updated 3, 1 failed"), .alert)
         XCTAssertEqual(MailboxToast.icon("Archive undone"), .undo)
         XCTAssertEqual(MailboxToast.icon("Snoozed"), .clock)
+        XCTAssertEqual(MailboxToast.icon("Snoozed until tomorrow 8:00"), .clock)
         XCTAssertEqual(MailboxToast.icon("Notifications on"), .check)
     }
 

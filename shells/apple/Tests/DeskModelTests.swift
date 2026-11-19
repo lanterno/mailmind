@@ -46,9 +46,36 @@ final class DeskModelTests: XCTestCase {
         XCTAssertEqual(sent[0]["folder"], .string("INBOX"))
         XCTAssertNil(sent[0]["copies"])
         XCTAssertNil(sent[0]["undo_group"])
-        XCTAssertEqual(said, "Snoozed")
+        XCTAssertEqual(said, "Snoozed until \(SendTimes.words(1_763_200_000))", "until when, as the server set it")
         XCTAssertTrue(undoable)
         XCTAssertEqual(changed, 1)
+    }
+
+    func testASnoozeAwayFromTheMessageOnScreenSaysWhichItWas() async {
+        routes.answer("POST", "/api/snooze", API.Snoozed(count: 1, ok: true, until: 1_763_200_000))
+        let model = AttentionModel(link: link, notices: notices)
+        model.naming = { copies in copies == [DeskFixture.ada] ? "Fabric samples" : nil }
+        await model.snooze([DeskFixture.ada], .preset(.tomorrow))
+        XCTAssertEqual(said, "Snoozed “Fabric samples” until \(SendTimes.words(1_763_200_000))")
+    }
+
+    func testSnoozeWordsSayUntilWhenAndWhich() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "Europe/Berlin"))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 19, hour: 10)))
+        let tomorrow = Int(try XCTUnwrap(calendar.date(byAdding: .hour, value: 23, to: now)).timeIntervalSince1970)
+        let when = SendTimes.words(tomorrow, now: now, calendar: calendar)
+        XCTAssertTrue(when.hasPrefix("tomorrow"))
+        XCTAssertEqual(SnoozeWords.said(until: tomorrow, count: 1, subject: nil, now: now, calendar: calendar),
+                       "Snoozed until \(when)")
+        XCTAssertEqual(SnoozeWords.said(until: tomorrow, count: 3, subject: "Ignored", now: now, calendar: calendar),
+                       "Snoozed 3 until \(when)")
+        XCTAssertEqual(SnoozeWords.said(until: tomorrow, count: 1, subject: "Design review", now: now, calendar: calendar),
+                       "Snoozed “Design review” until \(when)")
+        let long = String(repeating: "Quilt ", count: 20)
+        let said = SnoozeWords.said(until: tomorrow, count: 1, subject: long, now: now, calendar: calendar)
+        XCTAssertTrue(said.contains("…” until"), "a long subject is cut short: \(said)")
+        XCTAssertEqual(MailboxToast.icon(said), .clock, "and every one keeps the clock")
     }
 
     func testSnoozingSeveralIsOneRequestUnderOneUndoGroup() async {
