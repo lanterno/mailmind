@@ -13,79 +13,97 @@ extension FocusedValues {
 struct MailboxCommands: Commands {
     @FocusedValue(\.mailbox) private var mailbox
     @FocusedValue(\.messageWindow) private var window
+    @FocusedValue(\.mailWriting) private var writing
 
     var body: some Commands {
-        CommandMenu("Message") {
-            ComposeMessageItems()
-            Divider()
-            let verbs = MessageMenuVerbs(window: window, mailbox: mailbox)
-            Button("Archive") { verbs.file(.archive) }
-                .keyboardShortcut("a", modifiers: [.control, .command])
-                .disabled(!verbs.acting)
-            // ⌘⌫ deletes text while a field is being typed in, so it deletes mail only from the list or the message.
-            Button("Delete") { verbs.file(.trash) }
-                .keyboardShortcut(.delete, modifiers: .command)
-                .disabled(!verbs.acting || verbs.typing)
-            Button("Mark as Junk") { verbs.file(.junk) }
-                .keyboardShortcut("j", modifiers: [.shift, .command])
-                .disabled(!verbs.acting)
-            Button("Move To…") { verbs.askMove() }
-                .keyboardShortcut("m", modifiers: [.shift, .command])
-                .disabled(!verbs.acting)
-            Divider()
-            // Each says what it will do to the rows as they stand now, and does that.
-            let marks = Marks(verbs.shown)
-            Button(marks.unread ? "Mark as Read" : "Mark as Unread") { verbs.setSeen(marks.unread) }
-                .keyboardShortcut("u", modifiers: [.shift, .command])
-                .disabled(!verbs.acting)
-            Button(marks.unstars ? "Unstar" : "Star") { verbs.star(!marks.unstars) }
-                .keyboardShortcut("l", modifiers: [.shift, .command])
-                .disabled(!verbs.acting)
-            Divider()
-            DeskMessageItems()
-            Divider()
-            Button("Next Unread") { mailbox?.moveUnread(by: 1) }
-                .keyboardShortcut(.downArrow, modifiers: [.option, .command])
-                .disabled(mailbox == nil)
-            Button("Previous Unread") { mailbox?.moveUnread(by: -1) }
-                .keyboardShortcut(.upArrow, modifiers: [.option, .command])
-                .disabled(mailbox == nil)
-            Divider()
-            let shown = mailbox?.shownRows ?? []
-            let sender = shown.count == 1 ? shown[0].fromAddr : nil
-            Button("About This Sender") { if let sender { mailbox?.contact = sender } }
-                .disabled(sender?.isEmpty ?? true)
-            Button("Search Mail from This Sender") {
-                if let sender { mailbox?.app?.place = .search(Search(q: "from:\(sender)")) }
-            }
-            .disabled(sender?.isEmpty ?? true)
-        }
-        CommandMenu("Mailbox") {
-            Group {
-                Button("All Inboxes") { mailbox?.app?.place = .allInboxes }
-                    .keyboardShortcut("0", modifiers: .command)
-                ForEach(Array(Self.roles.enumerated()), id: \.offset) { index, role in
-                    Button(role.title) { mailbox?.go(role: role.role) }
-                        .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
-                }
-                Divider()
-                ForEach([VirtualFolder.snoozed, .waiting, .replyLater], id: \.self) { virtual in
-                    Button(virtual.title) { mailbox?.go(virtual) }
-                }
-                Button("Documents") { mailbox?.app?.place = .documents }
-                Divider()
-                Button("Search") { mailbox?.searchFocus = true }
-                    .keyboardShortcut("f", modifiers: .command)
-                Button("Save Search as View…") {
-                    if let q = mailbox?.app?.place?.search?.q { mailbox?.savingView = q }
-                }
-                .disabled(mailbox?.app?.place?.search == nil || mailbox?.app?.place?.search?.lane != nil
-                    || mailbox?.onSavedView == true)
-                Button("Command Palette…") { mailbox?.paletteOpen = true }
-                    .keyboardShortcut("k", modifiers: .command)
-            }
+        CommandMenu("Message") { MessageMenuItems(mailbox: mailbox, window: window, writing: writing) }
+        CommandMenu("Mailbox") { MailboxMenuItems(mailbox: mailbox) }
+    }
+}
+
+/// The Message menu's items for the window in front: the mail window's mailbox or a message's own window, and what
+/// it can write. A view of its own, so a test draws it as AppKit's menu and presses its keys.
+struct MessageMenuItems: View {
+    let mailbox: Mailbox?
+    let window: MessageWindowVerbs?
+    let writing: MailWriting?
+
+    var body: some View {
+        ComposeMessageItems(writing: writing)
+        Divider()
+        let verbs = MessageMenuVerbs(window: window, mailbox: mailbox)
+        Button("Archive") { verbs.file(.archive) }
+            .keyboardShortcut("a", modifiers: [.control, .command])
+            .disabled(!verbs.acting)
+        // ⌘⌫ deletes text while a field is being typed in, so it deletes mail only from the list or the message.
+        Button("Delete") { verbs.file(.trash) }
+            .keyboardShortcut(.delete, modifiers: .command)
+            .disabled(!verbs.acting || verbs.typing)
+        Button("Mark as Junk") { verbs.file(.junk) }
+            .keyboardShortcut("j", modifiers: [.shift, .command])
+            .disabled(!verbs.acting)
+        Button("Move To…") { verbs.askMove() }
+            .keyboardShortcut("m", modifiers: [.shift, .command])
+            .disabled(!verbs.acting)
+        Divider()
+        // Each says what it will do to the rows as they stand now, and does that.
+        let marks = Marks(verbs.shown)
+        Button(marks.unread ? "Mark as Read" : "Mark as Unread") { verbs.setSeen(marks.unread) }
+            .keyboardShortcut("u", modifiers: [.shift, .command])
+            .disabled(!verbs.acting)
+        Button(marks.unstars ? "Unstar" : "Star") { verbs.star(!marks.unstars) }
+            .keyboardShortcut("l", modifiers: [.shift, .command])
+            .disabled(!verbs.acting)
+        Divider()
+        DeskMessageItems()
+        Divider()
+        Button("Next Unread") { mailbox?.moveUnread(by: 1) }
+            .keyboardShortcut(.downArrow, modifiers: [.option, .command])
             .disabled(mailbox == nil)
+        Button("Previous Unread") { mailbox?.moveUnread(by: -1) }
+            .keyboardShortcut(.upArrow, modifiers: [.option, .command])
+            .disabled(mailbox == nil)
+        Divider()
+        let shown = mailbox?.shownRows ?? []
+        let sender = shown.count == 1 ? shown[0].fromAddr : nil
+        Button("About This Sender") { if let sender { mailbox?.contact = sender } }
+            .disabled(sender?.isEmpty ?? true)
+        Button("Search Mail from This Sender") {
+            if let sender { mailbox?.app?.place = .search(Search(q: "from:\(sender)")) }
         }
+        .disabled(sender?.isEmpty ?? true)
+    }
+}
+
+/// The Mailbox menu's items: the places to go and search, on the mail window's mailbox.
+struct MailboxMenuItems: View {
+    let mailbox: Mailbox?
+
+    var body: some View {
+        Group {
+            Button("All Inboxes") { mailbox?.app?.place = .allInboxes }
+                .keyboardShortcut("0", modifiers: .command)
+            ForEach(Array(Self.roles.enumerated()), id: \.offset) { index, role in
+                Button(role.title) { mailbox?.go(role: role.role) }
+                    .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
+            }
+            Divider()
+            ForEach([VirtualFolder.snoozed, .waiting, .replyLater], id: \.self) { virtual in
+                Button(virtual.title) { mailbox?.go(virtual) }
+            }
+            Button("Documents") { mailbox?.app?.place = .documents }
+            Divider()
+            Button("Search") { mailbox?.searchFocus = true }
+                .keyboardShortcut("f", modifiers: .command)
+            Button("Save Search as View…") {
+                if let q = mailbox?.app?.place?.search?.q { mailbox?.savingView = q }
+            }
+            .disabled(mailbox?.app?.place?.search == nil || mailbox?.app?.place?.search?.lane != nil
+                || mailbox?.onSavedView == true)
+            Button("Command Palette…") { mailbox?.paletteOpen = true }
+                .keyboardShortcut("k", modifiers: .command)
+        }
+        .disabled(mailbox == nil)
     }
 
     /// The folders the Mailbox menu goes to on the account in front, as g then a letter does.

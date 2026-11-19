@@ -21,11 +21,18 @@ struct ReaderCommands: Commands {
                 .keyboardShortcut("p", modifiers: .command)
                 .disabled(tools == nil)
         }
-        CommandGroup(after: .textEditing) {
-            Button("Find in Message…") { tools?.find() }
-                .keyboardShortcut("f", modifiers: [.option, .command])
-                .disabled(tools == nil)
-        }
+        CommandGroup(after: .textEditing) { FindInMessageItem(tools: tools) }
+    }
+}
+
+/// Edit › Find in Message… for the reader in front. A view of its own, so a test draws it as AppKit's menu.
+struct FindInMessageItem: View {
+    let tools: ReaderTools?
+
+    var body: some View {
+        Button("Find in Message…") { tools?.find() }
+            .keyboardShortcut("f", modifiers: [.option, .command])
+            .disabled(tools == nil)
     }
 }
 #else

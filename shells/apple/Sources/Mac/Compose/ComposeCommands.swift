@@ -27,9 +27,10 @@ struct ComposeCommands: Commands {
     }
 }
 
-/// Reply, Reply All, Forward and Edit Draft, at the top of the mailbox's Message menu, each with the key Mail gives it.
+/// Reply, Reply All, Forward and Edit Draft, at the top of the mailbox's Message menu, each with the key Mail gives it,
+/// for what the window in front can write (its `mailWriting`).
 struct ComposeMessageItems: View {
-    @FocusedValue(\.mailWriting) private var writing
+    let writing: MailWriting?
 
     var body: some View {
             Button("Reply") {
