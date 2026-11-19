@@ -313,6 +313,44 @@ final class NewMailAlertsTests: XCTestCase {
         XCTAssertTrue(SystemNotifier.forThisProcess(["XCTestConfigurationFilePath": "x"]) is SystemNotifier.Silent)
         XCTAssertTrue(SystemNotifier.forThisProcess(["MAILMIND_MEASURE": "home"]) is SystemNotifier.Silent)
     }
+
+    /// A demo's run (`just apple demo`: a home and a keychain's stand-in of its own) is no person's: it never asks to
+    /// notify and never posts, as the person's MailMind, but keeps what it would have posted for a test to read.
+    func testADemoRunNeverAsksOrPostsAndKeepsWhatItWouldHave() async throws {
+        let home = FileManager.default.temporaryDirectory.appending(path: "mm-demo-\(UUID().uuidString)").path
+        for demo in [["MAILMIND_HOME": home, "MAILMIND_TEST_KEYCHAIN": home + "/keychain.json"],
+                     ["MAILMIND_HOME": home], ["MAILMIND_TEST_KEYCHAIN": home + "/keychain.json"]] {
+            XCTAssertFalse(CoreHome.isAPersonsRun(demo))
+            XCTAssertTrue(SystemNotifier.forThisProcess(demo) is SystemNotifier.Silent, "\(demo.keys.sorted())")
+        }
+        let quiet = try XCTUnwrap(SystemNotifier.forThisProcess(["MAILMIND_HOME": home]) as? SystemNotifier.Silent)
+        let alerts = NewMailAlerts(notifier: quiet, isActive: { false }, badge: { _ in }, announce: { _ in })
+        alerts.preferences = { F.preferences() }
+        alerts.name = { _ in "Ada" }
+        alerts.now = { F.at("2026-11-14T15:00:00Z") }
+        alerts.hasAccounts = { true }
+
+        alerts.askOnce()
+        let asked = await alerts.ask()
+        XCTAssertFalse(asked, "nobody is asked")
+        let allowed = await alerts.allowed()
+        XCTAssertEqual(allowed, false)
+        alerts.arrived(.init(account: "ada@example.test", folder: "INBOX", count: 2))
+        await until { !quiet.wouldHavePosted.isEmpty }
+        XCTAssertEqual(quiet.wouldHavePosted, [.init(id: "mailmind-ada@example.test", title: "New mail · Ada",
+                                                    body: "2 new messages", opens: nil)])
+    }
+
+    /// The quiet notifier keeps only the latest it would have posted, so a demo left running keeps no more.
+    func testTheQuietNotifierKeepsOnlyTheLatest() async {
+        let quiet = SystemNotifier.Silent()
+        for n in 0..<(SystemNotifier.Silent.keeps + 5) {
+            await quiet.post(id: "mailmind-\(n)", title: "New mail", body: "\(n)")
+        }
+        XCTAssertEqual(quiet.wouldHavePosted.count, SystemNotifier.Silent.keeps)
+        XCTAssertEqual(quiet.wouldHavePosted.first?.body, "5")
+        XCTAssertEqual(quiet.wouldHavePosted.last?.body, "\(SystemNotifier.Silent.keeps + 4)")
+    }
 }
 
 /// The status model's own logic: a change laid over the preferences, and when a sync asked for has ended.
