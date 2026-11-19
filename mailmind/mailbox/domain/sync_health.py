@@ -5,13 +5,17 @@ Trouble that may pass (Accounts says which: a connection lost or refused, a serv
 take a login for now) is what a sleep or a change of network leaves for a moment: it shows only once the next sync of the
 account has failed too, or once the first failure in a row is three minutes old. Any other, a password refused or a
 certificate changed, shows at once. A sync that works ends the run. A run may begin before any sync has failed, with a
-connection to the server that couldn't be made outside one (`heard`): it counts from then. The Rust core's
-`mm_mailbox::sync_health` is the same.
+connection to the server that couldn't be made outside one (`heard`): it counts from then.
+
+While a run of trouble that may pass lasts, the account's server is tried again every RETRY_SECONDS, so the sync that
+ends it comes within moments of the server answering again, not at the next round, minutes on. A try that fails changes
+nothing: it is no sync of the round's, and counts toward nothing. The Rust core's `mm_mailbox::sync_health` is the same.
 """
 from dataclasses import dataclass
 
 SHOWS_AFTER_ROUNDS = 2          # the failed syncs in a row at which trouble that may pass shows
 SHOWS_AFTER_SECONDS = 180       # the seconds since the first failure in a row at which it shows
+RETRY_SECONDS = 20              # the seconds between tries of an account's server while its trouble may pass
 
 
 @dataclass(frozen=True)

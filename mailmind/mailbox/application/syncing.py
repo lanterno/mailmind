@@ -12,6 +12,11 @@ on (`unreached`): the account shows as trying again, as after a sync that failed
 measures it runs now. It counts no failed sync: the next that fails is the run's first. One dropped connection that
 connects again at once logs in, and says nothing.
 
+While an account's trouble may pass, the background tries it again every `sync_health.RETRY_SECONDS` (`try_unreached`), so
+it says it synced within moments of its server answering again, rather than at the next round. A try is its sync, run on
+its own: one that fails changes nothing and says nothing, and counts no failed sync, so trouble shows as it would have,
+after the round's next sync or three minutes on.
+
 A sync that works after one of the account's failed, and a person's Retry, let go of the waits of the changes queued for its
 server (`server_back`, the commands' `release`): they go now, not minutes on.
 
@@ -95,11 +100,11 @@ class Syncing:
         """How the sync as a whole stands now."""
         return self._sync
 
-    def sync_accounts(self, emails: Collection[str] | None = None) -> int:
+    def sync_accounts(self, emails: Collection[str] | None = None, tries: Collection[str] = ()) -> int:
         """Sync the given account emails (or all when None). Emits realtime events. Caller
         must hold the _sync single-flight guard (sync_once / sync_guarded).
         An Inbox's first scan stores mail that was there before, so it is no new mail: it counts
-        none and says no new-mail."""
+        none and says no new-mail. Of `tries`, a sync that fails by trouble that may pass changes nothing (`try_unreached`)."""
         new = 0
         for a in self._accounts.accounts():
             if emails is not None and a["email"] not in emails:
@@ -135,15 +140,16 @@ class Syncing:
                     if flight.stopped:
                         self._forget(a["email"])
                         continue
+                    if a["email"] in tries and self._accounts.may_pass(e):
+                        # A try of a server that still doesn't answer: the account shows as it did, its run as it was.
+                        self._show_as_before(a["email"], before)
+                        continue
                     kind, now = self._accounts.error_kind(e), time.time()
                     run = sync_health.and_one_more(self._failing.get(a["email"]), type(e).__name__,
                                                    self._accounts.may_pass(e), now)
                     self._failing[a["email"]] = run
                     if not run.shows(now):     # it may pass: the account shows as it did, and the next sync says
-                        if before is None:
-                            self._status.pop(a["email"], None)
-                        else:
-                            self._status[a["email"]] = before
+                        self._show_as_before(a["email"], before)
                         log.info("an account's sync failed; it shows if the next fails too", exc_info=e)
                         sse.publish("sync-trouble", {"account": a["email"]})
                         continue
@@ -153,6 +159,40 @@ class Syncing:
                         self._store.record_sync_result(c, a["email"], False, type(e).__name__, kind)
                     log.warning("%(account)s: sync failed", {"account": a["email"]}, exc_info=e)
         return new
+
+
+    def _show_as_before(self, email: str, before: dict[str, str] | None) -> None:
+        """The account shows as it did before a sync whose failure may pass."""
+        if before is None:
+            self._status.pop(email, None)
+        else:
+            self._status[email] = before
+
+
+    def try_unreached(self) -> None:
+        """Try again each account whose syncs fail by trouble that may pass: its sync, on its own. One that works ends the
+        trouble as any sync that works does; one that fails changes nothing (`sync_accounts`). Nothing else a round does goes
+        with it: no snooze wakes, no folder is warmed, and the round's last end stays as it was. A sync running now says how
+        each went, so a try waits for none; one asked for while the try ran goes after it."""
+        trying = frozenset(email for email, run in list(self._failing.items()) if run.passing)
+        if not trying:
+            return
+        with self._sync_lock:
+            if self._sync["running"]:
+                return
+            self._sync["running"] = True
+        try:
+            new = self.sync_accounts(trying, tries=trying)
+        finally:
+            with self._sync_lock:
+                asked = self._sync_asked[:]
+                self._sync_asked.clear()
+                self._sync["running"] = False
+        if new:
+            self._folders.invalidate()
+            self._kick("assess")
+        if asked:
+            self.sync_guarded(sync_plan.asked_again(asked))
 
 
     def unreached(self, email: str, e: BaseException) -> None:

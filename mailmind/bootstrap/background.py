@@ -4,6 +4,7 @@ import time
 from mailmind.bootstrap import accounts, assistant, attention, compose, curation, mailbox
 from mailmind.bootstrap.assistant import answers
 from mailmind.bootstrap.mailbox import store
+from mailmind.mailbox.domain import sync_health
 from mailmind.platform import environment, profile
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.workers import scheduler
@@ -75,6 +76,8 @@ def schedule(jobs):
     if nosync():
         return
     jobs.add("sync", mailbox.syncing.sync_rounds(), every=SYNC_INTERVAL, first=0)
+    jobs.add("retry", mailbox.syncing.try_unreached, every=sync_health.RETRY_SECONDS,   # a server that didn't answer, tried
+             first=sync_health.RETRY_SECONDS)                                         # again while its trouble may pass
     jobs.add("draft-push", compose.drafts.push_round, every=compose.PUSH_TICK, first=5)    # saves to their servers
     jobs.add("assess", assistant.assessments.round, every=ASSESS_INTERVAL, first=20)         # triage; a sync with new mail kicks it
     jobs.add("backfill", mailbox.syncing.backfill_round, every=600, first=45)              # old mail, full-text searchable
