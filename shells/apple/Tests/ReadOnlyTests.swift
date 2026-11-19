@@ -290,6 +290,70 @@ final class ReadOnlyTests: XCTestCase {
         }
     }
 
+    /// Closed with stray text left in To, which isn't an address and won't save: the toast says why, and that the
+    /// autosave before it is kept on this Mac; that save holds all of it but the stray text, so the toast goes by
+    /// itself. Edit brings back the message as it was typed, the stray text and all.
+    func testACloseThatCantSaveSaysWhyAndWhatTheAutosaveKept() async throws {
+        let composing = Composing()
+        let routes = FakeRoutes()
+        routes.answer(API.Post.Draft.path) { body in
+            if body["to"]?.strings?.contains("bo") == true { throw FakeRoutes.problem(400, "Invalid address: bo") }
+            return #"{"ok": true, "draft_id": 41, "version": 1, "message_id": "<d@example.test>", "pushed": false}"#
+        }
+        composing.use(routes, digest: Fixture.digest(readOnly: true))
+        var windows: [UUID] = []
+        composing.openWindow = { windows.append($0) }
+        var seed = ComposeSeed()
+        seed.to = ["cy@example.test"]
+        seed.subject = "Plans"
+        let composer = try XCTUnwrap(composing.open(seed))
+        composer.setBody("Thursday works.", selection: NSRange(location: 15, length: 0))
+        _ = await composer.save(silent: true, takeTyped: false, autosave: true).value
+        let at = try XCTUnwrap(composer.savedAt).formatted(date: .omitted, time: .shortened)
+        composer.setTyped(.to, "bo")
+        composer.close()
+
+        await eventually("the close's failure said") { composing.float != nil }
+        XCTAssertEqual(composing.float, .failed("Your message couldn’t be saved",
+                                                detail: "“bo” isn’t a valid address. What was saved at \(at) is kept on this Mac."))
+        XCTAssertEqual(composing.floatLife, Composing.offersSeconds, "the autosave holds the rest: it goes by itself")
+
+        composing.editFailed()
+        XCTAssertNil(composing.float)
+        let back = try XCTUnwrap(windows.last.flatMap { composing.composers[$0] })
+        XCTAssertEqual(back.to.map(\.value), ["cy@example.test", "bo"], "as typed, the stray text a chip to fix")
+        XCTAssertTrue(back.to.last?.bad == true)
+        XCTAssertTrue(back.body.hasPrefix("Thursday works."))
+        XCTAssertEqual(back.subject, "Plans")
+        back.close(force: true)
+    }
+
+    /// A close that can't save, with words no save kept: the toast says nothing was kept and stays until Edit or
+    /// Dismiss, as the page's does. Out of read only, what was kept is in Drafts.
+    func testACloseThatCantSaveAndKeptNothingStays() async throws {
+        let composing = Composing()
+        let routes = FakeRoutes()
+        routes.answer(API.Post.Draft.path) { _ in throw FakeRoutes.problem(502, "The server is away") }
+        composing.use(routes, digest: Fixture.digest())
+        composing.openWindow = { _ in }
+        var seed = ComposeSeed()
+        seed.to = ["cy@example.test"]
+        let composer = try XCTUnwrap(composing.open(seed))
+        composer.setBody("Thursday works.", selection: NSRange(location: 15, length: 0))
+        composer.close()
+
+        await eventually("the close's failure said") { composing.float != nil }
+        XCTAssertEqual(composing.float, .failed("Your message couldn’t be saved",
+                                                detail: "The server is away. Nothing of it was kept yet: Edit brings it back."))
+        XCTAssertEqual(composing.floatLife, 0, "nothing kept: it stays")
+        composing.dismissFloat()
+
+        let earlier = Date(timeIntervalSince1970: 1_800_000_000)
+        let time = earlier.formatted(date: .omitted, time: .shortened)
+        XCTAssertEqual(Composing.unsavedWords(.init(why: nil, keptAt: earlier, keptAllBut: false), readOnly: false),
+                       "What was saved at \(time) is in Drafts.")
+    }
+
     func testADiscardReadOnlyTurnsDownKeepsTheComposerOpenWithItsWords() async {
         let routes = FakeRoutes()
         routes.answer(API.Post.Draft.path) { body in
