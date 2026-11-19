@@ -669,7 +669,7 @@ final class MailboxGoingTests: XCTestCase {
         XCTAssertNil(app.list, "the desk's screens read what they show themselves")
         XCTAssertEqual(mailbox.title, "Today’s Brief")
         app.place = .desk(.screener(account: Fixture.ada))
-        XCTAssertEqual(mailbox.title, "Screener")
+        XCTAssertEqual(mailbox.title, "At the gate")
     }
 
     func testTheSidebarReadsTheAccountsFoldersLabelsAndViews() async {

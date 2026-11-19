@@ -468,4 +468,12 @@ final class AppStatusTests: XCTestCase {
         XCTAssertEqual(Guide.steps(ai: false, singleKeys: false).map(\.id), ["brief", "rail", "palette", "screener"])
         XCTAssertFalse(Guide.steps(ai: false, singleKeys: false)[1].text.contains("j and k"))
     }
+
+    func testTheGuideCallsTheGateWhatTheRailCallsIt() throws {
+        let gate = try XCTUnwrap(Guide.steps(ai: true, singleKeys: true).first { $0.id == "screener" })
+        XCTAssertEqual(gate.title, "At the gate", "as the rail says it")
+        XCTAssertFalse(gate.title.contains("Screener") || gate.text.contains("Screener"), "one name for one place")
+        XCTAssertTrue(gate.text.contains("Let in") && gate.text.contains("Screen out"), "and the gate's own buttons")
+        XCTAssertEqual(DeskPlace.screener(account: "ada@example.test").title, "At the gate", "and the window's title")
+    }
 }
