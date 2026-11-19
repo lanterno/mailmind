@@ -278,9 +278,9 @@ class Said:
 
 
 class Week:
-    """The Mail port as a weekly review reads it: the week's counts, the mail that needs the person (`needs`, as
-    needs_you_rows answers) and the threads they wait on (`waiting`, as awaited_threads does), the invites in the mail, and
-    where each message's copy is now (`copies`, by key). With `calendar_down` the invites can't be read."""
+    """The Mail port as a weekly review reads it: the week's counts, all the mail that needs the person (`needs`, the first
+    of which needs_you_rows answers) and all the threads they wait on (`waiting`, as awaited_threads does), the invites in
+    the mail, and where each message's copy is now (`copies`, by key). With `calendar_down` the invites can't be read."""
 
     def __init__(self):
         self.sent, self.received, self.buckets, self.replylater, self.cleaned, self.handled = 0, 0, {}, 0, 0, 0
@@ -298,8 +298,14 @@ class Week:
     def needs_you_rows(self, c, accounts, n):
         return self.needs[:n]
 
+    def needs_you_count(self, c, accounts):
+        return len(self.needs)
+
     def awaited_threads(self, c, accounts, n):
         return self.waiting[:n]
+
+    def awaited_count(self, c, accounts):
+        return len(self.waiting)
 
     def replylater_due(self, c, accounts):
         return self.replylater

@@ -34,9 +34,9 @@ IO = {"sqlite3", "smtplib", "imaplib", "socket", "ssl", "http", "subprocess", "u
 STORED_MAIL = {
     "answering", "any_copy", "brief_rows", "conversation_rows", "copy_in_folder", "copy_now", "delete_by_uids", "delete_message",
     "delta_rows", "draft_candidates", "get_body", "get_message", "get_message_by_key", "get_message_by_msgid", "get_uidvalidity",
-    "handled_since", "message_stamp", "message_to_reply_to", "needs_you_rows", "queue_flags", "received_by_bucket",
-    "received_since", "sender_recent", "sender_stats", "sent_since", "set_list_unsub", "set_local_flags", "thread_anchor_pk",
-    "thread_stamps",
+    "handled_since", "message_stamp", "message_to_reply_to", "needs_you_count", "needs_you_rows", "queue_flags",
+    "received_by_bucket", "received_since", "sender_recent", "sender_stats", "sent_since", "set_list_unsub", "set_local_flags",
+    "thread_anchor_pk", "thread_stamps",
 }
 
 
@@ -89,7 +89,8 @@ def test_the_assistants_ports_only_read():
     from mailmind.bootstrap import assistant
     allowed = {"_Mail": {"fetch_body",                                 # fills a local cache, and writes to no server
                          "copy_now", "accounts", "get_message", "any_copy", "for_asking", "brief_rows", "delta_rows",
-                         "sent_since", "received_since", "received_by_bucket", "needs_you_rows", "awaited_threads",
+                         "sent_since", "received_since", "received_by_bucket", "needs_you_rows", "needs_you_count",
+                         "awaited_threads", "awaited_count",
                          "replylater_due", "senders_cleaned", "draft_candidates", "thread_stamps", "message_stamp",
                          "thread_anchor_pk", "conversation_rows", "message_to_reply_to",
                          "sender_recent", "sender_stats", "screener_items", "handled_since", "events_from",

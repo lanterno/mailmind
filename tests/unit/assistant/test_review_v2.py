@@ -104,6 +104,20 @@ def test_the_model_is_told_how_many(reviews, model, week):
     assert "Filed away: 1" in model.prompt
 
 
+def test_its_numbers_count_all_that_needs_you_and_all_you_wait_on_and_its_lists_hold_the_first(reviews, model, week):
+    """More of each than a list holds: the numbers, the prose and the model say how many there are in all."""
+    week.needs = [{"message_key": n, "folder": "INBOX", "uid": n, "account": w.ADA, "thread_id": f"t{n}", "from_name": f"Sender {n}",
+                   "from_addr": None, "subject": f"Asks {n}", "importance": 5, "action": ""} for n in range(1, 14)]
+    week.waiting = [{"account": w.ADA, "thread_id": f"w{n}", "message_key": None, "folder": None, "uid": None, "subject": None,
+                     "recipients": None, "first_sent_ts": n} for n in range(1, 12)]
+    model.replies = [{"narrative": "test", "next": []}]                  # too short: the numbers say it themselves
+    r = reviews.build({w.ADA})
+    assert (r["stats"]["needs_you"], r["stats"]["waiting_on"], len(r["needs"]), len(r["waiting"])) == (13, 11, 8, 8)
+    assert r["narrative"].endswith("13 still need a reply from you and you're waiting to hear back on 11.")
+    assert "Still need your reply: 13\nWaiting to hear back: 11\n" in model.prompt
+    assert model.prompt.count(" — Asks ") == 8
+
+
 def test_a_calendar_that_cant_be_read_costs_only_its_mention(reviews, model, week):
     week.calendar_down = True
     r = reviews.build({w.ADA})
