@@ -507,6 +507,24 @@ final class AppStatusTests: XCTestCase {
         XCTAssertFalse(Guide.steps(ai: false, singleKeys: false)[1].text.contains("j and k"))
     }
 
+    /// The rail first shows folded to icons, with no sidebar to point at: the guide says where the accounts and folders
+    /// stand and how their names show, by the button and, where single keys are on, by [.
+    func testTheGuideSaysWhereTheRailIsAsItFirstShows() throws {
+        for singleKeys in [true, false] {
+            let rail = try XCTUnwrap(Guide.steps(ai: false, singleKeys: singleKeys).first { $0.id == "rail" })
+            XCTAssertFalse(rail.text.contains("in the sidebar"), rail.text)
+            XCTAssertTrue(rail.text.contains("down the left"), rail.text)
+            XCTAssertTrue(rail.text.contains("The sidebar button at the top"), rail.text)
+            XCTAssertTrue(rail.text.contains("folds them to icons"), rail.text)
+            XCTAssertEqual(rail.text.contains("or ["), singleKeys, rail.text)
+        }
+        let suite = "guide-rail-\(UUID().uuidString)"
+        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        XCTAssertFalse(try XCTUnwrap(UserDefaults(suiteName: suite)).bool(forKey: MeadowShell.railKey),
+                       "as it first shows: folded")
+        XCTAssertFalse(MeadowShell(defaults: try XCTUnwrap(UserDefaults(suiteName: suite))).railOpen)
+    }
+
     func testTheGuideCallsTheGateWhatTheRailCallsIt() throws {
         let gate = try XCTUnwrap(Guide.steps(ai: true, singleKeys: true).first { $0.id == "screener" })
         XCTAssertEqual(gate.title, "At the gate", "as the rail says it")
