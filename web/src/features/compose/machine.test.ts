@@ -876,6 +876,88 @@ describe("from the mail", () => {
     expect(d.autoCc).toEqual(["cy@example.test"]);
   });
 
+  describe("a message with a reply saved to it", () => {
+    const LUNCH = { key: 5, folder: "INBOX", uid: 2 };
+    const saved = (reply_draft: Json) => async (p: string) => (p.startsWith("/api/message/body") ? { ...mail, reply_draft } : { ok: true });
+    const reopened = { ok: true, draft_id: 4, version: 3, account: FROM, mode: "reply", subject: "Re: Lunch", to: ["bea@example.test"], cc: [], bcc: [], text: "Thursday suits me.", tail_text: "\n\nsoon?", in_reply_to: "<l@b>", references: "<l@b>", original_key: 5, participants: [], files: [] };
+
+    it("opens it with its words, by its id, on Reply and on Reply All, and saves nothing until an edit", async () => {
+      for (const all of [false, true]) {
+        const { m, answer, posted } = setup({ get: saved({ draft_id: 4, in_drafts: null, more: 0 }) });
+        answer("/api/draft/resume", () => reopened);
+        const c = (await m.reply(LUNCH, all))!;
+        expect(posted("/api/draft/resume")).toEqual([{ draft_id: 4 }]);
+        expect([c.draftId, c.version, c.body, c.origKey, c.dirty, c.note]).toEqual([4, 3, "Thursday suits me.", 5, false, ""]);
+        expect(c.to.map((x) => x.v)).toEqual(["bea@example.test"]);
+        expect(posted("/api/draft")).toEqual([]);
+      }
+    });
+
+    it("opens another app's by its copy in Drafts, and says how many more there are", async () => {
+      const { m, answer, posted, said } = setup({ get: saved({ draft_id: null, in_drafts: { key: 8, folder: "Drafts", uid: 3 }, more: 2 }) });
+      answer("/api/draft/resume", () => reopened);
+      const c = (await m.reply(LUNCH))!;
+      expect(posted("/api/draft/resume")).toEqual([{ key: 8, folder: "Drafts", uid: 3 }]);
+      expect(c.note).toBe("There are 2 more draft replies to this message in Drafts.");
+      expect(said).toContain(c.note);
+    });
+
+    it("starts a new reply when the saved one has gone since", async () => {
+      const changed = vi.fn();
+      const { m, answer } = setup({ get: saved({ draft_id: 4, in_drafts: null, more: 0 }), draftsChanged: changed });
+      answer("/api/draft/resume", () => { throw Object.assign(new Error("That draft is no longer in Drafts."), { status: 404 }); });
+      const c = (await m.reply(LUNCH))!;
+      expect([c.draftId, c.subject, c.origKey]).toEqual([null, "Re: Lunch", 5]);
+      expect(changed).toHaveBeenCalled();
+    });
+
+    it("says it is waiting in Drafts when it can't open, and never opens an empty reply over it", async () => {
+      const { m, answer, toasts, said } = setup({ get: saved({ draft_id: 4, in_drafts: null, more: 0 }) });
+      answer("/api/draft/resume", () => { throw Object.assign(new Error("Couldn’t load this draft from the mail server. Try again in a moment."), { status: 503 }); });
+      answer("/api/draft/resume", () => { throw Object.assign(new Error("That draft has reached the server. Open it from Drafts."), { status: 409 }); });
+      expect(await m.reply(LUNCH)).toBeNull();
+      expect(await m.reply(LUNCH)).toBeNull();
+      expect(m.view.get()).toBeNull();
+      const words = ["A draft reply to this message is waiting in Drafts. Couldn’t load this draft from the mail server. Try again in a moment.", "A draft reply to this message is waiting in Drafts. Open it from there."];
+      expect(toasts).toEqual(words);
+      expect(said).toEqual(words);
+    });
+
+    it("waits for the reply just closed to be saved before asking what answers the message", async () => {
+      const gate = deferred<Json>();
+      const asked: string[] = [];
+      const { m, env, answer, posted } = setup({ get: async (p: string) => { asked.push(p); return p.startsWith("/api/message/body") ? { ...mail, reply_draft: { draft_id: 7, in_drafts: null, more: 0 } } : { ok: true }; } });
+      m.open({ mode: "reply", origKey: 5, to: ["bea@example.test"], subject: "Re: Lunch" });
+      m.edit("body", "Thursday suits me.");
+      vi.mocked(env.post).mockImplementationOnce(() => gate.promise);
+      m.close();
+      answer("/api/draft/resume", () => ({ ...reopened, draft_id: 7 }));
+      const opening = m.reply(LUNCH);
+      await flush();
+      expect(asked.filter((p) => p.startsWith("/api/message/body"))).toEqual([]);
+      gate.resolve({ ok: true, draft_id: 7, version: 1 });
+      const c = (await opening)!;
+      expect(c.draftId).toBe(7);
+      expect(posted("/api/draft/resume")).toEqual([{ draft_id: 7 }]);
+    });
+
+    it("leaves it be for a quick reply's line, which starts one of its own", async () => {
+      const { m, posted } = setup({ get: saved({ draft_id: 4, in_drafts: null, more: 0 }), ai: () => false });
+      await m.quickReply(LUNCH, "thanks");
+      expect(posted("/api/draft/resume")).toEqual([]);
+      expect(m.view.get()!.draftId).toBeNull();
+    });
+
+    it("opens it in place of the reply AI wrote ahead, whose words never replace yours", async () => {
+      const asked: string[] = [];
+      const { m, answer } = setup({ get: async (p: string) => { asked.push(p); return p.startsWith("/api/message/body") ? { ...mail, reply_draft: { draft_id: 4, in_drafts: null, more: 0 } } : { status: "ready", body: "AI words." }; } });
+      answer("/api/draft/resume", () => reopened);
+      await m.openDraftAhead(LUNCH, () => {});
+      expect(m.view.get()!.body).toBe("Thursday suits me.");
+      expect(asked.some((p) => p.startsWith("/api/ai/draft-ahead"))).toBe(false);
+    });
+  });
+
   it("refuses to reopen a draft while one is open, and says so", async () => {
     const { m, toasts, posted } = setup();
     m.open();
