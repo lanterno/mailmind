@@ -42,7 +42,7 @@ struct AccountForm: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(EdgeInsets(top: 18, leading: 18, bottom: 12, trailing: 18))
                 .accessibilityAddTraits(.isHeader)
-            ScrollView {
+            FootInSight(change: Foot(tested: tested, problem: problem)) {
                 VStack(spacing: 0) {
                     row("Email") {
                         VStack(alignment: .leading, spacing: 4) {
@@ -95,7 +95,6 @@ struct AccountForm: View {
                     }
                 }
             }
-            .scrollContentBackground(.hidden)
 
             if let tested {
                 TestedWords(tested: draft.inSheet(tested))
@@ -155,6 +154,12 @@ struct AccountForm: View {
         .task(id: draft.presetQuery) { await askPreset() }
         .background { ComposePaper() }
         .presentationBackground { ComposePaper() }
+    }
+
+    /// What stands under the form and takes room from it: a test's words, and a problem.
+    private struct Foot: Equatable {
+        let tested: Tested?
+        let problem: String
     }
 
     /// A field's row (`.fld`): its name in a column of its own, what it holds beside it, a hairline above.
@@ -451,6 +456,31 @@ enum AccountFormField: Hashable {
         case .appPassword?, .password?: .password
         case .server?: .server
         case nil: nil
+        }
+    }
+}
+
+/// A form that scrolls, and scrolls to its foot whenever `change` does: what then shows under it takes room from it
+/// where its sheet can't grow past the window it hangs on, and its last row stays whole, never cut in two.
+struct FootInSight<Change: Equatable, Content: View>: View {
+    let change: Change
+    @ViewBuilder let content: () -> Content
+
+    private static var foot: String { "foot" }
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 0) {
+                    content()
+                    Color.clear.frame(height: 0).id(Self.foot)
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .onChange(of: change) {
+                // Once the room it lost is laid out.
+                DispatchQueue.main.async { proxy.scrollTo(Self.foot, anchor: .bottom) }
+            }
         }
     }
 }
