@@ -165,12 +165,13 @@ extension Notifier {
     }
 }
 
-/// The system's notification center. A test, a measure run or a demo's smoke run gets one that never asks and never
-/// posts: none has a person to answer, and a test bundle has no app to post as.
+/// The system's notification center, in a person's run only. A run that isn't a person's (`CoreHome.isAPersonsRun`:
+/// a demo, a test, a measure run) gets one that never asks and never posts: it has no person to answer, every build
+/// is `io.github.lanterno.mailmind`, so it would ask and post as the person's own MailMind, and a test bundle has no
+/// app to post as.
 struct SystemNotifier: Notifier {
     static func forThisProcess(_ environment: [String: String] = ProcessInfo.processInfo.environment) -> any Notifier {
-        let quiet = ["MAILMIND_MEASURE", "XCTestConfigurationFilePath", "XCTestSessionIdentifier"]
-        if quiet.contains(where: { environment[$0] != nil }) || Bundle.main.bundleIdentifier == nil {
+        if !CoreHome.isAPersonsRun(environment) || Bundle.main.bundleIdentifier == nil {
             return Silent()
         }
         return SystemNotifier()
@@ -204,11 +205,36 @@ struct SystemNotifier: Notifier {
                                                                                 trigger: nil))
     }
 
-    /// Never asks, never posts.
-    struct Silent: Notifier {
+    /// Never asks, never posts: it only keeps the latest it would have posted, in memory, for a test to read.
+    final class Silent: Notifier, @unchecked Sendable {
+        struct Post: Equatable, Sendable {
+            let id: String
+            let title: String
+            let body: String
+            let opens: MailCopy?
+        }
+
+        /// How many it keeps: a demo left running a day keeps no more.
+        static let keeps = 20
+        private let lock = NSLock()
+        private var kept: [Post] = []
+
+        /// What it would have posted, oldest first.
+        var wouldHavePosted: [Post] { lock.withLock { kept } }
+
         func allowed() async -> Bool? { false }
         func ask() async -> Bool { false }
-        func post(id: String, title: String, body: String) async {}
+
+        func post(id: String, title: String, body: String) async {
+            await post(id: id, title: title, body: body, opens: nil)
+        }
+
+        func post(id: String, title: String, body: String, opens: MailCopy?) async {
+            lock.withLock {
+                kept.append(Post(id: id, title: title, body: body, opens: opens))
+                kept.removeFirst(max(0, kept.count - Self.keeps))
+            }
+        }
     }
 }
 
