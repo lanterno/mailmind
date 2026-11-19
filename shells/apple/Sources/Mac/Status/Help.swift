@@ -180,10 +180,12 @@ enum Guide {
         var steps = [
             Step(id: "brief", symbol: "sun.max", title: String(localized: "Today’s brief"),
                  text: String(localized: "The brief says what needs you, what’s safe to file, and what’s coming up.")),
+            // Where they are whatever the rail shows: folded to icons, as it first is, with their names, or in the
+            // drawer of a narrow window, each of which the sidebar button gives.
             Step(id: "rail", symbol: "sidebar.left", title: String(localized: "Folders, and your accounts"),
                  text: singleKeys
-                    ? String(localized: "Your accounts and folders are in the sidebar. Open a message and read it beside the list; j and k move through the list.")
-                    : String(localized: "Your accounts and folders are in the sidebar. Open a message and read it beside the list.")),
+                    ? String(localized: "Your accounts and folders are down the left. The sidebar button at the top, or [, shows their names or folds them to icons. Open a message and read it beside the list; j and k move through the list.")
+                    : String(localized: "Your accounts and folders are down the left. The sidebar button at the top shows their names or folds them to icons. Open a message and read it beside the list.")),
             Step(id: "palette", symbol: "command", title: String(localized: "⌘K opens every command"),
                  text: String(localized: "Folders, filing, settings and more, by name. Press ⌘K any time, and start typing.")),
         ]
