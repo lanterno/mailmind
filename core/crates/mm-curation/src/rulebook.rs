@@ -175,9 +175,32 @@ pub fn token_of(raw: &str) -> String {
     lower(strip(raw)).into_owned()
 }
 
-/// Whether a rule could name this: an address or a domain, and a bare word is neither.
+/// Whether a rule could name this: an address or a domain, and a bare word is neither. Removing one asks only this, so
+/// a rule kept before `names_a_sender` held them to more still goes.
 pub fn is_token(token: &str) -> bool {
     !token.is_empty() && (token.contains('.') || token.contains('@'))
+}
+
+/// What parts an address, or quotes or comments in one.
+const SETS_APART: &[char] = &['@', '<', '>', '(', ')', '[', ']', ',', ';', ':', '"', '\\'];
+
+/// Some of an address or a domain: not empty, with no space, control character or mark that sets parts apart.
+fn plain(part: &str) -> bool {
+    !part.is_empty() && !part.chars().any(|c| c.is_whitespace() || c.is_control() || SETS_APART.contains(&c))
+}
+
+fn domain_of_at_least(name: &str, labels: usize) -> bool {
+    name.split('.').count() >= labels && name.split('.').all(plain)
+}
+
+/// Whether a keep or block rule can name this: one address (`name@host`), or one domain with a dot in it, and nothing
+/// beside it. A number pasted before an address, two addresses or a name in brackets is neither, and a rule on it
+/// would never match a sender (`rulebook.names_a_sender`).
+pub fn names_a_sender(token: &str) -> bool {
+    match token.rsplit_once('@') {
+        Some((local, host)) => plain(local) && domain_of_at_least(host, 1),
+        None => domain_of_at_least(token, 2),
+    }
 }
 
 pub fn is_domain(token: &str) -> bool {

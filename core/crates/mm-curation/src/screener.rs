@@ -11,11 +11,14 @@ use serde_json::{Value, json};
 
 use crate::classifier::{by_rule, classify};
 use crate::ports::{AuditTrail, Filing, Mailboxes, Reclassified, RuleBook, SenderMail};
-use crate::rulebook::{VERDICTS, decided, domain_of, is_token, token_of};
+use crate::rulebook::{VERDICTS, decided, domain_of, is_token, names_a_sender, token_of};
 use crate::text::lower;
 
 /// The most the queue lists, of however many are left to decide on.
 pub const SHOWN: usize = 100;
+/// What a rule on anything else is refused with, which the page and the Mac app show as said.
+pub const NOT_A_SENDER: &str =
+    "A rule names one address, such as name@example.com, or one domain, such as example.com.";
 
 #[derive(Debug)]
 pub struct Screener {
@@ -74,11 +77,13 @@ impl Screener {
     }
 
     /// A keep, block or remove from the person, on a sender or a domain; a block with `pk` trashes that copy too.
-    /// `verdict` is what the request said, if anything.
+    /// `verdict` is what the request said, if anything. A keep or block names one address or one domain; a removal
+    /// takes any rule kept before that was held to less.
     pub fn rule(&self, token: Option<&str>, verdict: Option<&str>, pk: Option<i64>) -> Result<Value, Failure> {
         let token = token_of(token.unwrap_or_default());
-        if !is_token(&token) {
-            return Err(Problem::refused("invalid token (need a domain or an address)").into());
+        let named = if verdict == Some("remove") { is_token(&token) } else { names_a_sender(&token) };
+        if !named {
+            return Err(Problem::refused(NOT_A_SENDER).into());
         }
         let placed = match verdict {
             Some("remove") => {
