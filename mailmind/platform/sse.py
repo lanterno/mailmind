@@ -48,6 +48,8 @@ TOPICS = frozenset({
     "outbox",             # a send went out, or a change was queued: what the outbox panel shows
     "undo-done",          # an undo finished
     "commands-changed",   # a queued move or flag change was applied or refused, retried or discarded
+    "summarized",         # a round of the AI's summaries landed (`count`: how many messages it summarized): what needs
+                          # you and what can wait changed, which the lists, the Inbox's tabs and the brief count
 })
 RESYNC = "resync"         # this tab missed events it can't be told: fetch afresh
 RING = 512                # the events kept for tabs that reconnect

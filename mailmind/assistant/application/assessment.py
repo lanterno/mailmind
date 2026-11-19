@@ -19,7 +19,7 @@ from mailmind.kernel.ai_provider import DEFAULT_PROVIDER, AiProvider
 from mailmind.kernel.assessment import ASSESSED, REFUSED, UNUSABLE, Assessment
 from mailmind.kernel.ids import MessageKey, Pk
 from mailmind.kernel.row import Connection, Row
-from mailmind.platform import environment
+from mailmind.platform import environment, sse
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 
@@ -296,17 +296,31 @@ class Assessments:
         batch means more are waiting, so the next round follows at once. While the user is using AI the
         round waits until it has yielded long enough; held back otherwise (the limit, the breaker), it
         waits its interval. A batch's answers are brought in first, whatever holds the rest back, and a
-        backlog goes out in the next batch rather than through this round's calls."""
+        backlog goes out in the next batch rather than through this round's calls.
+
+        Summaries change what needs you and what can wait with no mail changing, so a round that kept any tells the
+        open tabs how many (`summarized`), a batch's answers among them, even when what follows them holds the round
+        back or fails: the lists, the Inbox's tabs, the rail and the brief read them again."""
+        landed = [0]
+        try:
+            return self._round(landed)
+        finally:
+            if landed[0]:
+                sse.publish("summarized", {"count": landed[0]})
+
+    def _round(self, landed: list[int]) -> int | None:
+        """The round, adding to `landed` each summary it keeps as it keeps it."""
         def say(m: str) -> None:                       # the app's own words, and counts and an error's class
             assess_log.info("%(what)s", {"what": m})
 
-        self.batch_collect(say)
+        landed[0] += self.batch_collect(say)
         why = self._gateway().held_back("triage", self._calls.background_label())
         if why:
             return self.ASSESS_YIELD if why == "yielding" else None
         if not environment.NO_BATCHES.on():
             self.batch_submit(log=say)
         done = self.summarize_pending(limit=self.ASSESS_BATCH, workers=self.WORKERS)
+        landed[0] += done
         if done:
             assess_log.info("%d summarized", done)
         return 0 if done >= self.ASSESS_BATCH else None
