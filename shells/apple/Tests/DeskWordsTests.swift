@@ -78,11 +78,13 @@ final class DeskWordsTests: XCTestCase {
     }
 
     /// See all opens Waiting, which holds what others wait on you for as well as what waits on them: it says how many
-    /// Waiting holds, as the tally does, not how many the card beside it lists.
+    /// the Waiting it opens holds, as the tally does, not how many the card beside it lists.
     func testSeeAllUnderWhoYoureWaitingOnSaysHowManyWaitingHolds() {
         XCTAssertNil(BriefWords.seeAllWaiting(listed: 3, held: 5), "the card shows all three")
         XCTAssertEqual(BriefWords.seeAllWaiting(listed: 4, held: 6), "See all 6")
-        XCTAssertEqual(BriefWords.seeAllWaiting(listed: 4, held: 0), "See all 4", "before Waiting's count is read")
+        XCTAssertEqual(BriefWords.seeAllWaiting(listed: 4, held: nil), "See all 4", "before Waiting's count is read")
+        XCTAssertEqual(BriefWords.seeAllWaiting(listed: 5, held: 2), "See all 2",
+                       "beside one account's Inbox, the card lists every account's but See all opens that one's")
     }
 
     func testAReviewSaysWhatWeekItLookedBackOn() {

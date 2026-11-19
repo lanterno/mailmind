@@ -320,6 +320,66 @@ final class DeskModelTests: XCTestCase {
         XCTAssertEqual(model.aiOn, true)
     }
 
+    /// The Waiting and Reply later tallies count the stacks they open: beside one account's Inbox that account's
+    /// alone, beside All Inboxes every account's, as the page counts them where its tallies go.
+    func testTheBriefCountsTheStacksItsTalliesOpen() async {
+        let (ada, bea) = ("ada@example.test", "bea@example.test")
+        var digest = DeskFixture.digest()
+        digest.accounts = [ada, bea]
+        routes.answer("GET", "/api/digest", digest)
+        routes.answer("GET", "/api/briefing", API.BriefingAnswer.brief(DeskFixture.brief))
+        routes.answer("GET", "/api/upcoming", DeskFixture.upcoming)
+        routes.answer("GET", "/api/waiting-on-others", DeskFixture.waiting)
+        routes.answer("GET", "/api/tidy", API.TidyRun(filed: 0, group: nil, items: [], ok: true))
+        routes.answer("GET", "/api/folders", API.Folders(account: ada, folders: [], muted: 1, ok: true, replylater: 2,
+                                                         snoozed: 3, waiting: 4))
+        let model = briefModel()
+        var whose: String? = ada
+        model.stacksAccount = { whose }
+
+        await model.load()
+        XCTAssertEqual(routes.sent("GET", "/api/folders").map { $0.query["account"] }, [ada], "Ada's alone")
+        XCTAssertEqual(model.waitingCount, 4)
+        XCTAssertEqual(model.replyLaterCount, 2)
+
+        // Opened again beside All Inboxes: Ada's count isn't shown while every account's is read.
+        model.close()
+        whose = nil
+        routes.hold("GET", "/api/folders")
+        let opening = Task { await model.load() }
+        await until { model.waitingCount == nil }
+        XCTAssertNil(model.replyLaterCount)
+        routes.release("GET", "/api/folders")
+        await opening.value
+        XCTAssertEqual(routes.sent("GET", "/api/folders").dropFirst().map { $0.query["account"] }, [ada, bea])
+        XCTAssertEqual(model.waitingCount, 8, "Ada's and Bea's together")
+        XCTAssertEqual(model.replyLaterCount, 4)
+    }
+
+    /// The brief is a place of no account: its tallies open the stacks of the account whose Inbox it stands beside,
+    /// and every account's beside All Inboxes, as the page's `goToFolder` does; and they count those.
+    func testTheBriefsTalliesOpenTheStacksOfTheInboxItStandsBeside() async {
+        let app = MailApp()
+        app.mailbox.wire = Fixture.server().wire
+        await app.mailbox.refresh()
+        let desk = Desk()
+        desk.use(app, routes: routes)
+
+        app.place = .folder(account: Fixture.ada, folder: "INBOX")
+        app.place = .desk(.brief)
+        XCTAssertEqual(app.listed, .folder(account: Fixture.ada, folder: "INBOX"), "the brief beside Ada's Inbox")
+        XCTAssertEqual(desk.brief.stacksAccount(), Fixture.ada, "what the tallies count")
+        desk.goToStack(.waiting)
+        XCTAssertEqual(app.place, .virtual(.waiting, account: Fixture.ada))
+
+        app.place = .allInboxes
+        app.place = .desk(.brief)
+        XCTAssertNil(desk.brief.stacksAccount())
+        desk.goToStack(.replyLater)
+        XCTAssertEqual(app.place, .virtual(.replyLater, account: nil), "every account's")
+        withExtendedLifetime(desk) {}
+    }
+
     func testWithAIOffTheBriefStandsOnTheDigestAndAsksNothing() async {
         scriptTheBrief(ai: "none", briefing: Self.missing)
         let model = briefModel()
