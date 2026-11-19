@@ -181,7 +181,8 @@ struct PaneEmptyWords: Equatable {
     static func of(_ app: MailApp) -> PaneEmptyWords {
         let mailbox = app.mailbox
         let marked = mailbox.chosenRows.count + mailbox.unheld.count
-        if marked > 1 {
+        // Marked whenever the bulk bar shows, one row a check box marked alone among them (`Mailbox.marking`).
+        if mailbox.marking {
             return .marked(marked, inTrash: mailbox.chosenRows.first.map { mailbox.inTrash(MailCopy($0)) } ?? false)
         }
         let list = app.list
