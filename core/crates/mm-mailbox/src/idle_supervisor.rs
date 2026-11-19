@@ -2,7 +2,9 @@
 //!
 //! A worker holds a connection open and waits on it. `reconcile` starts one for each key wanted, up to a limit,
 //! retires one whose key has gone or is now wanted differently, and leaves the rest be. A worker whose connection
-//! fails, or whose work on it panics (`Panic`), rests, longer each time, then opens another. `renew` has every worker
+//! fails, or whose work on it panics (`Panic`), rests, longer each time, then opens another; one whose connection
+//! served a while (`Rests::at_once_after`) and was lost opens another at once, so a server gone away is found gone
+//! within moments, and one that dropped a connection is back on another. `renew` has every worker
 //! let its connection go and open another at once, as a connection may have died without a word when the computer
 //! slept or its network changed. One that finds itself no longer wanted leaves on its own, and
 //! asks for a reconcile on its way out. What a connection is, and what a worker does with one, is the `Watched`'s to
@@ -17,7 +19,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// What ends a wait on a connection from another thread.
 pub trait Interrupt: Send + Sync + fmt::Debug {
@@ -68,16 +70,23 @@ pub trait Watched: Send + Sync + 'static {
     fn say_failed(&self, _spec: &Self::Spec, _class: &'static str, _rest: Duration) {}
 }
 
-/// How long a worker rests after a failure: `first`, twice that after each failure in a row, up to `longest`.
+/// How long a worker rests after a failure: `first`, twice that after each failure in a row, up to `longest`. A
+/// connection that served `at_once_after` or longer and was lost is followed by another at once, with no rest: had it
+/// served less, a server that drops each connection as it begins would have the worker log in again and again.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Rests {
     pub first: Duration,
     pub longest: Duration,
+    pub at_once_after: Duration,
 }
 
 impl Default for Rests {
     fn default() -> Rests {
-        Rests { first: Duration::from_secs(5), longest: Duration::from_secs(300) }
+        Rests {
+            first: Duration::from_secs(5),
+            longest: Duration::from_secs(300),
+            at_once_after: Duration::from_secs(10),
+        }
     }
 }
 
@@ -167,6 +176,8 @@ enum Turn {
     Served,
     /// It failed, by this class: the worker rests.
     Failed(&'static str),
+    /// It served a while, then was lost, by this class: the worker opens another at once.
+    Lost(&'static str),
 }
 
 impl<W: Watched> Inner<W> {
@@ -186,8 +197,8 @@ impl<W: Watched> Inner<W> {
                 self.reconcile();
                 return;
             }
-            let failed = match caught(|| watched.connect(&watch.spec)) {
-                Err(class) => class,
+            let (failed, at_once) = match caught(|| watched.connect(&watch.spec)) {
+                Err(class) => (class, false),
                 Ok((mut conn, interrupt)) => {
                     let turn = self.turn(watch, &mut conn, interrupt);
                     // A close that panics has nothing more to close.
@@ -195,7 +206,8 @@ impl<W: Watched> Inner<W> {
                     match turn {
                         Turn::NeverReady => return,
                         Turn::Served => continue,
-                        Turn::Failed(class) => class,
+                        Turn::Failed(class) => (class, false),
+                        Turn::Lost(class) => (class, true),
                     }
                 }
             };
@@ -204,9 +216,13 @@ impl<W: Watched> Inner<W> {
                 watch.set_rest(held(&self.rests).first);
                 continue;
             }
-            let rest = watch.rest();
+            // A connection that served a while and was lost: the next opens now, and its rests start from the first.
+            let rest = if at_once { Duration::ZERO } else { watch.rest() };
             if !watch.leaving() {
                 watched.say_failed(&watch.spec, failed, rest);
+            }
+            if at_once {
+                continue;
             }
             self.rest(watch, rest);
             if watch.renewed() {
@@ -228,12 +244,15 @@ impl<W: Watched> Inner<W> {
         // Set before `leaving()` is asked: a retirement sets `quit` first, then interrupts what it finds here. A
         // renewal does the same, so one asked before the connection was listed is found here, and it goes unserved.
         *held(&watch.conn) = Some(interrupt.clone());
-        watch.set_rest(held(&self.rests).first);
+        let rests = *held(&self.rests);
+        watch.set_rest(rests.first);
+        let began = Instant::now();
         let served = if watch.renewed() { Ok(()) } else { caught(|| self.watched.serve(watch, conn)) };
         *held(&watch.conn) = None;
         held(&self.conns).retain(|listed| !Arc::ptr_eq(listed, &interrupt));
         match served {
             Ok(()) => Turn::Served,
+            Err(class) if began.elapsed() >= rests.at_once_after => Turn::Lost(class),
             Err(class) => Turn::Failed(class),
         }
     }
