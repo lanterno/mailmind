@@ -43,6 +43,9 @@ struct ReplyBox: View {
     var messages = 1
     /// Whether quick replies are offered: a person you could answer.
     var quick = false
+    /// Whether the box shows R, the key that opens it: in the mail window, whose list takes r, not in a message's own
+    /// window, where Reply is ⌘R.
+    var keyed = true
     private var composing: Composing { .shared }
 
     var body: some View {
@@ -50,7 +53,7 @@ struct ReplyBox: View {
             if let open = composing.inline, open.copy == copy, !open.composer.closed {
                 OpenReply(composer: open.composer, words: words, drafted: open.drafted, messages: messages)
             } else {
-                ClosedReply(copy: copy, words: words, me: me, quick: quick,
+                ClosedReply(copy: copy, words: words, me: me, quick: quick, keyed: keyed,
                             ready: composing.chips[copy.key] == .ready)
             }
         }
@@ -96,6 +99,7 @@ private struct ClosedReply: View {
     let words: ReplyBoxWords
     let me: String
     let quick: Bool
+    let keyed: Bool
     let ready: Bool
     @Environment(\.meadow) private var meadow
 
@@ -108,7 +112,7 @@ private struct ClosedReply: View {
                         Text(words.placeholder)
                             .font(.meadow(.ui, 14))
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        MeadowKey("R")
+                        if keyed { MeadowKey("R") }
                     }
                 }
                 .buttonStyle(ReplyLineStyle())

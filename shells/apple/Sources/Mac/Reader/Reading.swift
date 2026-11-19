@@ -34,13 +34,20 @@ struct MessageReader: View {
                                               address: opened.fromAddr, following: place.role == "sent"),
                          me: place.me,
                          quick: QuickReply.offered(to: opened.fromAddr, mine: mine, isJunk: row?.isJunk ?? false,
-                                                   bucket: row?.bucket))
+                                                   bucket: row?.bucket),
+                         keyed: Self.showsReplyKey(app: app, mailbox: mailbox))
             }
             if let app { UpNext(app: app, inTrash: place.role == "trash") }
         }
     }
 
     @Environment(\.meadow) private var meadow
+
+    /// Whether the reply box shows R, the key that opens it: not in a message's own window (its mailbox, and no mail
+    /// window around it), which takes no single keys; Reply there is ⌘R.
+    static func showsReplyKey(app: MailApp?, mailbox: Mailbox?) -> Bool {
+        app != nil || mailbox == nil
+    }
 
     private func account(_ place: DocumentPlace) -> Color? {
         app == nil && mailbox == nil ? nil : meadow.account(place.accountIndex)
