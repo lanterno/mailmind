@@ -142,6 +142,11 @@ replies ahead for important mail (`draft_ahead`), the morning's brief written ah
 written ahead on Monday morning and kept in the database, never sent as mail, and Tidy's daily run, which files only what
 the brief's Tidy offers and reports it for one Undo.
 
+A round of the assess job that kept any summaries, a batch's answers among them, tells the open tabs how many on the
+event stream (`summarized`, with `count`), on both servers (`Assessments.round`), even when what follows holds the round
+back or fails. No mail changed, but what needs you and what can wait did: the page reads the lists, their tabs, Tidy and
+the brief's tallies again on it, and the Mac app its list, the rail's counts, the brief and Settings' AI.
+
 An assessment keeps how it came to be (migration 43, `kernel.assessment`): `served_by`, the model `Reply.model` names, which
 a server-side fallback can make another; `prompt_version`; and `outcome`, which is `assessed`, or `unusable` or `refused` for
 the stand-in stored so a message doesn't go round for ever. `assessments.model` stays the label shown beside a summary, the
