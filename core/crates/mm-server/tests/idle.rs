@@ -1,9 +1,10 @@
 //! IDLE on the Rust server (`idle_wiring`), against an IMAP server on loopback that speaks IDLE and counts what each
 //! account is sent: one worker for each account, logging in as every session does, so a refused login is held back;
 //! the workers following the accounts as they are added, changed and removed; new mail heard in IDLE syncing that
-//! account, which the open tabs hear of; and `Workers::start` starting them unless the process only reads (the
-//! Python app's tests/integration/mailbox/test_idle_supervisor.py and tests/characterization/mailbox/
-//! test_pool_and_idle.py). mm-mailbox's tests/realtime.rs holds the workers' own rules over sessions of its own.
+//! account, which the open tabs hear of; a server gone that IDLE can't reach again showing at once as trying again,
+//! until it answers; and `Workers::start` starting them unless the process only reads (the Python app's
+//! tests/integration/mailbox/test_idle_supervisor.py and tests/characterization/mailbox/test_pool_and_idle.py).
+//! mm-mailbox's tests/realtime.rs holds the workers' own rules over sessions of its own.
 
 #![allow(clippy::unwrap_used)]
 
@@ -52,6 +53,10 @@ struct State {
     delivered: BTreeMap<String, u32>,
     /// Logins answered with a refusal, whatever the password.
     refusing: BTreeSet<String>,
+    /// Logins the server can't take for now ([UNAVAILABLE]), as one gone away answers through a proxy.
+    unavailable: BTreeSet<String>,
+    /// The users whose IDLE the server ends (BYE), and the connection with it, as a server that goes away does.
+    dropping: BTreeSet<String>,
     without_idle: bool,
 }
 
@@ -114,6 +119,20 @@ impl Imap {
         self.count(user, "IDLE") >= n
     }
 
+    /// `user`'s IDLE ends, and the next connection may log in or not: `away` says the server can't take it.
+    fn drop_idle(&self, user: &str, away: bool) {
+        let mut state = self.held();
+        state.dropping.insert(user.to_owned());
+        if away {
+            state.unavailable.insert(user.to_owned());
+        }
+    }
+
+    /// The server takes `user`'s logins again.
+    fn back(&self, user: &str) {
+        self.held().unavailable.remove(user);
+    }
+
     /// What the connection that sent `user`'s first IDLE sent, in order.
     fn idle_connection(&self, user: &str) -> Vec<String> {
         let state = self.held();
@@ -157,6 +176,10 @@ impl Connection {
                 }
             }
             if let (Some(user), Some((_, said))) = (self.user.clone(), self.idling.clone()) {
+                if self.held().dropping.remove(&user) {
+                    self.say("* BYE going away\r\n")?;
+                    return Ok(());
+                }
                 let holds = self.held().delivered.get(&user).copied().unwrap_or(0);
                 if holds > said {
                     self.idling.as_mut().unwrap().1 = holds;
@@ -202,11 +225,14 @@ impl Connection {
             let quoted: Vec<&str> = line.split('"').collect();
             let (asked, password) = (quoted.get(1).copied().unwrap_or(""), quoted.get(3).copied().unwrap_or(""));
             self.record(asked, "LOGIN");
-            let (refusing, right) = {
+            let (refusing, right, unavailable) = {
                 let state = self.held();
-                (state.refusing.contains(asked), state.passwords.get(asked).is_some_and(|p| p == password))
+                let right = state.passwords.get(asked).is_some_and(|p| p == password);
+                (state.refusing.contains(asked), right, state.unavailable.contains(asked))
             };
-            if refusing || !right {
+            if unavailable {
+                self.say(&format!("{tag} NO [UNAVAILABLE] try again later\r\n"))?;
+            } else if refusing || !right {
                 self.say(&format!("{tag} NO [AUTHENTICATIONFAILED] invalid credentials\r\n"))?;
             } else {
                 self.user = Some(asked.to_owned());
@@ -450,6 +476,63 @@ fn new_mail_heard_in_idle_syncs_that_account_alone_and_the_page_hears_of_it() {
         frames.contains(said)
     });
     assert!(!frames.contains("bea@example.test"));
+}
+
+/// The frames the tab has had so far, after what it had before.
+fn heard(tab: &mut TabStream, frames: &mut String) {
+    while let Poll::Ready(Some(Ok(frame))) = Pin::new(&mut *tab).poll_next(&mut Context::from_waker(Waker::noop())) {
+        frames.push_str(&frame);
+    }
+}
+
+#[test]
+fn an_idle_whose_server_went_away_says_so_at_once_and_clears_once_it_answers() {
+    let w = world(&[ADA, BEA], "full");
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_time().build().unwrap();
+    let _entered = runtime.enter();
+    let mut tab = TabStream::new(w.app.events.listen(None).unwrap(), "b1");
+    w.start(quick());
+    w.all_idling(&[ADA, BEA]);
+    w.imap.drop_idle(ADA, true);
+    // Its next connection can't log in: it shows as trying again, as after a sync that failed, minutes before the
+    // next sync would have said so, and the tab hears to read the status again.
+    until(|| w.app.syncing.status().unwrap().get(ADA).is_some_and(|s| s.trying_again));
+    let mut frames = String::new();
+    let said = "event: sync-trouble\ndata: {\"account\": \"ada@example.test\"}";
+    until(|| {
+        heard(&mut tab, &mut frames);
+        frames.contains(said)
+    });
+    assert_eq!(frames.matches("event: sync-trouble").count(), 1, "said once, however often it tries");
+    assert!(!w.app.syncing.status().unwrap().contains_key(BEA));
+    // The server answers again: IDLE's connection asks for a sync, which ends the trouble.
+    w.imap.back(ADA);
+    until(|| w.app.syncing.status().unwrap().get(ADA).is_some_and(|s| s.health == "ok" && !s.trying_again));
+    until(|| {
+        heard(&mut tab, &mut frames);
+        frames.contains("event: sync-done\ndata: {\"account\": \"ada@example.test\"")
+    });
+}
+
+#[test]
+fn an_idle_that_drops_and_connects_again_at_once_shows_no_trouble() {
+    let w = world(&[ADA], "full");
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_time().build().unwrap();
+    let _entered = runtime.enter();
+    let mut tab = TabStream::new(w.app.events.listen(None).unwrap(), "b1");
+    w.start(quick());
+    w.all_idling(&[ADA]);
+    w.imap.drop_idle(ADA, false);
+    until(|| w.imap.idling(ADA, 2));
+    // The sync it asks for as it connects again finds the server there.
+    until(|| w.app.syncing.status().unwrap().get(ADA).is_some_and(|s| s.health == "ok"));
+    let mut frames = String::new();
+    until(|| {
+        heard(&mut tab, &mut frames);
+        frames.contains("event: sync-done")
+    });
+    assert!(!frames.contains("sync-trouble"));
+    assert!(!w.app.syncing.status().unwrap()[ADA].trying_again);
 }
 
 #[test]

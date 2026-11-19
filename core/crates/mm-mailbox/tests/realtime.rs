@@ -120,6 +120,15 @@ impl Servers {
     fn interrupted(&self) -> Vec<String> {
         self.held().interrupted.clone()
     }
+
+    /// `email`'s latest connection drops, as a server gone or a network changed leaves it.
+    fn lose(&self, email: &str) {
+        let mut state = self.held();
+        let n = state.opened.iter().rposition(|(who, _)| who == email).unwrap() + 1;
+        state.shut.insert(n);
+        drop(state);
+        self.changed.notify_all();
+    }
 }
 
 #[derive(Debug)]
@@ -486,4 +495,45 @@ fn before_start_and_after_stop_it_starts_nothing() {
     assert!(watching(&w).is_empty());
     w.realtime.start(quick());
     assert!(watching(&w).is_empty());
+}
+
+#[test]
+fn a_worker_whose_connection_dropped_asks_for_a_sync_once_it_is_connected_again() {
+    let w = world(&[ADA, BEA]);
+    w.realtime.start(quick());
+    until(|| w.servers.idling(ADA, 1) && w.servers.idling(BEA, 1));
+    w.servers.lose(ADA);
+    until(|| w.servers.idling(ADA, 2));
+    until(|| !w.news.heard().is_empty());
+    // The server answers again: the sync says so, and fetches what came while nothing listened.
+    assert_eq!(w.news.heard(), [[ADA]]);
+    assert_eq!(w.servers.sent(ADA), ["SELECT INBOX", "IDLE", "SELECT INBOX", "IDLE"]);
+}
+
+#[test]
+fn a_worker_that_takes_several_tries_to_connect_again_asks_for_one_sync() {
+    let w = world(&[ADA]);
+    w.realtime.start(quick());
+    until(|| w.servers.idling(ADA, 1));
+    w.servers.refusing.lock().unwrap().insert(ADA.to_owned(), 2);
+    w.servers.lose(ADA);
+    until(|| w.servers.idling(ADA, 2));
+    until(|| !w.news.heard().is_empty());
+    assert_eq!(w.servers.opened(ADA).len(), 4);
+    w.servers.deliver(ADA);
+    until(|| w.news.heard().len() == 2);
+    assert_eq!(w.news.heard(), [[ADA], [ADA]], "the reconnection's sync, then the new mail's");
+}
+
+#[test]
+fn a_renewal_asks_for_no_sync() {
+    let w = world(&[ADA, BEA]);
+    w.realtime.start(quick());
+    until(|| w.servers.idling(ADA, 1) && w.servers.idling(BEA, 1));
+    w.realtime.renew();
+    until(|| w.servers.idling(ADA, 2) && w.servers.idling(BEA, 2));
+    // Nothing failed: only the new mail asks, and only for its account.
+    w.servers.deliver(BEA);
+    until(|| !w.news.heard().is_empty());
+    assert_eq!(w.news.heard(), [[BEA]]);
 }
