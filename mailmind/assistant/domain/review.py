@@ -111,11 +111,14 @@ def fingerprint_of(stats: Stats, needs: Sequence[Mapping[str, Any]], waiting: Se
 
 
 def fallback(stats: Stats, needs: Sequence[Needed], waiting: Sequence[Awaited]) -> Retrospective:
+    """The review's prose and picks from the numbers alone. What needs you is counted a message each, and only those not
+    answered, so it says messages and a reply: the brief counts a conversation once, answered or not."""
+    one = stats["needs_you"] == 1
     n = (f"In the last 7 days you sent {stats['sent']} message"
          + ("s" if stats["sent"] != 1 else "")
          + f" and {stats['received']} came in. "
          + (f"You filed away {stats['handled']}. " if stats["handled"] else "")
-         + (f"{stats['needs_you']} still need a reply from you"
+         + (f"{stats['needs_you']} message{'' if one else 's'} still need{'s' if one else ''} a reply from you"
             + (f" and you're waiting to hear back on {stats['waiting_on']}." if stats["waiting_on"]
                else ".") if (stats["needs_you"] or stats["waiting_on"])
             else "Your inbox is clear — nothing is waiting on you."))

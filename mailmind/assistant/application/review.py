@@ -189,7 +189,7 @@ class Reviews:
         def make() -> Result:
             bl = ", ".join(f"{k}: {v}" for k, v in sorted(stats["by_bucket"].items(), key=lambda kv: -kv[1])[:5])
             stats_txt = (f"Sent: {stats['sent']}\nReceived in inbox: {stats['received']} ({bl})\n"
-                         f"Still need your reply: {stats['needs_you']}\n"
+                         f"Messages that still need your reply: {stats['needs_you']}\n"
                          f"Waiting to hear back: {stats['waiting_on']}\n"
                          f"Pinned to reply-later: {stats['reply_later']}\n"
                          f"Senders cleaned up: {stats['cleaned']}\n"
