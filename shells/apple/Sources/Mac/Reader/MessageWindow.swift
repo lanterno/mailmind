@@ -243,7 +243,7 @@ struct MessageWindowContent: View {
         }
         .background { ZStack { meadow.paper; MeadowGrain() }.ignoresSafeArea() }
         .background { if let verbs { TypingWatch { verbs.typing = $0 } } }
-        .background { MessageWindowKeys(verbs: verbs) }
+        .background { MessageWindowKeys(verbs: verbs, find: opened == nil ? nil : { find.show() }) }
         .environment(\.toastRoom, toastRoom)
         // What the window's verbs and keys say, with Undo, where the person is as well as in the mail window, clear
         // of the reply box.
@@ -334,14 +334,25 @@ private struct MessageWindowDialog: View {
 /// The keyboard in a message's window while nothing else there has it: as it opens, and once a field or a dialog
 /// lets it go. Space, the arrows, Page Up and Down, Home and End scroll the message, as a Mac's reader does; any other
 /// key goes on to the window and its menus, and a single key nothing took, from here or from the message's frame, is
-/// the reader's (`Catcher`). The window opens clear of the message windows already open (`OwnWindowPlace`).
+/// the reader's (`Catcher`). ⌘F finds in the message once it has opened (`finds`). The window opens clear of the
+/// message windows already open (`OwnWindowPlace`).
 struct MessageWindowKeys: NSViewRepresentable {
     let verbs: MessageWindowVerbs?
+    /// Opens Find in Message's bar, once the message has opened.
+    var find: (() -> Void)?
 
     func makeNSView(context: Context) -> Keys { Keys() }
 
     func updateNSView(_ view: Keys, context: Context) {
         view.verbs = verbs
+        view.find = find
+    }
+
+    /// Whether `event` is ⌘F, whatever the layout types for F (`SingleKey`).
+    static func finds(_ event: NSEvent) -> Bool {
+        event.type == .keyDown
+            && event.modifierFlags.intersection([.command, .control, .option, .shift]) == .command
+            && SingleKey.typed(event).map { $0 == "f" || $0 == "F" } == true
     }
 
     final class Keys: NSView {
@@ -349,6 +360,7 @@ struct MessageWindowKeys: NSViewRepresentable {
         weak var verbs: MessageWindowVerbs? {
             didSet { if let window { Catcher.hang(on: window).verbs = verbs } }
         }
+        var find: (() -> Void)?
 
         override var acceptsFirstResponder: Bool { true }
 
@@ -371,6 +383,17 @@ struct MessageWindowKeys: NSViewRepresentable {
 
         override func keyDown(with event: NSEvent) {
             if !ReaderPage.scrolls(event, in: window) { super.keyDown(with: event) }
+        }
+
+        /// ⌘F finds in the message, as Edit › Find in Message says there. A window hears a key equivalent before the
+        /// menu bar does, so ⌘F finds here even while the menus read another window or none: SwiftUI hands them a
+        /// window's focused values only once its scene has said them, and Mailbox › Search holds ⌘F otherwise.
+        override func performKeyEquivalent(with event: NSEvent) -> Bool {
+            guard let find, event.window === window, MessageWindowKeys.finds(event) else {
+                return super.performKeyEquivalent(with: event)
+            }
+            find()
+            return true
         }
     }
 
