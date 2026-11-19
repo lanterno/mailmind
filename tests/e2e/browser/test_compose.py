@@ -266,8 +266,11 @@ def test_a_reply_saved_once_goes_out_after_its_originals_row_went(page, app, wor
     assert filed["folder"] == "Archive"
     with world.server.lock:
         world.server.mailbox(w.ADA, "Archive").messages.pop(filed["uid"])
-    app.work("reconcile", w.ADA)
-    assert world.where(LUNCH[1])["db"] == []
+
+    def pruned():                                          # the ghost pruner's round, which yields while the page reads
+        app.work("reconcile", w.ADA)
+        return world.where(LUNCH[1])["db"] == []
+    until(page, pruned, "the ghost was never pruned")
     send_button(page).click()
     let_undo_pass(page)
     due(app, page)
@@ -432,8 +435,11 @@ def test_autosave_writes_it_down_here_and_the_server_gets_it_a_minute_on(page, a
     expect(page.locator("#cmpSaved")).to_contain_text("Saved")
     assert copies(world, "Thread colours") == []
     app.clock.shift(timedelta(minutes=2))
-    app.work("drafts")
-    assert len(copies(world, "Thread colours")) == 1
+
+    def pushed():                                          # a pass gives way to what holds the account's gate, such as
+        app.work("drafts")                                 # the folder lists the page asked for as it opened, and the
+        return len(copies(world, "Thread colours")) == 1   # next has it
+    until(page, pushed, "the job never pushed it")
     clean(page)
 
 
