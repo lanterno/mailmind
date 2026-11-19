@@ -260,6 +260,61 @@ final class OwnWindowTests: XCTestCase {
         XCTAssertEqual(server.asked(API.Post.Flag.path).count, 1, "⌘س starred nothing")
     }
 
+    // MARK: Find
+
+    /// ⌘F in a message's own window finds in its message, as Edit › Find in Message says there, from the window
+    /// itself, which hears a key equivalent before the menu bar: whichever window's focused values the menus still
+    /// read, Mailbox › Search's ⌘F never takes it, under ABC or Arabic. Before the message has opened there is nothing
+    /// to find, and ⌘F goes on.
+    func testCommandFFindsInTheMessageFromItsWindowWhateverTheMenusRead() async throws {
+        let core = try await openCore()
+        let server = OpenedMessageVerbsTests.server()
+        let mailbox = await mailbox(server)
+        let reader = ReaderModel()
+        let find = ReaderFind()
+        let verbs = MessageWindowVerbs(copy: Self.copy, mailbox: mailbox, reader: reader, routes: server.wire)
+        let content = MessageWindowContent(core: core, copy: Self.copy, reader: reader, find: find, verbs: verbs)
+        let host = NSHostingView(rootView: MessageWindow.inDesk(of: mailbox, content).meadowLight(.day))
+        host.frame = CGRect(x: 0, y: 0, width: 820, height: 700)
+        // The window as a message's opens, made key: far off the screen and see-through.
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.alphaValue = 0
+        window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
+        window.makeKeyAndOrderFront(nil)
+        defer {
+            window.orderOut(nil)
+            window.contentView = nil
+        }
+        func settle() async throws {
+            for _ in 0..<20 {
+                host.layoutSubtreeIfNeeded()
+                try await Task.sleep(for: .milliseconds(10))
+            }
+        }
+        func command(_ typed: String, _ code: UInt16, held: NSEvent.ModifierFlags = .command) throws -> NSEvent {
+            try KeyLayouts.event(typed, code, held: held, in: window)
+        }
+        try await settle()
+        XCTAssertFalse(window.performKeyEquivalent(with: try command("f", 3)), "nothing to find before it opens")
+
+        reader.hold(Self.copy, OpenedMessageVerbsTests.head(Self.copy, thread: nil))
+        try await settle()
+        XCTAssertTrue(window.performKeyEquivalent(with: try command("f", 3)), "the window's own, before the menus")
+        XCTAssertTrue(find.open, "Find in Message's bar opens")
+        XCTAssertFalse(mailbox.searchFocus, "and the mail window's search is left alone")
+
+        find.close()
+        let close = try KeyLayouts.arabic()
+        defer { close() }
+        XCTAssertTrue(window.performKeyEquivalent(with: try command("ب", 3)), "⌘F where Arabic's ب is F")
+        XCTAssertTrue(find.open)
+        XCTAssertFalse(MessageWindowKeys.finds(try command("f", 3, held: [.option, .command])), "⌥⌘F is the menu's")
+        XCTAssertFalse(MessageWindowKeys.finds(try command("F", 3, held: [.shift, .command])), "⇧⌘F forwards")
+        XCTAssertFalse(MessageWindowKeys.finds(try command("ب", 3, held: [])), "and F alone is no find")
+    }
+
     // MARK: Where it opens
 
     /// A second window over the first opens a step down and to the right of it, a third further on, as a Mac cascades;
