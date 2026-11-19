@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from mailmind.discovery.domain.query import QuerySpec
-from mailmind.kernel import attention
+from mailmind.kernel import addressees, attention
 from mailmind.kernel.parsed import required_int
 from mailmind.kernel.row import Row
 
@@ -60,7 +60,7 @@ def hit(r: Row, aliases: Mapping[str, str | None], when: Callable[[str | None], 
     return {
         "key": r["message_key"], "account": r["account"], "folder": r["folder"], "uid": r["uid"],
         "alias": aliases.get(r["account"]),
-        "from_name": r["from_name"] or r["from_addr"], "from_addr": r["from_addr"],
+        "from_name": r["from_name"] or r["from_addr"], "from_addr": r["from_addr"], **addressees.listed(r["recipients"]),
         "subject": r["subject"] or NO_SUBJECT, "when": when(r["date_iso"]),
         "date": (r["date_iso"] or "")[:10],
         "snippet": (r["snippet"] or "")[:200], "seen": bool(r["seen"]), "flagged": bool(r["flagged"]),

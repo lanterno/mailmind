@@ -6,6 +6,7 @@ Inbox is filed empty, or whose first sync hasn't ended, still has its place on t
 from collections.abc import Callable
 from typing import Any
 
+from mailmind.kernel import addressees
 from mailmind.kernel import attention as verdict
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import now_iso, rel_time
@@ -36,7 +37,7 @@ class Digest:
             items = [{
                 "key": r["message_key"], "uid": r["uid"], "account": r["account"], "kind": r["kind"],
                 "alias": amap.get(r["account"]),
-                "from_name": r["from_name"] or r["from_addr"], "from_addr": r["from_addr"],
+                "from_name": r["from_name"] or r["from_addr"], "from_addr": r["from_addr"], **addressees.listed(r["recipients"]),
                 "subject": r["subject"] or "(no subject)", "when": rel_time(r["date_iso"]),
                 "summary": r["summary"], "importance": r["importance"], **_attention(r),
                 "category": r["category"], "action": r["action"] or "", "link": self._accounts.deep_link(r, wmap),

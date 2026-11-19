@@ -4,7 +4,7 @@ from typing import Any, Literal
 from pydantic import Field
 
 from mailmind.discovery.api import DocumentGrouping, DocumentKind, ViewVerb
-from mailmind.http.schemas.common import Answer, QueryArgs, RequestBody
+from mailmind.http.schemas.common import Addressee, Answer, QueryArgs, RequestBody
 
 
 class SearchArgs(QueryArgs):
@@ -59,6 +59,8 @@ class SearchHit(Answer):
     alias: str | None
     from_name: str | None
     from_addr: str | None
+    sent_to: list[Addressee]                # as a folder's row has them (`MessageRow`)
+    sent_to_more: int
     subject: str
     when: str
     date: str

@@ -2,7 +2,7 @@
 from typing import Literal
 
 from mailmind.assistant.api import AiOff
-from mailmind.http.schemas.common import ACopy, Answer, Copy, Failure, Flag, Number, QueryArgs, RequestBody
+from mailmind.http.schemas.common import ACopy, Addressee, Answer, Copy, Failure, Flag, Number, QueryArgs, RequestBody
 from mailmind.kernel.ai_provider import AiProvider
 from mailmind.mailbox.api import FilingVerb, FlagName
 
@@ -147,6 +147,8 @@ class MessageRow(Answer):
     uid: int                                # the copy's on the server: two in one folder can share a key
     from_name: str | None
     from_addr: str | None
+    sent_to: list[Addressee]                # the first its To, then its Cc, name, each once: whom a row of your own names
+    sent_to_more: int                       # and how many more
     subject: str
     when: str
     snippet: str
@@ -366,6 +368,8 @@ class DigestItem(_Verdict):
     alias: str | None
     from_name: str | None
     from_addr: str | None
+    sent_to: list[Addressee]
+    sent_to_more: int
     subject: str
     when: str
     summary: str | None

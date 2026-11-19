@@ -80,6 +80,12 @@ class Copy(Answer):
     uid: int
 
 
+class Addressee(Answer):
+    """One of the people a message went to, as its To or Cc names them (`kernel.addressees`)."""
+    name: str | None                        # as it was written there, or none
+    addr: str
+
+
 class NotJson(Answer):
     """A file, a document or a stream, which is what its route says it is. Nothing holds an answer that isn't JSON to a model."""
 

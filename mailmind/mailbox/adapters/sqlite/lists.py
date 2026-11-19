@@ -39,8 +39,8 @@ def snoozed_rows(c, accounts, limit, offset):
     """Every snoozed message in the account, or in each of a list of them, soonest wake first."""
     among, named = _of_accounts(accounts)
     return c.execute(
-        f"""SELECT m.pk, m.message_key, m.uid, m.account, m.folder, m.from_addr, m.from_name, m.subject, m.date_iso, m.snippet,
-                  m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id,
+        f"""SELECT m.pk, m.message_key, m.uid, m.account, m.folder, m.from_addr, m.from_name, m.recipients, m.subject, m.date_iso,
+                  m.snippet, m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id,
                   z.until AS snoozed_until, s.importance, s.category, s.action
            FROM snoozes z CROSS JOIN messages m ON m.message_key=z.message_key AND m.folder=z.folder
            LEFT JOIN assessments s ON s.message_key=m.message_key
@@ -79,8 +79,8 @@ def _conversation_rows(c, where, params, partition, limit, offset):
 
 def _message_rows(c, where, params, limit, offset):
     return c.execute(
-        f"""SELECT m.pk, m.message_key, m.uid, m.account, m.folder, m.from_addr, m.from_name, m.subject, m.date_iso, m.ts, m.snippet,
-                  m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id, s.importance,
+        f"""SELECT m.pk, m.message_key, m.uid, m.account, m.folder, m.from_addr, m.from_name, m.recipients, m.subject, m.date_iso,
+                  m.ts, m.snippet, m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id, s.importance,
                   s.summary, s.action, s.category
            FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key
            WHERE {_listed(where)}
@@ -162,7 +162,7 @@ def stored_folder_counts(c, account):
 def thread_rows(c, account, thread_id):
     """A conversation's messages in the account, oldest first, every copy of each."""
     return c.execute(
-        """SELECT pk, message_key, uid, folder, from_addr, from_name, subject, date_iso, ts, snippet,
+        """SELECT pk, message_key, uid, folder, from_addr, from_name, recipients, subject, date_iso, ts, snippet,
                   seen, flagged, answered, has_attach, is_junk, message_id
            FROM messages WHERE account=? AND thread_id=? AND pending_removal IS NULL
            ORDER BY ts ASC, pk ASC""",

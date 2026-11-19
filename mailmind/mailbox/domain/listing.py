@@ -4,6 +4,7 @@ is said (`kernel.when`)."""
 from collections.abc import Callable, Iterable, Sequence
 from typing import Any
 
+from mailmind.kernel import addressees
 from mailmind.kernel import attention as verdict
 from mailmind.kernel.row import Row
 
@@ -21,9 +22,9 @@ def _attention(r: Row) -> dict[str, bool]:
 
 
 def _who(r: Row) -> dict[str, Any]:
-    """Which copy this is and who it is from."""
+    """Which copy this is, who it is from and whom it went to, which names a row of a person's own mail."""
     return {"key": r["message_key"], "folder": r["folder"], "uid": r["uid"], "from_name": r["from_name"] or r["from_addr"],
-            "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)"}
+            "from_addr": r["from_addr"], **addressees.listed(r["recipients"]), "subject": r["subject"] or "(no subject)"}
 
 
 def _marks(r: Row) -> dict[str, Any]:
