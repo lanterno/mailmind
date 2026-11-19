@@ -29,30 +29,20 @@ struct Sheet: Sendable {
 /// them with: `/api/messages` for a folder or a virtual folder, `/api/inboxes` for All Inboxes, `/api/search`.
 enum Lists {
     static let pageSize = 200
-    /// How far down its folder one message is looked for (`row`): ten pages, newest first.
-    static let lookingFor = 2_000
 
-    /// The row a folder lists for one message, by its UID and, where it is known, its key: the folder read a message
-    /// a row, newest first, a page at a time, until a page holds it, the folder ends, or `lookingFor` rows are read.
-    /// No route names one message's row by its copy or its UID (`/api/message/body` wants its key and says nothing of
-    /// its flags), so its folder is read for it. The row stands for that message alone. With no UID, the first copy
-    /// its key has in the folder: a move's Undo gives the copy it brings back a new one.
+    /// The row a folder lists for one message, by its UID and, where it is known, its key, as the server reads it
+    /// from what is stored (`/api/message/row`), however far down its folder: nil where the folder lists none of it.
+    /// The row stands for that message alone. With no UID, the newest copy its key has in the folder: a move's Undo
+    /// gives the copy it brings back a new one.
     static func row(_ wire: Wire, account: String, folder: String, uid: Int?, key: Int? = nil) async -> API.FolderRow? {
-        var offset = 0
-        while offset < lookingFor {
-            guard let page = try? await Self.folder(wire, account: account, folder: folder, grouped: false,
-                                                    offset: offset, limit: pageSize) else { return nil }
-            if var row = page.rows.first(where: {
-                (uid == nil || $0.uid == uid) && $0.folder == folder && (key == nil || $0.key == key)
-            }) {
-                row.count = nil
-                row.threadCount = nil
-                return row
-            }
-            guard page.hasMore, !page.rows.isEmpty else { return nil }
-            offset += page.rows.count
-        }
-        return nil
+        guard uid != nil || key != nil,
+              var row = try? await wire.get(API.Get.MessageRow.self, [
+                  "account": account, "folder": folder, "uid": uid.map(String.init), "key": key.map(String.init),
+              ]).row
+        else { return nil }
+        row.count = nil
+        row.threadCount = nil
+        return row
     }
 
     /// A folder's page, or a virtual folder's (`account` nil reads it over every account).
