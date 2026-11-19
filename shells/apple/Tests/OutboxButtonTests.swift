@@ -87,6 +87,25 @@ final class OutboxButtonTests: XCTestCase {
         XCTAssertEqual(OutboxButton.badge(12), "12")
     }
 
+    /// Cancel on a scheduled send in the tray says it was cancelled, in the page's words, which offer no Undo. One
+    /// already going says it is too late.
+    func testCancelInTheTraySaysSo() async throws {
+        let (composing, routes) = composing(Self.holding("queued", scheduled: true))
+        await until { composing.outbox?.active == 1 }
+        let tray = try XCTUnwrap(composing.outbox)
+        routes.answer(API.Post.OutboxCancel.path, #"{"ok": true}"#)
+        routes.answer(API.Get.Outbox.path, Self.empty)
+
+        await tray.cancel(1)
+        XCTAssertEqual(routes.calls(to: API.Post.OutboxCancel.path).last?.body["id"], .number(1))
+        XCTAssertEqual(composing.notice?.text, "Send cancelled")
+        XCTAssertEqual(tray.active, 0, "read again: nothing waits")
+
+        routes.answer(API.Post.OutboxCancel.path) { _ in throw FakeRoutes.problem(409, "It is being sent") }
+        await tray.cancel(1)
+        XCTAssertEqual(composing.notice?.text, "Too late to cancel")
+    }
+
     /// Reads in flight together answer in any order: the tray shows the newest one's.
     func testAnOlderReadThatAnswersLateIsLetGo() async {
         let routes = FakeRoutes()
