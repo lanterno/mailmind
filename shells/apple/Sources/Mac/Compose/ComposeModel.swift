@@ -125,6 +125,11 @@ enum Addresses {
     /// The people a header names, each as it was written ("Lin Mori <lin@example.test>"): split on the commas and
     /// semicolons between them, never on one inside a quoted name or the angle brackets.
     static func entries(_ text: String?) -> [String] {
+        pieces(text).filter { !first($0).isEmpty }
+    }
+
+    /// Split on the commas and semicolons between people, never on one inside a quoted name or the angle brackets.
+    private static func pieces(_ text: String?) -> [String] {
         var entries: [String] = [], entry = "", quoted = false, bracketed = false
         for character in text ?? "" {
             switch character {
@@ -142,7 +147,7 @@ enum Addresses {
             entry.append(character)
         }
         entries.append(entry)
-        return entries.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !first($0).isEmpty }
+        return entries.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
     }
 
     /// The name an entry was written with, quotes and all taken off, else nil.
@@ -167,11 +172,23 @@ enum Addresses {
         return shape.firstMatch(in: bare, range: NSRange(bare.startIndex..., in: bare)) != nil
     }
 
-    /// What was typed, split on commas and semicolons.
+    /// What was typed, split on commas and semicolons, but for one inside a quoted name (`"Mori, Ren" <ren@…>`).
     static func split(_ raw: String) -> [String] {
-        raw.split(whereSeparator: { $0 == "," || $0 == ";" })
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        pieces(raw).filter { !$0.isEmpty }
     }
+
+    /// A person as a recipient is written with their name: `Lin Mori <lin@example.test>`, the name quoted where it
+    /// holds what an address list reads (`"Mori, Ren" <ren@example.test>`); the address alone with no name.
+    static func named(_ name: String, _ address: String) -> String {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, !name.contains("@") else { return address }
+        guard name.unicodeScalars.contains(where: nameSpecials.contains) else { return "\(name) <\(address)>" }
+        let escaped = name.replacingOccurrences(of: #"\"#, with: #"\\"#).replacingOccurrences(of: #"""#, with: #"\""#)
+        return #""\#(escaped)" <\#(address)>"#
+    }
+
+    /// What a name can't hold unquoted in an address list (RFC 5322's specials).
+    private static let nameSpecials = CharacterSet(charactersIn: #"()<>[]:;,.\""#)
 
     /// Where a Reply-To sends a reply instead of to the mail's sender, or nil if it sends it to them.
     static func redirect(replyTo: String?, sender: String?) -> Redirect? {
@@ -203,7 +220,7 @@ struct RecipientCompletion: Equatable {
 
     /// What Return or Tab takes.
     enum Taken: Equatable {
-        /// The suggestion highlighted: its address.
+        /// The suggestion highlighted: its address with the person's name (`chip`), which its chip shows.
         case suggestion(String)
         /// What is typed, as it is.
         case typed
@@ -232,8 +249,13 @@ struct RecipientCompletion: Equatable {
 
     /// What Return or Tab takes with `typed` in the field: the suggestion highlighted, else what is typed.
     func taken(typed: String) -> Taken {
-        if let chosen { return .suggestion(chosen.addr) }
+        if let chosen { return .suggestion(Self.chip(chosen)) }
         return typed.trimmingCharacters(in: .whitespaces).isEmpty ? .nothing : .typed
+    }
+
+    /// The chip a suggestion makes: the person by the name the list showed, going to their address.
+    static func chip(_ suggestion: API.Suggestion) -> String {
+        Addresses.named(suggestion.name, suggestion.addr)
     }
 
     /// Esc: the list goes, and the key is taken only while there was one, so Esc never closes more than the list.

@@ -861,7 +861,7 @@ struct ChipField: View {
 
     private func take(_ item: API.Suggestion) {
         close()
-        composer.commitChip(field, item.addr)
+        composer.commitChip(field, RecipientCompletion.chip(item))
     }
 }
 
