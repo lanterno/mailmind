@@ -209,8 +209,9 @@ private struct MeadowDrawer: ViewModifier {
 
 /// The splitter between the list and the pane (`.splitter`): drag it, or with the focus on it the arrow keys, Home
 /// and End; a double-click puts the list back to its own width. Its grip shows while it is pointed at, held or
-/// focused.
-private struct MeadowSplitter: View {
+/// focused. Only Tab brings the keyboard to it: the focus a window gives as it opens or the welcome goes, or a click
+/// on it, goes back to the list.
+struct MeadowSplitter: View {
     let shell: MeadowShell
     @State private var hovering = false
     @State private var start: CGFloat?
@@ -249,6 +250,13 @@ private struct MeadowSplitter: View {
             .focusable()
             .focused($focused)
             .focusEffectDisabled()
+            .onChange(of: focused) { _, now in
+                guard now, !Self.keepsFocus(after: NSApp.currentEvent) else { return }
+                focused = false
+                if let window = NSApp.keyWindow, let table = ListTable.find(in: window.contentView) {
+                    window.makeFirstResponder(table)
+                }
+            }
             .onKeyPress(.leftArrow) { nudge(-1) }
             .onKeyPress(.rightArrow) { nudge(1) }
             .onKeyPress(.home) {
@@ -275,6 +283,11 @@ private struct MeadowSplitter: View {
     private func nudge(_ steps: Int) -> KeyPress.Result {
         shell.nudgeList(by: steps)
         return .handled
+    }
+
+    /// Whether the focus the splitter was given stays: only when Tab or ⇧Tab moved it there.
+    static func keepsFocus(after event: NSEvent?) -> Bool {
+        event?.type == .keyDown && event?.keyCode == 48
     }
 }
 

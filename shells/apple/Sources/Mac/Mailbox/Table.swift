@@ -280,6 +280,7 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
         redraw(rows: IndexSet(reshown.map { row(at: $0) }))
         // New mail above the rows chosen moves them: keep the rows, not the positions.
         follow(mailbox?.marked ?? [], scroll: false)
+        table.rowsShown()
     }
 
     /// Run a change to the rows' heights, then put the rows on screen back where they stood, unless the list is at
@@ -688,12 +689,30 @@ final class MailboxTableView: NSTableView {
 
     /// Take the keyboard where nothing in the window has it, unless a dialog is up, or the first run's welcome. A
     /// list just `placed` takes it from the window's SwiftUI too, which a click on a tab or a place in the rail
-    /// leaves holding it; never from a field.
+    /// leaves holding it; never from a field. Placed under the welcome, it takes it once the first account's rows
+    /// show (`rowsShown`).
     func takeKeyboardIfNowhere(placed: Bool = false) {
-        guard let window, mailbox?.typing != true, !AppStatus.shared.firstRun else { return }
+        guard let window, mailbox?.typing != true else { return }
+        guard !welcomeUp() else {
+            if placed { awaitsRows = true }
+            return
+        }
         let responder = window.firstResponder
         guard DialogFocus.nowhere(responder, in: window) || (placed && responder === window.contentView) else { return }
         window.makeFirstResponder(self)
+    }
+
+    /// Whether the first run's welcome stands over the window.
+    var welcomeUp: @MainActor () -> Bool = { AppStatus.shared.firstRun }
+    /// The list was placed while the welcome stood over it, and takes the keyboard once rows show.
+    private var awaitsRows = false
+
+    /// Rows came: a list placed under the welcome takes the keyboard now that the first account's rows show, as a
+    /// list placed takes it, so it never stays where the window put it first (the splitter).
+    func rowsShown() {
+        guard awaitsRows, !welcomeUp(), numberOfRows > 0 else { return }
+        awaitsRows = false
+        takeKeyboardIfNowhere(placed: true)
     }
 
     /// The window came to the front with the pointer already resting on a row, which moved no mouse: the row shows
