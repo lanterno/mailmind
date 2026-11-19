@@ -37,6 +37,9 @@ protocol ComposeHost: AnyObject {
     func draftsChanged()
     func foldersChanged()
     func outboxChanged()
+    /// A composer closed whose draft read only keeps on this Mac, saved before it closed: the app says where it is
+    /// kept and shows it there.
+    func keptOnThisMac(_ composer: Composer)
     /// A composer closed with words to save: the app says how the save went, and keeps them a click away if it
     /// failed.
     func closing(_ composer: Composer, save: Task<Bool?, Never>, snapshot: ComposeSeed)
@@ -48,6 +51,7 @@ protocol ComposeHost: AnyObject {
 
 extension ComposeHost {
     var readOnly: Bool { false }
+    func keptOnThisMac(_ composer: Composer) {}
 }
 
 /// What the send check shows: the lines, what must be waved through, and whether it may be yet.
@@ -339,7 +343,11 @@ final class Composer: Identifiable {
             host.closing(self, save: saved, snapshot: snapshot())
         }
         closed = true
-        if draftId != nil && !closingSave { host.draftsChanged() }   // its saves replaced the copy that list shows
+        if draftId != nil && !closingSave {
+            host.draftsChanged()   // its saves replaced the copy that list shows
+            // Read only kept its saves on this Mac, where no list shows them: closing says where it is.
+            if host.readOnly { host.keptOnThisMac(self) }
+        }
         host.closed(self)
     }
 

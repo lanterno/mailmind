@@ -275,9 +275,21 @@ final class Composing: ComposeHost {
         scheduledChanged?()
     }
 
+    /// What a draft closed while read only is on says: kept on this Mac, in the tray's words, not in Drafts.
+    static let keptWords = String(localized: "Draft saved · \(OutboxTray.kept)")
+
+    /// A draft read only keeps on this Mac, closed: where it is kept is said, and the outbox's tray is read again,
+    /// so it shows there at once, as it does once MailMind opens again; no Drafts folder holds it.
+    func keptOnThisMac(_ composer: Composer) {
+        say(Self.keptWords)
+        outboxChanged()
+    }
+
     func closing(_ composer: Composer, save: Task<Bool?, Never>, snapshot: ComposeSeed) {
         Task {
             switch await save.value {
+            case true? where readOnly:
+                keptOnThisMac(composer)
             case true?:
                 say("Saved to Drafts")
                 draftsChanged()
