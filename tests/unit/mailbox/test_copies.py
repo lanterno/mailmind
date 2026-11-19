@@ -120,7 +120,7 @@ def test_whether_a_message_is_in_sent(found, there):
 def test_a_draft_goes_in_drafts_and_the_copy_before_it_goes_by_its_uid_alone():
     s = _Session()
     assert copies(s).append_to_drafts(ACCT, b"raw", prev_uid=42, prev_uidvalidity=5) == ("Brouillons", 100, 5, 42)
-    assert s.said == [("select", "Brouillons", False), ("append", "Brouillons", ("\\Draft",)),
+    assert s.said == [("select", "Brouillons", False), ("append", "Brouillons", ("\\Seen", "\\Draft")),
                       ("flag", [42], ["\\Deleted"]), ("expunge", [42]), ("logout",)]
 
 

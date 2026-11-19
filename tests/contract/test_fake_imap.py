@@ -194,7 +194,7 @@ def test_append_reports_the_new_uid(srv, app):
     from mailmind.bootstrap import mailbox
     folder, uid, uidv, _ = mailbox.copies.append_to_drafts(app, _mail(9, subject="Draft"))
     assert folder == "Drafts" and uidv == srv.mailbox(ADA, "Drafts").uidvalidity
-    assert srv.messages(ADA, "Drafts")[uid].flags == {"\\Draft"}
+    assert srv.messages(ADA, "Drafts")[uid].flags == {"\\Seen", "\\Draft"}
 
 
 def test_a_store_on_a_read_only_mailbox_is_refused(srv, app):
