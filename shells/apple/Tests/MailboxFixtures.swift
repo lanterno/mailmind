@@ -187,7 +187,7 @@ enum Fixture {
         }
         server.on("GET", API.Get.Views.path, API.Views(ok: true, views: [
             API.ListedView(builtin: true, id: "__lane_feed__", name: "Feed", q: "category:newsletter"),
-            API.ListedView(builtin: true, id: "__lane_papertrail__", name: "Paper Trail", q: "category:receipt"),
+            API.ListedView(builtin: true, id: "__lane_papertrail__", name: "Paper trail", q: "category:receipt"),
             API.ListedView(builtin: false, id: "v1", name: "From Grace", q: "from:grace"),
         ]))
         server.on("GET", API.Get.Preferences.path, preferences(conversations: grouped, singleKeys: singleKeys))

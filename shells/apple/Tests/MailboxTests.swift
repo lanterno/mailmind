@@ -101,7 +101,8 @@ final class MailboxPlacesTests: XCTestCase {
         XCTAssertEqual(Place.allInboxes.title(folders: []), "Inbox")
         XCTAssertEqual(Place.folder(account: Fixture.ada, folder: "Receipts").title(folders: Fixture.adaFolders), "Receipts")
         XCTAssertEqual(Place.virtual(.replyLater, account: nil).title(folders: []), "Reply later")
-        XCTAssertEqual(Place.search(Search(q: "x", lane: .papertrail)).title(folders: []), "Paper Trail")
+        // As the rail names it (the servers' view, "Paper trail"), not a second way.
+        XCTAssertEqual(Place.search(Search(q: "x", lane: .papertrail)).title(folders: []), "Paper trail")
         XCTAssertEqual(Place.documents.title(folders: []), "Documents")
     }
 
