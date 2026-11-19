@@ -357,10 +357,11 @@ final class CurateModel {
 
     // MARK: Rules and filters
 
-    /// Keep or block a sender or a domain, or remove a rule.
-    func rule(_ token: String, _ verdict: API.RuleChange) async {
+    /// Keep or block a sender or a domain, or remove a rule: whether it was kept.
+    @discardableResult
+    func rule(_ token: String, _ verdict: API.RuleChange) async -> Bool {
         let token = token.trimmingCharacters(in: .whitespaces)
-        guard let routes = link.routes, !token.isEmpty else { return }
+        guard let routes = link.routes, !token.isEmpty else { return false }
         do {
             let changed = try await routes.post(API.Post.Rules.self, API.RuleBody(token: token, verdict: verdict))
             rules = changed.rules
@@ -372,9 +373,21 @@ final class CurateModel {
             stats = try? await routes.get(API.Get.Stats.self, [:])
             // A rule changed how stored mail reads.
             if changed.reclassified > 0 { self.changed() }
+            return true
         } catch {
-            notices.say(String(localized: "Rule failed"))
+            notices.say(Self.ruleFailed(error))
+            return false
         }
+    }
+
+    /// A rule that wasn't kept: the server's own words when it refused (what isn't one address or one domain, say),
+    /// else that it failed.
+    static func ruleFailed(_ error: any Error) -> String {
+        if ReadOnlyWords.refuses(error) { return ReadOnlyWords.refused }
+        if let problem = error as? Problem, problem.isRefusal, let detail = problem.detail, !detail.isEmpty {
+            return detail
+        }
+        return String(localized: "Rule failed")
     }
 
     /// Save the filter the sheet holds. A refusal says, in the server's words, what a filter can't look at; it is

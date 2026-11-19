@@ -540,11 +540,13 @@ private struct RulesPage: View {
         .scrollContentBackground(.hidden)
     }
 
+    /// What was typed stays until the rule is kept, so a refused one can be put right rather than typed again.
     private func add(_ verdict: API.RuleChange) {
         let token = text.trimmingCharacters(in: .whitespaces)
         guard !token.isEmpty else { return }
-        text = ""
-        Task { await model.rule(token, verdict) }
+        Task {
+            if await model.rule(token, verdict), text.trimmingCharacters(in: .whitespaces) == token { text = "" }
+        }
     }
 
     @ViewBuilder private func chips(_ tokens: [String], keep: Bool) -> some View {
