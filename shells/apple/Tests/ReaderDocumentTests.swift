@@ -384,6 +384,62 @@ final class ReaderDocumentTests: XCTestCase {
         XCTAssertEqual(PaneEmptyWords.of(needsDone: false, hasMail: false).title, "Nothing here.")
     }
 
+    /// Your own mail, as the reader shows it in Sent (b25, b27): the reply box, About and the trust line name the
+    /// people it went to, not you; mail to you names who wrote it, as before.
+    func testYourOwnMailIsNamedByWhomItWentTo() {
+        let mine = SendGuard.mineSet(["ada@example.test"])
+        let sent = opened(from: "ada@example.test", to: "Ada <ada@example.test>, Lin Mori <lin@guild.example.test>")
+        let lin = MessageWords.OtherSide(name: "Lin Mori", address: "lin@guild.example.test", wentTo: true)
+        XCTAssertTrue(MessageWords.isYours(sent, mine: mine))
+        XCTAssertEqual(MessageWords.otherSide(sent, mine: mine), lin)
+        XCTAssertEqual(ReplyBoxWords(answering: sent, mine: mine, following: true).placeholder, "Follow up with Lin…")
+        XCTAssertEqual(MessageContent.from(sent, mine: mine), .external(domain: "guild.example.test"))
+        var known = sent
+        known.sender = API.SenderFacts(count: 41, firstAgo: "8mo", replied: 12)
+        XCTAssertEqual(MessageContent.from(known, mine: mine), .external(domain: "guild.example.test"),
+                       "what the server knows of you says nothing of Lin")
+        let about = AsideWords.about(known, mine: mine)
+        XCTAssertEqual(about?.name, "Lin Mori")
+        XCTAssertEqual(about?.address, "lin@guild.example.test")
+        XCTAssertNil(about?.relation, "no facts of yours on Lin's card")
+
+        var draft = opened(from: "", to: "cy@example.test")
+        draft.isDraft = true
+        XCTAssertEqual(MessageWords.otherSide(draft, mine: mine),
+                       MessageWords.OtherSide(name: "cy@example.test", address: "cy@example.test", wentTo: true))
+
+        var toSelf = opened(from: "ada@example.test", to: "ada+notes@example.test")
+        toSelf.sender = API.SenderFacts(count: 3, replied: 0)
+        XCTAssertFalse(MessageWords.otherSide(toSelf, mine: mine).wentTo)
+        XCTAssertNil(AsideWords.about(toSelf, mine: mine), "no card about yourself")
+
+        var theirs = opened()
+        theirs.sender = API.SenderFacts(count: 1, replied: 0)
+        XCTAssertEqual(MessageWords.otherSide(theirs, mine: mine),
+                       MessageWords.OtherSide(name: "Bo", address: "bo@example.test", wentTo: false))
+        XCTAssertEqual(ReplyBoxWords(answering: theirs, mine: mine, following: false).placeholder, "Reply to Bo…")
+        XCTAssertEqual(AsideWords.about(theirs, mine: mine)?.relation, "This is the first message from them.")
+        XCTAssertEqual(MessageContent.from(theirs, mine: mine), .external(domain: "example.test"))
+    }
+
+    /// A conversation's box answers the member the server names; where that is yours, the latest message as it
+    /// opened names whom it went to.
+    func testAConversationOfYoursIsNamedByWhomItWentTo() {
+        let mine = SendGuard.mineSet(["ada@example.test"])
+        let member = { (from: String, key: Int) in
+            API.ThreadMessage(answered: false, flagged: false, folder: "Sent", fromAddr: from, fromName: "Ada Park",
+                              hasAttach: false, isJunk: false, key: key, seen: true, snippet: "", subject: "Lunch",
+                              uid: key, when: "")
+        }
+        let latest = opened(from: "ada@example.test", to: "Lin Mori <lin@example.test>", key: 9)
+        XCTAssertEqual(ReplyBoxWords(answering: member("ada@example.test", 9), opened: latest, mine: mine,
+                                     following: true).placeholder, "Follow up with Lin…")
+        XCTAssertEqual(ReplyBoxWords(answering: member("ada@example.test", 9), opened: nil, mine: mine,
+                                     following: true).placeholder, "Follow up with Ada…", "until it has opened")
+        XCTAssertEqual(ReplyBoxWords(answering: member("bo@example.test", 8), opened: latest, mine: mine,
+                                     following: false).name, "Ada Park", "another member is named as it is")
+    }
+
     func testTheReplyBoxsWords() {
         let ren = ReplyBoxWords(name: "Ren Takeda", address: "ren@example.test", following: false)
         XCTAssertEqual(ren.placeholder, "Reply to Ren…")

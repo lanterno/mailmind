@@ -394,6 +394,42 @@ final class ComposeModelTests: XCTestCase {
         XCTAssertEqual(seed.origKey, 7)
     }
 
+    func testAReplyToYourOwnMessageGoesToWhomItWentTo() {
+        let mine = SendGuard.mineSet(["ada@example.test"])
+        let sent = opened(from: "ada@example.test", to: "Lin Mori <lin@example.test>, \"Mori, Ren\" <ren@example.test>",
+                          cc: "Ada <ada+news@example.test>, cy@example.test", replyTo: "ada@example.test")
+        let reply = Seeds.reply(sent, all: false, mine: mine)
+        XCTAssertEqual(reply.to, ["lin@example.test", "ren@example.test"], "a follow-up goes on to them, never to you")
+        XCTAssertEqual(reply.cc, [])
+        XCTAssertNil(reply.redirect, "your own Reply-To sends nothing elsewhere")
+        XCTAssertEqual(reply.mode, .reply)
+
+        let all = Seeds.reply(sent, all: true, mine: mine)
+        XCTAssertEqual(all.to, ["lin@example.test", "ren@example.test"])
+        XCTAssertEqual(all.cc, ["cy@example.test"], "Reply All copies its Cc in, your tagged address left out")
+        XCTAssertEqual(all.autoCc, ["cy@example.test"])
+
+        let copied = Seeds.reply(opened(from: "ada@example.test", to: "ada@example.test", cc: "cy@example.test"),
+                                 all: false, mine: mine)
+        XCTAssertEqual(copied.to, ["cy@example.test"], "one that went to you, Cy copied in, goes to Cy")
+
+        XCTAssertEqual(Seeds.reply(opened(from: "ada@example.test", to: "ada@example.test"), all: false, mine: mine).to,
+                       ["ada@example.test"], "a note to yourself is answered as any other")
+        XCTAssertEqual(Seeds.reply(opened(), all: false, mine: mine).to, ["bo@example.test"], "a message to you")
+    }
+
+    func testAHeadersPeopleAsTheyWereWritten() {
+        XCTAssertEqual(Addresses.entries("Lin Mori <lin@example.test>, \"Mori, Ren\" <ren@example.test>; cy@example.test"),
+                       ["Lin Mori <lin@example.test>", "\"Mori, Ren\" <ren@example.test>", "cy@example.test"])
+        XCTAssertEqual(Addresses.entries(""), [])
+        XCTAssertEqual(Addresses.entries("undisclosed-recipients:;"), [], "a group with no one in it")
+        XCTAssertEqual(Addresses.name("\"Mori, Ren\" <ren@example.test>"), "Mori, Ren")
+        XCTAssertEqual(Addresses.name("Lin Mori <lin@example.test>"), "Lin Mori")
+        XCTAssertNil(Addresses.name("cy@example.test"))
+        XCTAssertNil(Addresses.name("<cy@example.test>"))
+        XCTAssertNil(Addresses.name("cy@example.test <cy@example.test>"), "an address written as a name is none")
+    }
+
     func testAForwardCountsTheFilesThatTravelWithinTheBudget() {
         let file = { (size: Int, travels: Bool) in
             API.AttachmentPart(contentType: "application/pdf", filename: "f.pdf", isInline: 0, partId: "2", size: size,
