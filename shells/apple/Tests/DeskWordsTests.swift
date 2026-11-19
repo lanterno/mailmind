@@ -147,6 +147,48 @@ final class DeskWordsTests: XCTestCase {
         XCTAssertEqual(EventWhen.short(start: "soon", allDay: false, now: now, calendar: calendar).big, "soon")
     }
 
+    /// An event's start as the core serves it, on the person's wall clock with no zone: Today & next's and Your Week's,
+    /// copied from the served app's answers (`tests/golden/http_get/upcoming_screener_and_contacts.json` and the
+    /// review in `tests/golden/http_ai`). Its hour reads as that hour here, wherever here is, never as the day's
+    /// midnight, and the meeting reminder comes for it.
+    func testAnEventsWallClockStartReadsAsItsHourHere() throws {
+        let upcoming = try JSONDecoder().decode(API.Upcoming.self, from: Data("""
+            {"items": [{"account": "ada@example.test", "all_day": false, "end": "2026-11-03T14:00", "folder": "INBOX",
+              "invite": true, "key": 6, "location": "Room 2", "organizer": "Noor Haddad", "recurrence": "",
+              "start": "2026-11-03T13:00", "summary": "Design review",
+              "thread_id": "rf:ada@example.test:9f2993fccfd8ca64", "uid": 6}], "ok": true}
+            """.utf8))
+        let meeting = try JSONDecoder().decode(API.ReviewMeeting.self, from: Data("""
+            {"account": "ada@example.test", "all_day": false, "folder": "INBOX", "key": 6, "past": false,
+             "start": "2026-11-03T13:00", "summary": "Design review",
+             "thread_id": "rf:ada@example.test:9f2993fccfd8ca64", "uid": 6}
+            """.utf8))
+        let event = try XCTUnwrap(upcoming.items.first)
+        let english = Locale(identifier: "en_US")
+        func plain(_ text: String) -> String { text.replacingOccurrences(of: "\u{202F}", with: " ") }
+        for zone in ["Europe/Paris", "Asia/Tokyo", "America/Los_Angeles"] {
+            var here = Calendar(identifier: .gregorian)
+            here.timeZone = try XCTUnwrap(TimeZone(identifier: zone))
+            let at = { (day: Int, hour: Int, minute: Int) in
+                here.date(from: DateComponents(year: 2026, month: 11, day: day, hour: hour, minute: minute))!
+            }
+            let monday = EventWhen.short(start: event.start, allDay: event.allDay, now: at(2, 10, 0), calendar: here,
+                                         locale: english)
+            XCTAssertEqual(monday.big, "Tue", zone)
+            XCTAssertEqual(plain(monday.small), "1:00 pm", zone)
+            let today = EventWhen.short(start: event.start, allDay: event.allDay, now: at(3, 9, 0), calendar: here,
+                                        locale: english)
+            XCTAssertEqual(plain(today.big), "1:00 pm", "not 00:00: \(zone)")
+            XCTAssertEqual(today.small, "today")
+            XCTAssertEqual(plain(EventWhen.long(start: meeting.start, allDay: meeting.allDay, calendar: here,
+                                                locale: english)), "Tue, Nov 3, 1:00 pm", "Your Week, \(zone)")
+            let soon = Soon.next(upcoming.items, now: at(3, 12, 55), closed: [], calendar: here)
+            XCTAssertEqual(soon?.title, "Design review", "the reminder five minutes before, \(zone)")
+            XCTAssertEqual(soon?.when(now: at(3, 12, 55)), "in 5 min")
+            XCTAssertEqual(soon?.end, at(3, 14, 0))
+        }
+    }
+
     func testRefusalsReadAsThePageReadsThem() {
         let off = Problem(CoreAnswer(status: 409, contentType: "application/problem+json", headers: [], body: Data(
             #"{"type": "/problems/ai-off", "title": "AI is off", "status": 409, "detail": "No key.", "ai_off": true}"#.utf8)))
