@@ -554,8 +554,8 @@ pub trait Overview: Send + Sync + fmt::Debug {
     fn brief_rows(&self, accounts: &[String], n: i64) -> Result<Vec<Glance>, Fault>;
     /// The Inbox's mail newer than `since_ts`, newest first, with what the AI said of each or its defaults.
     fn delta_rows(&self, accounts: &[String], since_ts: i64, n: i64) -> Result<Vec<Glance>, Fault>;
-    /// The copy each stored message has now, among them the one in the folder it was read from; None for one that
-    /// has gone.
+    /// The copy each stored message has now in the folder it was read from; None for one that has gone from it, filed
+    /// or deleted, though its row follows a filed copy to where it went.
     fn copies_now(&self, copies: &[(i64, Option<String>)]) -> Result<Vec<CopyNow>, Fault>;
     /// The week since `since_ts` (`since_iso` as text), with at most `top` of each list.
     fn week(&self, accounts: &[String], since_ts: f64, since_iso: &str, top: i64) -> Result<WeekRows, Fault>;

@@ -177,7 +177,8 @@ impl Reviews {
     }
 
     /// A kept list as the page reads it: each with the folder and uid of its message's copy now. One whose message has
-    /// gone is left out, one that named no message stays as it was, and a pk a list once held goes.
+    /// gone from the folder it was read from, filed or deleted, is left out, one that named no message stays as it was,
+    /// and a pk a list once held goes.
     fn items_now(&self, items: Vec<Value>) -> Result<Vec<Value>, Fault> {
         let items: Vec<Map<String, Value>> = items
             .into_iter()

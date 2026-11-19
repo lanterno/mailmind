@@ -150,7 +150,7 @@ impl Briefs {
     }
 
     /// A stored brief's groups as the page reads them: each message by its key and the folder its copy is in now. One
-    /// whose message has gone is left out.
+    /// whose message has gone from the folder it was read from, filed or deleted, is left out.
     fn groups_now(&self, groups: &str) -> Result<Vec<Value>, Fault> {
         let groups = parsed(groups)?;
         let groups = groups.as_array().map(Vec::as_slice).unwrap_or_default();

@@ -558,8 +558,8 @@ impl Overview for Database {
         }
         self.read(|c| {
             let mut now = c.prepare_cached(
-                "SELECT folder, uid FROM messages WHERE message_key=? AND pending_removal IS NULL \
-                 ORDER BY folder=? DESC, pk DESC LIMIT 1",
+                "SELECT folder, uid FROM messages WHERE message_key=?1 AND pending_removal IS NULL \
+                 AND (?2 IS NULL OR folder=?2) ORDER BY pk DESC LIMIT 1",
             )?;
             copies
                 .iter()
