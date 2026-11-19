@@ -18,6 +18,8 @@ struct ComposeTextView: NSViewRepresentable {
     /// What ⌘Return does while the text has the keys, where something besides the menu's should answer it; it is
     /// told whether the press only repeats one (the key held down).
     var commandReturn: ((_ held: Bool) -> Void)?
+    /// What Esc does while the text has the keys, where something should answer it: whether it took the key.
+    var escape: (() -> Bool)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(composer: composer)
@@ -45,6 +47,7 @@ struct ComposeTextView: NSViewRepresentable {
         text.font = .systemFont(ofSize: NSFont.systemFontSize + 1)
         text.textContainerInset = NSSize(width: 12, height: 10)
         text.commandReturn = commandReturn
+        text.escape = escape
         text.string = composer.body
         if let look {
             // The mockup's padding is the text's own distance from the edge, with no fragment padding inside it.
@@ -64,6 +67,7 @@ struct ComposeTextView: NSViewRepresentable {
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let view = scroll.documentView as? BodyTextView else { return }
         view.commandReturn = commandReturn
+        view.escape = escape
         if view.string != text {
             // A change the composer made (a snippet, a draft, a picture's mark): the text takes it whole, in the look.
             view.string = text
@@ -133,6 +137,13 @@ final class BodyTextView: NSTextView {
     /// main window's View menu would otherwise take it for focus reading. Every auto-repeat of a held key comes here
     /// too, so it says which are.
     var commandReturn: ((_ held: Bool) -> Void)?
+    /// Esc while this text has the keys, ahead of the text's own completion: the reader's reply box closes with it.
+    var escape: (() -> Bool)?
+
+    override func cancelOperation(_ sender: Any?) {
+        if let escape, escape() { return }
+        super.cancelOperation(sender)
+    }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if let commandReturn, window?.firstResponder === self,

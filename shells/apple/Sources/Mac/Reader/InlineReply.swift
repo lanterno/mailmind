@@ -105,6 +105,19 @@ extension Composing {
         }
     }
 
+    /// Esc in the reader's box, as the page's composer takes it: a check showing goes, back to the text; else the
+    /// reply closes, what was written in it saved as its draft (`close`), to take up again from Drafts.
+    @discardableResult
+    func escapeInBox() -> Bool {
+        guard let open = inline, !open.composer.closed else { return false }
+        if open.composer.check != nil {
+            open.composer.dismissGuard()
+        } else {
+            open.composer.close()
+        }
+        return true
+    }
+
     /// A send guard's fix, pressed in the reader's box. The box holds the text, Send later and files, so a fix for
     /// those is done there (Attach opens the file panel in it); it has no subject or recipients to edit, so a fix
     /// that asks for one of those takes the reply to a window of its own, whose field takes the keys.
@@ -305,7 +318,7 @@ private struct OpenReply: View {
         let look = ComposeTextLook(meadow, light: light)
         return ComposeTextView(composer: composer, text: composer.body, selectionRequest: composer.selectionRequest,
                                focusBody: composer.focusRequest == .body, look: look,
-                               commandReturn: { send(held: $0) })
+                               commandReturn: { send(held: $0) }, escape: { composing.escapeInBox() })
             .frame(height: max(190, ComposeTextLook.size * ComposeTextLook.lineHeight * 7 + 24))
             .overlay(alignment: .topLeading) {
                 if composer.body.isEmpty {
