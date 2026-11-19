@@ -16,10 +16,10 @@ use mm_assistant::digest::{fingerprint, parse};
 use mm_assistant::gateway::{Budget, Gateway};
 use mm_assistant::governor::CostGovernor;
 use mm_assistant::ports::{
-    AccountList, AiSettings, Answers, Around, AskIndex, AskRow, Cards, ConversationBy, CopyNow, Engine, Glance,
-    InForce, LanguageModel, Mail, Message, ModelError, Needing, NewDraft, Overview, PlanSearch, Prompt, Reached, Reply,
-    Said, SenderRecent, SenderStats, Senders, Spend, Stamp, StoredCard, StoredDraft, StoredReview, StoredSummary,
-    Usage, UsageLedger, WeekRows,
+    AccountList, AiSettings, Answers, Around, AskIndex, AskRow, Awaiting, Cards, ConversationBy, CopyNow, Engine,
+    Glance, InForce, LanguageModel, Mail, Message, ModelError, Needing, NewDraft, Overview, PlanSearch, Prompt,
+    Reached, Reply, Said, SenderRecent, SenderStats, Senders, Spend, Stamp, StoredCard, StoredDraft, StoredReview,
+    StoredSummary, Usage, UsageLedger, WeekRows,
 };
 use mm_assistant::prepared_replies::{PreparedReplies, ReplyAsked};
 use mm_assistant::rationale::Rationales;
@@ -649,8 +649,43 @@ impl Overview for Glances {
             received: 5,
             by_bucket: vec![(None, 3), (Some("newsletters".into()), 2)],
             needs: vec![ivo],
+            needs_you: 1,
             ..WeekRows::default()
         })
+    }
+}
+
+/// A week with more mail that needs the person, and more threads they wait on, than a review lists: the first `top` of
+/// each, of 13 and 11.
+#[derive(Debug)]
+struct Crowded;
+
+impl Overview for Crowded {
+    fn brief_rows(&self, _accounts: &[String], _n: i64) -> Result<Vec<Glance>, Fault> {
+        Ok(Vec::new())
+    }
+    fn delta_rows(&self, _accounts: &[String], _since_ts: i64, _n: i64) -> Result<Vec<Glance>, Fault> {
+        Ok(Vec::new())
+    }
+    fn copies_now(&self, copies: &[(i64, Option<String>)]) -> Result<Vec<CopyNow>, Fault> {
+        Ok(copies.iter().map(|(key, _)| Some((Some("INBOX".to_owned()), Some(*key)))).collect())
+    }
+    fn week(&self, _accounts: &[String], _since_ts: f64, _since_iso: &str, top: i64) -> Result<WeekRows, Fault> {
+        let needs = (1..=top.min(13))
+            .map(|n| Needing {
+                message_key: Some(n),
+                account: ADA.into(),
+                thread_id: Some(format!("t{n}")),
+                from_name: Some(format!("Sender {n}")),
+                subject: Some(format!("Asks {n}")),
+                importance: Some(5),
+                ..Needing::default()
+            })
+            .collect();
+        let waiting = (1..=top.min(11))
+            .map(|n| Awaiting { account: ADA.into(), thread_id: format!("w{n}"), ..Awaiting::default() })
+            .collect();
+        Ok(WeekRows { needs, needs_you: 13, waiting, waiting_on: 11, ..WeekRows::default() })
     }
 }
 
@@ -823,6 +858,32 @@ fn a_review_counts_the_week_and_keeps_what_the_model_said_of_it() {
         (read["cached"].clone(), read["stale"].clone(), read["needs"][0]["uid"].clone()),
         (json!(true), json!(false), json!(110))
     );
+}
+
+#[test]
+fn a_reviews_numbers_count_all_that_needs_the_person_and_all_they_wait_on_beyond_its_lists() {
+    let w = world(true);
+    let reviews = Reviews::new(
+        w.calls.clone(),
+        Arc::new(Kept2::default()),
+        Arc::new(Crowded),
+        Arc::new(NoCalendar),
+        clock_at(NOW),
+        Arc::new(Utc),
+    );
+    w.model.replies.lock().expect("replies").push(Ok("{\"narrative\": \"test\", \"next\": []}".into()));
+    let written = reviews.build(&[ADA.to_owned()], false, true, "review", false).expect("a review");
+    let listed = |name: &str| written[name].as_array().map(Vec::len);
+    assert_eq!((written["stats"]["needs_you"].clone(), written["stats"]["waiting_on"].clone()), (json!(13), json!(11)));
+    assert_eq!((listed("needs"), listed("waiting")), (Some(8), Some(8)));
+    assert_eq!(
+        written["narrative"],
+        "In the last 7 days you sent 0 messages and 0 came in. 13 still need a reply from you and you're waiting to \
+         hear back on 11."
+    );
+    let [prompt] = sent(&w).try_into().expect("one call");
+    assert!(prompt.text.contains("Still need your reply: 13\nWaiting to hear back: 11\n"));
+    assert_eq!(prompt.text.matches(" \u{2014} Asks ").count(), 8);
 }
 
 /// The open tabs, as what each was told.

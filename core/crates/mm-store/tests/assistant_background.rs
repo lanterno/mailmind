@@ -1,7 +1,7 @@
 //! What the Assistant's background work reads and keeps, on a database the core makes (`tests/unit/assistant`'s
 //! `test_assessment_record.py` and the Python adapters' `needs_summary`, `save_summary` and `draft_candidates`): one copy
 //! of each message triage hasn't summarized, newest first, none a batch holds; what it says kept under the message's
-//! key; and the mail a reply may be drafted ahead for.
+//! key; and the mail a reply may be drafted ahead for. Beside them, what a brief, a delta and the week's review read.
 
 #![allow(clippy::unwrap_used)]
 
@@ -139,6 +139,57 @@ fn a_brief_and_a_delta_read_the_inbox_alone() {
     assert_eq!(pks(database.delta_rows(&[], 0, 50).unwrap()), [16]);
     assert_eq!(pks(database.brief_rows(&[], 50).unwrap()), [16]);
     assert_eq!(pks(database.delta_rows(&[ADA.to_owned()], 0, 50).unwrap()), [16]);
+}
+
+/// Eleven messages in Ada's Inbox that need her, each way a message can (importance 4 and up, action-needed, a next
+/// step), and beside them one each way one doesn't: answered, junk, filed, on its way out, snoozed, in a muted thread,
+/// asking nothing, and Bea's. Ten threads Ada waits on an answer in, and beside them one each way a thread isn't one:
+/// waiting on her, not due yet, dismissed, pinned to reply later, and Bea's.
+const CROWDED: &str = "
+WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 19)
+INSERT INTO message_identity (key, account, identity)
+  SELECT i, CASE i WHEN 19 THEN 'bea@example.test' ELSE 'ada@example.test' END, 'm' || i FROM n;
+WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 19)
+INSERT INTO messages (pk, account, kind, folder, uid, from_addr, subject, ts, thread_id, is_junk, answered,
+                      pending_removal, message_key)
+  SELECT i, CASE i WHEN 19 THEN 'bea@example.test' ELSE 'ada@example.test' END, 'imap',
+         CASE i WHEN 14 THEN 'Archive' ELSE 'INBOX' END, i, 'lin@example.test', 'Asks ' || i, 1000 + i, 't' || i,
+         i = 13, i = 12, CASE i WHEN 15 THEN 1 END, i FROM n;
+WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 19)
+INSERT INTO assessments (message_key, summary, importance, category, action)
+  SELECT i, 'Wants something.', CASE WHEN i = 18 THEN 2 WHEN i % 3 = 0 THEN 4 ELSE 1 END,
+         CASE WHEN i = 18 THEN 'info' WHEN i % 3 = 1 THEN 'action-needed' ELSE 'personal' END,
+         CASE WHEN i % 3 = 2 AND i != 18 THEN 'Pay it' ELSE '' END FROM n;
+INSERT INTO snoozes (message_key, folder, until) VALUES (16, 'INBOX', 4102444800);
+INSERT INTO muted (account, thread_id) VALUES ('ada@example.test', 't17');
+WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 10)
+INSERT INTO followups (account, thread_id, kind, state, first_sent_ts)
+  SELECT 'ada@example.test', 'w' || i, 'sent', 'due', i FROM n;
+INSERT INTO followups (account, thread_id, kind, state, first_sent_ts) VALUES
+  ('ada@example.test', 'r1', 'received', 'due', 1), ('ada@example.test', 'p1', 'sent', 'pending', 1),
+  ('ada@example.test', 'd1', 'sent', 'dismissed', 1), ('ada@example.test', 'l1', 'replylater', 'due', 1),
+  ('bea@example.test', 'w1', 'sent', 'due', 1);
+";
+
+#[test]
+fn the_weeks_numbers_count_all_that_needs_the_person_and_all_they_wait_on_and_its_lists_hold_the_first() {
+    let dir = tempfile::tempdir().unwrap();
+    let database = database(dir.path(), CROWDED);
+    let week = |accounts: &[String], top| database.week(accounts, 0.0, "1970-01-01T00:00:00+00:00", top).unwrap();
+    let ada = [ADA.to_owned()];
+    let listed = week(&ada, 8);
+    assert_eq!((listed.needs.len(), listed.needs_you, listed.waiting.len(), listed.waiting_on), (8, 11, 8, 10));
+    // The most important first, then the newest; who has waited longest first.
+    let keys: Vec<_> = listed.needs.iter().filter_map(|n| n.message_key).collect();
+    assert_eq!(keys, [9, 6, 3, 11, 10, 8, 7, 5]);
+    let threads: Vec<_> = listed.waiting.iter().map(|w| w.thread_id.as_str()).collect();
+    assert_eq!(threads, ["w1", "w2", "w3", "w4", "w5", "w6", "w7", "w8"]);
+    // Listed whole, they are what was counted.
+    let whole = week(&ada, 50);
+    assert_eq!((whole.needs.len(), whole.needs_you, whole.waiting.len(), whole.waiting_on), (11, 11, 10, 10));
+    // Every account's, with none named.
+    let every = week(&[], 8);
+    assert_eq!((every.needs.len(), every.needs_you, every.waiting.len(), every.waiting_on), (8, 12, 8, 11));
 }
 
 #[test]
