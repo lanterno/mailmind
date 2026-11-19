@@ -444,11 +444,12 @@ struct MailboxToast: View {
     }
 
     /// The icon for what was said: a refusal's alert, never the tick, for words said as one (`refused`) or that say
-    /// one (read only's sentence, "Couldn’t…", "Too late…"); else by the word the mailbox starts it with
-    /// (`Words.filed`, the marks, Undo), a verb's own icon, else a tick. Words it doesn't know, a translation's among
-    /// them, take the tick.
+    /// one (read only's sentence, "Couldn’t…", "Too late…"); an Undo's, whatever verb it names ("Trashed undone");
+    /// else by the word the mailbox starts it with (`Words.filed`, the marks), a verb's own icon, else a tick. Words
+    /// it doesn't know, a translation's among them, take the tick.
     static func icon(_ text: String, refused: Bool = false) -> MeadowIcon {
         if refused || text == ReadOnlyWords.refused { return .alert }
+        if text.hasSuffix(" undone") { return .undo }
         let starts: [(String, MeadowIcon)] = [
             ("Couldn’t", .alert), ("Too late", .alert), ("Nothing to", .alert), ("Archived", .archive), ("Trashed", .trash), ("Marked junk", .ban),
             ("Moved", .folder), ("Starred", .star), ("Unstarred", .star), ("Marked read", .mailOpen),
@@ -456,7 +457,6 @@ struct MailboxToast: View {
             ("Saved to Reply later", .bookmark), ("Go to folder", .arrowRight), ("Saved ", .download),
         ]
         if let icon = starts.first(where: { text.hasPrefix($0.0) })?.1 { return icon }
-        if text.hasSuffix(" undone") { return .undo }
         if text.contains(" failed") || text.contains("couldn’t") { return .alert }
         return .check
     }
