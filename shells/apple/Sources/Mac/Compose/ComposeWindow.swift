@@ -74,8 +74,8 @@ struct ComposerForm: View {
     }
 
     /// The head's words, as the mockup's dialog says them: "New message", or "Reply to" and the first name of whom
-    /// it answers.
-    static func heading(_ mode: API.ComposeMode, to: [Recipient]) -> String {
+    /// it answers, as its chip names them or else the message replied to does (`names`).
+    static func heading(_ mode: API.ComposeMode, to: [Recipient], names: [String: String] = [:]) -> String {
         switch mode {
         case .new: return String(localized: "New message")
         case .forward: return String(localized: "Forward")
@@ -83,8 +83,10 @@ struct ComposerForm: View {
             guard let value = to.first?.value, case let first = ChipField.shown(value), !first.isEmpty else {
                 return mode == .reply ? String(localized: "Reply") : String(localized: "Reply all")
             }
+            let address = Addresses.recipient(value)
+            let named = Addresses.name(value) ?? names[address] ?? first
             // A person by their first name, an organisation whole (`Words.calling`), else the address.
-            let name = Words.calling(first, address: Addresses.recipient(value)) ?? first
+            let name = Words.calling(named, address: address) ?? first
             return String(localized: "Reply to \(name)")
         }
     }
@@ -176,7 +178,7 @@ struct ComposerForm: View {
 
     private var head: some View {
         HStack(spacing: 8) {
-            Text(Self.heading(composer.mode, to: composer.to))
+            Text(Self.heading(composer.mode, to: composer.to, names: composer.names))
                 .font(.meadow(.display, 18, .bold))
                 .foregroundStyle(meadow.ink)
                 .lineLimit(1)

@@ -104,6 +104,8 @@ struct ComposeSeed: Sendable {
     var redirect: Redirect?
     /// When its words as they stand were saved: a reply closed in the reader's box, opened there again.
     var saved: Date?
+    /// What the message replied to calls its people, by address: the window's head names whom a reply goes to.
+    var names: [String: String] = [:]
 }
 
 /// Addresses as the composer reads them.
@@ -340,7 +342,20 @@ enum Seeds {
         seed.subject = Addresses.prefixed(d.subject, "Re:")
         seed.quote = quote(d)
         seed.origKey = d.key
+        seed.names = names(d)
         return seed
+    }
+
+    /// The names the message gives its people, by address: its sender's, and those in its To, Cc and Reply-To.
+    static func names(_ d: API.MessageOpened) -> [String: String] {
+        var names: [String: String] = [:]
+        for entry in [d.to, d.cc, d.replyTo].flatMap(Addresses.entries) {
+            if let name = Addresses.name(entry) { names[Addresses.recipient(entry)] = name }
+        }
+        if let from = d.fromAddr, let name = d.fromName.map(Addresses.oneLine), !name.isEmpty, !name.contains("@") {
+            names[from.lowercased()] = name
+        }
+        return names
     }
 
     /// How many of the original's files a forward takes along: those the server marks, up to the budget it stops at.

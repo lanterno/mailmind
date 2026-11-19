@@ -180,6 +180,8 @@ final class Composer: Identifiable {
     private(set) var pendingAfter = 0
     /// The thread's people: never "new".
     private(set) var participants: Set<String>
+    /// What the message replied to calls its people, by address.
+    let names: [String: String]
     private(set) var people: [String: Person] = [:]
     private(set) var thin = false
     @ObservationIgnored private var knownQueue: [String] = []
@@ -254,6 +256,7 @@ final class Composer: Identifiable {
         redirect = seed.redirect
         ack = seed.ack
         participants = Set(seed.participants.map { $0.lowercased() })
+        names = seed.names
         if edited { markEdited() }
         host.loadSnippets()
         autosaver = Task { [weak self] in
@@ -328,6 +331,7 @@ final class Composer: Identifiable {
         seed.autoCc = autoCc
         seed.redirect = redirect
         seed.participants = Array(participants)
+        seed.names = names
         seed.ack = ack
         seed.body = body
         seed.attachments = attachments
