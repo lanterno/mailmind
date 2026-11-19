@@ -164,7 +164,7 @@
  },
  {
   "body": {
-   "detail": "invalid token (need a domain or an address)",
+   "detail": "A rule names one address, such as name@example.com, or one domain, such as example.com.",
    "status": 400,
    "title": "Refused",
    "type": "/problems/refused"

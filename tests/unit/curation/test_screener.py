@@ -4,7 +4,7 @@ and a rule that won't do refused in its own words. The route is tests/integratio
 import pytest
 
 from mailmind.bootstrap.curation import rules
-from mailmind.curation.application.screener import Screener
+from mailmind.curation.application.screener import NOT_A_SENDER, Screener
 from mailmind.kernel.errors import Refused
 
 LOOM = "news@loom.example.test"
@@ -63,8 +63,8 @@ def test_only_a_block_trashes(data_dir):
     assert ("trash", 7) not in filing.said
 
 
-@pytest.mark.parametrize("body, said", [({"token": "nothing", "verdict": "keep"}, "invalid token (need a domain or an address)"),
-                                        ({"verdict": "keep"}, "invalid token (need a domain or an address)"),
+@pytest.mark.parametrize("body, said", [({"token": "nothing", "verdict": "keep"}, NOT_A_SENDER),
+                                        ({"verdict": "keep"}, NOT_A_SENDER),
                                         ({"token": LOOM}, "verdict must be keep|block|remove"),
                                         ({"token": LOOM, "verdict": "maybe"}, "verdict must be keep|block|remove")])
 def test_a_rule_that_wont_do_is_refused_in_its_own_words_and_changes_nothing(data_dir, body, said):
@@ -74,3 +74,18 @@ def test_a_rule_that_wont_do_is_refused_in_its_own_words_and_changes_nothing(dat
         rule(filing, **body)
     assert refused.value.said == said
     assert (rules.load(), filing.said) == (before, [])
+
+
+def test_a_keep_or_block_of_what_names_no_sender_is_refused_and_a_rule_kept_before_still_goes(data_dir):
+    """A number pasted before an address would make a rule that never matches: refused. One kept before this was held
+    to stays removable, so Curate's chip for it still takes it away."""
+    filing = Filing()
+    pasted = "50506 spam@lottery.example.test"
+    for verdict in ("keep", "block"):
+        with pytest.raises(Refused) as refused:
+            rule(filing, token=pasted, verdict=verdict)
+        assert refused.value.said == NOT_A_SENDER
+    assert pasted not in rules.load()["keep_senders"] + rules.load()["block_senders"]
+    rules.add(pasted, "block")                          # as one was kept before
+    assert rule(filing, token=pasted, verdict="remove")["placed_in"] is None
+    assert pasted not in rules.load()["block_senders"]

@@ -36,6 +36,26 @@ def test_a_rule_names_an_address_or_a_domain(token, ok):
     assert rulebook.is_token(token) is ok
 
 
+NAMED = ["lin@example.test", "lin.mori+news@mail.example.test", "ada@local", "example.test", "bücher.example.test"]
+NOT_NAMED = ["50506 spam@lottery.example.test", "spam@lottery.example.test 50506", "lin", "", "lin@", "@example.test",
+             "a@b@example.test", "example", "example..test", ".example.test", "example.test.", "lin@example..test",
+             "lin@example.test,bo@example.test", "<lin@example.test>", "lin mori <lin@example.test>",
+             '"lin"@example.test', "lin@[127.0.0.1]", "lin\u00a0@example.test", "lin\x07@example.test",
+             "lin@exa\u2003mple.test", "lin@example.test;"]
+
+
+@pytest.mark.parametrize("token", NAMED)
+def test_a_keep_or_block_names_one_address_or_one_domain(token):
+    assert rulebook.names_a_sender(token)
+
+
+@pytest.mark.parametrize("token", NOT_NAMED)
+def test_a_keep_or_block_names_nothing_beside_its_address_or_domain(token):
+    """A number pasted before an address, two addresses, a name in brackets or a space inside: a rule on any of them
+    would never match a sender."""
+    assert not rulebook.names_a_sender(token)
+
+
 # ── a token is never in both ──────────────────────────────────────────────────
 @pytest.mark.parametrize("token, kept, blocked", [("ada@example.test", "keep_senders", "block_senders"),
                                                   ("example.test", "keep_domains", "block_domains")])

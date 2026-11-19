@@ -5,6 +5,7 @@ import problems
 from fixtures import world as w
 from mailmind.bootstrap import curation
 from mailmind.bootstrap.curation import rules
+from mailmind.curation.application.screener import NOT_A_SENDER
 from mailmind.platform.db import audit
 from mailmind.platform.db.uow import UnitOfWork
 
@@ -86,8 +87,8 @@ def test_a_sweep_that_answers_an_account_by_account_failure_fits(app, world):
     assert r.json["results"][0]["error"]
 
 
-@pytest.mark.parametrize("body, said", [({"token": "nothing", "verdict": "keep"}, "invalid token (need a domain or an address)"),
-                                        ({"verdict": "keep"}, "invalid token (need a domain or an address)"),
+@pytest.mark.parametrize("body, said", [({"token": "nothing", "verdict": "keep"}, NOT_A_SENDER),
+                                        ({"verdict": "keep"}, NOT_A_SENDER),
                                         ({"token": LOOM}, "verdict must be keep|block|remove"),
                                         ({"token": LOOM, "verdict": None}, "verdict must be keep|block|remove")])
 def test_a_rule_that_wont_do_is_refused_in_its_own_words(app, body, said):
