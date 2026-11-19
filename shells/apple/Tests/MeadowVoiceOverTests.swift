@@ -7,6 +7,8 @@ import XCTest
 @MainActor
 final class MeadowVoiceOverTests: XCTestCase {
     private var suite = ""
+    /// The window the walk reads, kept open while a test acts on what it found.
+    private var window: NSWindow?
 
     override func setUp() async throws {
         _ = NSApplication.shared
@@ -16,6 +18,8 @@ final class MeadowVoiceOverTests: XCTestCase {
     }
 
     override func tearDown() async throws {
+        window?.close()
+        window = nil
         Self.assistive(false)
         UserDefaults().removePersistentDomain(forName: suite)
     }
@@ -40,9 +44,42 @@ final class MeadowVoiceOverTests: XCTestCase {
                       "the AI's title, as a section's label is:\n\(Self.said(read))")
     }
 
+    /// A message's head is a heading, read whole: who wrote, to whom and when. A conversation's messages are found by
+    /// their heads.
+    func testAMessagesHeadIsAHeading() async throws {
+        let read = try await windowRead()
+        let head = try XCTUnwrap(read.first { $0.label.contains("bo@example.test · to you") }, Self.said(read))
+        XCTAssertEqual(head.role, "AXHeading", "the head:\n\(Self.said(read))")
+        XCTAssertTrue(head.label.contains("Bo"), head.label)
+    }
+
+    /// The splitter is a slider VoiceOver can move: named, with the list's width as its value, a step wider or
+    /// narrower at each increment or decrement, as the arrow keys move it.
+    func testTheSplitterIsASliderThatMovesTheList() async throws {
+        let (read, shell) = try await windowReadWithShell()
+        let splitter = try XCTUnwrap(read.first { $0.label == "Resize the message list" }, Self.said(read))
+        XCTAssertEqual(splitter.role, NSAccessibility.Role.slider.rawValue, "the splitter:\n\(Self.said(read))")
+        XCTAssertEqual(splitter.value, "372 points wide")
+        XCTAssertEqual(shell.listWidth, 372)
+
+        XCTAssertTrue(splitter.element.accessibilityPerformIncrement?() ?? false, "it can be moved")
+        XCTAssertEqual(shell.listWidth, 396)
+        XCTAssertTrue(splitter.element.accessibilityPerformDecrement?() ?? false)
+        XCTAssertTrue(splitter.element.accessibilityPerformDecrement?() ?? false)
+        XCTAssertEqual(shell.listWidth, 348)
+        try await Task.sleep(for: .milliseconds(200))
+        let again = try XCTUnwrap(Self.read(splitter.root).first { $0.label == "Resize the message list" })
+        XCTAssertEqual(again.value, "348 points wide")
+    }
+
     /// The mail window at the mockup's 1440 by 900 on the fixture's mail, its first message open under the pane's bar
     /// with its summary, as VoiceOver reads it.
     private func windowRead() async throws -> [Read] {
+        try await windowReadWithShell().read
+    }
+
+    /// The same, and the window's shell.
+    private func windowReadWithShell() async throws -> (read: [Read], shell: MeadowShell) {
         let app = MailApp()
         app.mailbox.wire = Fixture.server().wire
         await app.mailbox.refresh()
@@ -56,6 +93,8 @@ final class MeadowVoiceOverTests: XCTestCase {
         let frame = MeadowFrame(app: app, mailbox: app.mailbox, shell: shell, status: AppStatus.shared, lights: false) {
             VStack(spacing: 0) {
                 MeadowPaneBar(app: app, mailbox: app.mailbox, writing: PaneWriting(replyTo: MailCopy(row)))
+                MessageHead(opened: opened(), mine: [Fixture.ada])
+                    .padding(.horizontal, 24)
                 SummaryCard(copy: MailCopy(row), stored: ("Lunch on Thursday, at the noodle place.", "Say yes"),
                             cards: desk.summaries, author: "Lin Mori", authorAddress: "lin@example.test")
                     .padding(24)
@@ -70,11 +109,12 @@ final class MeadowVoiceOverTests: XCTestCase {
         window.isReleasedWhenClosed = false
         window.contentView = host
         window.layoutIfNeeded()
+        self.window = window
         try await Task.sleep(for: .milliseconds(600))
         let read = Self.read(host)
         XCTAssertTrue(read.contains { $0.role == NSAccessibility.Role.button.rawValue && $0.label == "File" },
                       "the walk reached the pane's bar:\n\(Self.said(read))")
-        return read
+        return (read, shell)
     }
 
     // MARK: Reading the tree
@@ -82,24 +122,43 @@ final class MeadowVoiceOverTests: XCTestCase {
     struct Read: CustomStringConvertible {
         let role: String
         let label: String
+        /// What it says of itself besides its name, as words.
+        let value: String
         let size: CGSize
         let depth: Int
+        /// The element itself, to act on, and the walk's root, to read again.
+        let element: AnyObject
+        let root: AnyObject
 
         var description: String {
-            String(repeating: " ", count: depth) + "\(role) \"\(label)\" \(Int(size.width))x\(Int(size.height))"
+            String(repeating: " ", count: depth) + "\(role) \"\(label)\"\(value.isEmpty ? "" : " = \(value)") "
+                + "\(Int(size.width))x\(Int(size.height))"
         }
     }
 
     /// Every element under `element` as VoiceOver goes through them.
-    static func read(_ element: Any, depth: Int = 0) -> [Read] {
+    static func read(_ element: Any, depth: Int = 0, root: AnyObject? = nil) -> [Read] {
         let object = element as AnyObject
         let role = (object.accessibilityRole?() ?? nil)?.rawValue ?? ""
         let label = [(object.accessibilityLabel?() ?? nil), (object.accessibilityTitle?() ?? nil)]
             .compactMap { $0 }.first { !$0.isEmpty } ?? ""
+        let value = [(object.accessibilityValueDescription?() ?? nil), Self.value(of: object)]
+            .compactMap { $0 }.first { !$0.isEmpty } ?? ""
         let size = object.accessibilityFrame?().size ?? .zero
         let kids = (object.accessibilityChildren?() ?? nil) ?? []
-        return [Read(role: role, label: label, size: size, depth: depth)]
-            + kids.flatMap { read($0, depth: depth + 1) }
+        return [Read(role: role, label: label, value: value, size: size, depth: depth, element: object,
+                     root: root ?? object)]
+            + kids.flatMap { read($0, depth: depth + 1, root: root ?? object) }
+    }
+
+    /// What an element says its value is, as words: nil when it says none, or none in words.
+    static func value(of object: AnyObject) -> String? {
+        // Read through its getter: the elements SwiftUI makes answer it whatever protocol Swift sees them through.
+        guard let object = object as? NSObject, object.responds(to: NSSelectorFromString("accessibilityValue")) else {
+            return nil
+        }
+        let value = object.value(forKey: "accessibilityValue")
+        return (value as? String) ?? (value as? NSAttributedString)?.string
     }
 
     static func said(_ read: [Read]) -> String { read.map(\.description).joined(separator: "\n") }
