@@ -838,7 +838,7 @@ fn a_review_counts_the_week_and_keeps_what_the_model_said_of_it() {
     assert_eq!(
         (written["narrative"].clone(), written["next"].clone(), written["model"].clone(), written["meetings"].clone()),
         (
-            json!("In the last 7 days you sent 2 messages and 5 came in. 1 still need a reply from you."),
+            json!("In the last 7 days you sent 2 messages and 5 came in. 1 message still needs a reply from you."),
             json!(["Reply to Ivo \u{2014} Contract"]),
             json!("fallback"),
             json!([])
@@ -878,11 +878,11 @@ fn a_reviews_numbers_count_all_that_needs_the_person_and_all_they_wait_on_beyond
     assert_eq!((listed("needs"), listed("waiting")), (Some(8), Some(8)));
     assert_eq!(
         written["narrative"],
-        "In the last 7 days you sent 0 messages and 0 came in. 13 still need a reply from you and you're waiting to \
-         hear back on 11."
+        "In the last 7 days you sent 0 messages and 0 came in. 13 messages still need a reply from you and you're \
+         waiting to hear back on 11."
     );
     let [prompt] = sent(&w).try_into().expect("one call");
-    assert!(prompt.text.contains("Still need your reply: 13\nWaiting to hear back: 11\n"));
+    assert!(prompt.text.contains("Messages that still need your reply: 13\nWaiting to hear back: 11\n"));
     assert_eq!(prompt.text.matches(" \u{2014} Asks ").count(), 8);
 }
 

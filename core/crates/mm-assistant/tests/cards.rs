@@ -176,7 +176,7 @@ fn a_reviews_fingerprint_fallback_and_answer_read_as_the_python_apps() {
     let (narrative, next) = review::fallback(&stats, &needs);
     assert_eq!(
         narrative,
-        "In the last 7 days you sent 1 message and 4 came in. You filed away 3. 2 still need a reply from you."
+        "In the last 7 days you sent 1 message and 4 came in. You filed away 3. 2 messages still need a reply from you."
     );
     assert_eq!(next, ["Reply to Ivo \u{2014} Contract", "Reply to Noor \u{2014} Design"]);
     let mut clear = stats.clone();
@@ -190,7 +190,18 @@ fn a_reviews_fingerprint_fallback_and_answer_read_as_the_python_apps() {
     assert!(
         review::fallback(&waits, &needs)
             .0
-            .ends_with("2 still need a reply from you and you're waiting to hear back on 1.")
+            .ends_with("2 messages still need a reply from you and you're waiting to hear back on 1.")
+    );
+    // A message each, and one is one.
+    let mut one = stats.clone();
+    one.insert("needs_you".into(), json!(1));
+    assert!(review::fallback(&one, &needs).0.ends_with(" 1 message still needs a reply from you."));
+    let mut none = waits.clone();
+    none.insert("needs_you".into(), json!(0));
+    assert!(
+        review::fallback(&none, &[])
+            .0
+            .ends_with(" 0 messages still need a reply from you and you're waiting to hear back on 1.")
     );
     let (narrative, next) =
         review::clean(&object(json!({"narrative": "n".repeat(1500), "next": ["a".repeat(200), 5, "b", "c", "d"]})));
