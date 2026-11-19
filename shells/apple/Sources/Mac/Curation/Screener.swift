@@ -227,9 +227,14 @@ struct ScreenerScreen: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .focusable()
-        .focused($focus, equals: .screen)
-        .focusEffectDisabled()
+        // What holds the keys where no button can, behind the gate rather than around it: a button reads the focus
+        // of the nearest view that can take it, so around them it drew every button's ring at once.
+        .background {
+            Color.clear
+                .focusable()
+                .focused($focus, equals: .screen)
+                .focusEffectDisabled()
+        }
         .onAppear { holdKeys() }
         // Another account's gate shows in the same place, gone to from the rail, which the click left the keyboard
         // with: the gate takes it as it does as it first shows.
