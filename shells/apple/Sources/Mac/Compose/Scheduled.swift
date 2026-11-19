@@ -6,8 +6,15 @@ import SwiftUI
 // edit the message, which cancels it first: a draft waiting in the outbox can't be changed while it waits.
 
 extension Composing {
+    /// The send waiting for later that goes from the draft MailMind keeps as `draftId`, as the outbox names it: a
+    /// draft another draft's subject can't be taken for. None for a draft MailMind doesn't keep, which no send goes from.
+    func scheduledSend(draftId: Int?) -> API.OutboxItem? {
+        guard let draftId else { return nil }
+        return scheduled.first { $0.draftId == draftId }
+    }
+
     /// The send waiting for later that goes from a draft of `account`'s with this subject, and to these recipients
-    /// when they're known. The outbox doesn't name the draft a send goes from, so the draft is known by what it says.
+    /// when they're known: how a list's row, which names no draft, is known.
     func scheduledSend(account: String, subject: String, to: String? = nil) -> API.OutboxItem? {
         let subject = ScheduledWords.plain(subject)
         let people = to.map(ScheduledWords.people)
