@@ -203,6 +203,24 @@ then `lint-imports` (import-linter) on the `mailmind` package's layers, then `py
 and strict ones on what `[tool.pyright]` lists, which a package joins once it reaches zero. New tests are pytest-native, in the folder of `tests/` they belong to;
 pytest's `--import-mode=importlib` keeps a folder like `tests/unit/calendar` from shadowing a module.
 
+## The Mac app's runs
+
+`just apple test` runs the Mac app's tests in a test bundle of their own, where no app is launched, each over a suite
+of defaults of its own. `just apple demo`, its `smoke`, `measure` and `picture`, `just apple smoke` and `measure`, the
+release check and CI's `mac-floor` launch the app itself, and every build of it is `io.github.lanterno.mailmind`, the
+person's own MailMind's identifier, whose defaults macOS would hand it. So a run that isn't a person's (one that names
+a home with `MAILMIND_HOME`, the keychain's stand-in with `MAILMIND_TEST_KEYCHAIN`, or a measure mode with
+`MAILMIND_MEASURE`) keeps its preferences apart by itself, however it was started: the first thing it does
+(`Sources/main.swift`, `RunPreferences`) makes its user defaults volatile, so it reads and writes nothing of the
+person's MailMind (its settings, the read-only switch, the window frames AppKit saves, a window's saved state). It
+carries in the Mac's own settings (Dark Mode, language and region), and keeps its own in its home, as
+`Library/Preferences/io.github.lanterno.mailmind.plist`; one that names no home keeps them only while it runs.
+`demo_home.py` checks after each run that the file is there (`tests/unit/test_mac_demo_home.py`).
+
+To open the app by path, as an agent might, name a temp home, the keychain's stand-in in it and a `MAILMIND_DB_KEY` of
+the run's own, and read the run's preferences in that home, never with `defaults` on the app's domain, which is the
+person's. `CFFIXED_USER_HOME` is no help: on macOS 26 it moves the home folder, but not the defaults.
+
 ## Supply chain
 
 `just audit` (part of `just verify`) looks up what `uv.lock` and `web/package-lock.json` pin: `pip-audit` for the first, `osv-scanner` for both.

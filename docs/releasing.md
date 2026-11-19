@@ -105,8 +105,9 @@ halves are built for that macOS, a program signed as the app is loads its Sparkl
 acknowledgements, the .dmg's window is laid out, and the .dmg's signature and the appcast's own both verify against the
 app's key and no other, a feed changed after signing doesn't, and the appcast names the same lowest macOS. Then
 the app in the .dmg opens on the demo's fictional mail (`Measure/demo_home.py`: fake servers on loopback, a home of its
-own and a keychain stand-in, where a release's copy starts no update check) until its inbox shows rows, on Apple
-silicon: the check runs on an Apple silicon Mac, and never opens the Intel half.
+own and a keychain stand-in, where a release's copy starts no update check and keeps its preferences apart from the
+person's MailMind, in that home) until its inbox shows rows, on Apple silicon: the check runs on an Apple silicon Mac,
+and never opens the Intel half.
 Run it after changing anything in `shells/apple/Release`; CI runs it on every change to the clients, even when an
 earlier step failed. `MAILMIND_RELEASE_CHECK_KEEP=DIR` keeps a copy of the .dmg it made: CI keeps it as an artifact
 for a few days, and `mac-floor` opens it on macOS 15 the same way, each half natively on a Mac of its kind.
