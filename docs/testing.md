@@ -114,7 +114,8 @@ with the CSRF token its page carries, and over a line protocol on its standard i
 - `work` runs one pass of a background job, since no worker runs on its own there: `app.work("outbox")`, `"commands"`,
   `"drafts"`, `"snoozes"`, `"follow-ups"`, `"assess"` (triage what AI hasn't summarized), `"tidy"`, `"draft-ahead"`
   (draft one reply ahead, once a test turns `draft_ahead` on), `"forget"` (what went a month ago let go), `"backfill"` (a
-  round of the body backfill), `"warm"` (a round of warming folders beyond the Inbox), `app.work("reconcile", account)`
+  round of the body backfill), `"warm"` (a round of warming folders beyond the Inbox), `"retry"` (a try of each account
+  whose server didn't answer, while its trouble may pass), `app.work("reconcile", account)`
   (the ghost pruner's round), or `app.work("sync", account, folder)`, which `world.deliver` runs after delivering.
   `tests/support/serve_python.py` says what each does.
 - `settle` waits for the work requests started (`app.settle()`), and `check` fails the test on what the server's own checks refused:
