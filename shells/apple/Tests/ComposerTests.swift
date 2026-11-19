@@ -155,6 +155,35 @@ final class ComposerTests: XCTestCase {
         XCTAssertEqual(saved, true)
     }
 
+    /// Closed with only a recipient picked, or only a subject, or only words, a message is saved to Drafts, as the
+    /// page keeps it (`nothingToSave` counts a recipient) and both servers do; only one with nothing at all is let go.
+    func testClosingKeepsAMessageWithOnlyARecipientASubjectOrWords() async throws {
+        let composing = Composing()
+        composing.use(routes, digest: Fixture.digest())
+        composing.openWindow = { _ in }
+        let fills: [(String, (Composer) -> Void)] = [
+            ("a recipient", { $0.commitChip(.to, "bo@example.test") }),
+            ("a subject", { $0.setSubject("Plans") }),
+            ("words", { $0.setBody("Thursday works.", selection: NSRange(location: 15, length: 0)) }),
+        ]
+        for (what, fill) in fills {
+            let before = routes.calls(to: "/api/draft").count
+            let composer = try XCTUnwrap(composing.open(ComposeSeed()))
+            fill(composer)
+            composing.say("between")
+            composer.close()
+            await eventually("closed with \(what), it is kept") { composing.notice?.text == "Saved to Drafts" }
+            XCTAssertEqual(routes.calls(to: "/api/draft").count, before + 1, "saved once, with \(what)")
+        }
+
+        let before = routes.calls(to: "/api/draft").count
+        composing.say("between")
+        try XCTUnwrap(composing.open(ComposeSeed())).close()
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(routes.calls(to: "/api/draft").count, before, "nothing in it: nothing saved")
+        XCTAssertEqual(composing.notice?.text, "between", "and nothing said")
+    }
+
     func testDiscardThrowsAwayTheServersCopyToo() async throws {
         let draft = written("Gone soon")
         _ = await draft.save().value
