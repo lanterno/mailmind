@@ -434,6 +434,12 @@ struct MeadowMenu: View {
     let model: MeadowMenuModel
     let close: @MainActor () -> Void
     var label = ""
+    /// Whether each item keeps room above and below it for the focus ring, which reaches past its row: where an item
+    /// with a second line sits under another, its title is at its top, and the ring on the one above would cross it.
+    var ringRoom = false
+
+    /// How far the focus ring reaches past its row: drawn three points out, half its two-point stroke further.
+    static let ringReach: CGFloat = 4
 
     /// The items the keys move over, in order, those in a scroll among them.
     static func items(_ parts: [Part]) -> [MeadowMenuItem] {
@@ -484,6 +490,7 @@ struct MeadowMenu: View {
                          pop: true, check: item.check) {
             if let leading = item.leading { leading } else if let icon = item.icon { MeadowIconView(icon) }
         }
+        .padding(.vertical, ringRoom ? Self.ringReach / 2 : 0)
         .disabled(item.disabled)
         .onTapGesture { model.run(item) }
         .accessibilityAction { model.run(item) }

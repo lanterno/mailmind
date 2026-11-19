@@ -74,7 +74,10 @@ struct StatusMenu: View {
     @State private var notAsked = false
 
     var body: some View {
-        MeadowMenu(parts: parts, width: 280, model: model, close: close, label: String(localized: "Sync status"))
+        // Check Mail Against the Server says what it does on a second line, under Check for mail now: its items keep
+        // room for the ring the keys put on one, so it never crosses the title of the next.
+        MeadowMenu(parts: parts, width: 280, model: model, close: close, label: String(localized: "Sync status"),
+                   ringRoom: true)
             .task { notAsked = await status.newMail.allowed() == nil }
             .task { await status.readJobs() }
     }
