@@ -15,25 +15,38 @@ extension SMAppService: LoginItem {}
 
 /// Settings › General's Open at Login: whether macOS opens MailMind as you log in, so mail scheduled for later goes
 /// at its time and new mail comes in. macOS may ask for it to be allowed in its own Login Items first.
+///
+/// Only a person's run has it (`CoreHome.isAPersonsRun`). Every build is `io.github.lanterno.mailmind`, so a demo's or
+/// a test's run would add its own build to the person's login items, to open with no home as they log in: such a run
+/// has no item, never asks macOS, and says why under the switch.
 @MainActor
 @Observable
 final class OpenAtLogin {
-    @ObservationIgnored private let item: any LoginItem
+    @ObservationIgnored private let item: (any LoginItem)?
     private(set) var status: SMAppService.Status
     /// What went wrong the last time it was changed, in words.
     private(set) var problem: String?
 
-    init(item: any LoginItem = SMAppService.mainApp) {
+    /// `item` nil: a run that isn't a person's, which has no switch.
+    init(item: (any LoginItem)?) {
         self.item = item
-        status = item.status
+        status = item?.status ?? .notRegistered
     }
 
+    /// macOS's login item in a person's run; in any other none, and `SMAppService` is never asked.
+    convenience init(_ environment: [String: String] = ProcessInfo.processInfo.environment) {
+        self.init(item: CoreHome.isAPersonsRun(environment) ? SMAppService.mainApp : nil)
+    }
+
+    /// Whether this run has the switch.
+    var available: Bool { item != nil }
     /// On once asked for, whether or not macOS has let it yet.
     var isOn: Bool { status == .enabled || status == .requiresApproval }
     /// macOS waits for it to be allowed in System Settings › General › Login Items.
     var needsApproval: Bool { status == .requiresApproval }
 
     func set(_ on: Bool) {
+        guard let item else { return }
         do {
             if on { try item.register() } else { try item.unregister() }
             problem = nil
@@ -47,12 +60,18 @@ final class OpenAtLogin {
 
     /// Read again what macOS holds: a person may have changed it in System Settings.
     func refresh() {
+        guard let item else { return }
         status = item.status
     }
 
     static let help = String(localized: """
         MailMind opens as you log in to this Mac, so mail you scheduled goes at its time and new mail comes in. It \
         sends and syncs only while it is open.
+        """)
+
+    /// What a demo or test run says under the switch it doesn't have, as read only's card says it.
+    static let notAvailable = String(localized: """
+        This demo or test run never opens at login. Open at login is a switch here when you open MailMind yourself.
         """)
 }
 
@@ -69,6 +88,8 @@ struct OpenAtLoginCard: View {
         DeskSideCard(title: String(localized: "This Mac"), icon: .info) {
             SettingSwitch(String(localized: "Open at login"), help: OpenAtLogin.help,
                           isOn: Binding(get: { model.isOn }, set: { model.set($0) }))
+                .disabled(!model.available)
+            if !model.available { SettingHelp(OpenAtLogin.notAvailable) }
             if model.needsApproval {
                 SettingLine(String(localized: "macOS asks you to allow MailMind in Login Items.")) {
                     Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
