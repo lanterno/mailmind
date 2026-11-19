@@ -65,6 +65,8 @@ final class AppStatus {
     /// What opens Curate from the status menu, when the window offers it.
     @ObservationIgnored var curate: (@MainActor () -> Void)?
 
+    /// What reads the digest when no core is open: a test's routes, which answer as the core would.
+    @ObservationIgnored var wire: Wire?
     @ObservationIgnored private var listening: Task<Void, Never>?
     @ObservationIgnored private var ticking: Task<Void, Never>?
     @ObservationIgnored private var digestSoon: Task<Void, Never>?
@@ -128,13 +130,14 @@ final class AppStatus {
         digestSoon?.cancel()
         listening = nil
         ticking = nil
+        digestSoon = nil
     }
 
     // MARK: Reading
 
     func readDigest() async {
-        guard let core else { return }
-        if let read = try? await core.get(API.Get.Digest.self) { digest = read }
+        guard let wire = wire ?? core.map(Wire.init) else { return }
+        if let read = try? await wire.get(API.Get.Digest.self) { digest = read }
     }
 
     /// The accounts, then how each stands. Once there is an account to hear from, macOS is asked whether MailMind may
@@ -172,12 +175,16 @@ final class AppStatus {
         if let read = try? await core.get(API.Get.Upcoming.self) { upcoming = read.items }
     }
 
-    /// The digest again, a moment after a burst of events, as the page reads it once for many.
+    /// The digest again, a moment after a burst of events, as the page reads it once for many. Events that come while
+    /// a read waits join it rather than put it off, as the mailbox's do (`Mailbox.digestAgain`): the older-mail lane
+    /// says folder-synced at each step for minutes after a first sync, and a wait begun afresh at each would leave the
+    /// pill and the brief's line as they were until the steps stopped.
     private func digestAgain() {
-        digestSoon?.cancel()
+        guard digestSoon == nil else { return }
         digestSoon = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled else { return }
+            self?.digestSoon = nil
             await self?.readDigest()
         }
     }
@@ -423,7 +430,8 @@ final class AppStatus {
         }
     }
 
-    private func heard(_ event: CoreEvent) async {
+    /// What an event touches, read again. The stream's own listener calls it; so does a test, with events of its own.
+    func heard(_ event: CoreEvent) async {
         switch event.name {
         case "sync-done", "folder-synced":
             digestAgain()
