@@ -5,7 +5,7 @@ asked."""
 import json
 from typing import Any
 
-from mailmind.kernel.ids import INBOX, FolderName
+from mailmind.kernel.ids import INBOX, AccountId, FolderName
 from mailmind.kernel.row import Connection, Row
 from mailmind.mailbox.application.commands import MailCommands
 from mailmind.mailbox.application.ports import Accounts, StoredMail
@@ -95,7 +95,19 @@ class Reversals:
             self._ingest.ingest_message(self._accounts.get(d["account"]), d["src_folder"], d["message_id"])
         except Exception:
             pass
+        self._forget_left(d["account"], d["dest_folder"], d["message_id"])
         return True, d["account"], d["src_folder"]
+
+    def _forget_left(self, account: AccountId, folder: FolderName, message_id: str) -> None:
+        """The copy the move left in `folder` went back with the Undo: its row goes, as that folder's next reconcile would
+        take it, so the folder no longer lists what its server no longer holds. Only logged when it fails: the message is
+        back where it was."""
+        try:
+            with self._uow.write() as c:
+                if (r := self._store.newest_copy_in(c, account, folder, message_id)) is not None:
+                    self._store.delete_message(c, r["pk"])
+        except Exception as e:
+            log.warning("a copy moved back couldn't be forgotten", exc_info=e)
 
 
     def sweep_back(self, entries: list[dict[str, Any]]) -> list[Reversed]:

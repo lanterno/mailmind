@@ -66,6 +66,19 @@ def delete_message(c, pk):
                   (int(datetime.now(timezone.utc).timestamp()), row["message_key"], row["message_key"]))
 
 
+def relocate(c, pk, folder, uid):
+    """A message's row follows it to the copy at `uid` in `folder`, listed again there, its body and what was said of it
+    kept: False, and nothing changed, when `folder` holds that UID or that message already. Its search row stays as it
+    was: what the index holds of a message never names its folder."""
+    moved = c.execute(
+        "UPDATE messages SET folder=?1, uid=?2, pending_removal=NULL WHERE pk=?3 AND NOT EXISTS "
+        "(SELECT 1 FROM messages t, messages here WHERE here.pk=?3 AND t.account=here.account AND t.folder=?1 "
+        "AND (t.uid=?2 OR t.message_key=here.message_key))", (folder, uid, pk)).rowcount
+    if moved:                                    # the Inbox's label went with it, where a server keeps labels
+        c.execute("DELETE FROM message_labels WHERE message_pk=? AND label=?", (pk, "\\Inbox"))
+    return bool(moved)
+
+
 def mint_key(c, account, message_id, from_addr, date_iso, subject):
     """The message's key, minted the first time any copy of it is seen."""
     who = (account, identity.of(message_id, from_addr, date_iso, subject))

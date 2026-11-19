@@ -52,6 +52,22 @@ def _uid_by_msgid(s: MailSession, mid: str | None) -> int | None:
         return None
 
 
+def _landed_in(s: MailSession, folder: str, mid: str) -> tuple[str, int] | None:
+    """The copy a move just put in `folder`, as (folder, UID): the newest with Message-ID `mid` there, as the folder's
+    next sync would store it. None when it has no Message-ID, or the server won't select the folder or search it; a lost
+    connection still raises, as any step of a try does."""
+    if not mid:
+        return None
+    try:
+        s.select(folder, readonly=True)
+    except imaplib.IMAP4.abort:
+        raise
+    except imaplib.IMAP4.error:
+        return None
+    uid = _uid_by_msgid(s, mid)
+    return (folder, int(uid)) if uid else None
+
+
 def _seen_on_server(s: MailSession, uid: int, otherwise: bool) -> bool:
     """Whether the selected folder's message `uid` carries \\Seen, as the server says now; the
     local row's word (`otherwise`) when it won't say."""
@@ -170,7 +186,8 @@ class ServerOps:
                                             trash=trash)
             if strategy.way is Way.LABELS:
                 s.remove_labels([uid], ["\\Inbox"])
-                return command.ServerAnswer()
+                all_mail = mail_session.find_role(s, "all")     # it stays there, found as it is anywhere else
+                return command.ServerAnswer(copy=_landed_in(s, all_mail, mid) if all_mail else None)
             if not where.folder:
                 return command.ServerAnswer(won_t=command.NO_FOLDER)
             unseen = strategy.read_seen_first and not _seen_on_server(s, uid, bool(params.get("seen", True)))
@@ -181,7 +198,7 @@ class ServerOps:
                 mail_session.move_by_copy(s, [uid], where.folder)
             else:
                 s.move([uid], where.folder)
-            return command.ServerAnswer(dest=where.folder, unseen=unseen)
+            return command.ServerAnswer(dest=where.folder, unseen=unseen, copy=_landed_in(s, where.folder, mid))
 
         try:
             return self._do_imap(acct, run, timeout)

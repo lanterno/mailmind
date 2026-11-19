@@ -161,11 +161,13 @@ class MailCommands:
 
     # ── a try, and what settles it ──────────────────────────────────────────────────────────────
 
-    def _local_mirror(self, c: Connection, row: Row) -> None:
-        """Idempotent: what the server now holds, on the local rows. A move drops the rows it marked pending_removal
+    def _local_mirror(self, c: Connection, row: Row, copy: tuple[str, int] | None = None) -> None:
+        """Idempotent: what the server now holds, on the local rows. A move takes the rows it marked pending_removal
         or, when there are none (a sync stored the message again meanwhile, or it was queued before migration 23 and
-        its row went then), the source folder's row by Message-ID. A flag change sets the flags on the row by
-        Message-ID. Re-running is harmless (delete of a gone row is a no-op; set_flags is idempotent)."""
+        its row went then), the source folder's row by Message-ID: the first follows the message to the copy the server
+        named (`copy`), so it is listed and searchable there at once, and the rest go, as all go when the server named
+        none or the folder holds that copy already. A flag change sets the flags on the row by Message-ID. Re-running
+        is harmless (delete of a gone row is a no-op; set_flags is idempotent)."""
         if row["kind"] == "flag":
             r = self._flagged_row(c, row)
             if r is None:
@@ -177,6 +179,10 @@ class MailCommands:
         if not pks and row["message_id"]:
             r = self._store.newest_copy_in(c, row["account"], row["src_folder"], row["message_id"])
             pks = [r["pk"]] if r else []
+        if copy and pks:
+            first, *pks = pks
+            if not self._store.relocate(c, first, *copy):
+                self._store.delete_message(c, first)
         for pk in pks:
             self._store.delete_message(c, pk)
 
@@ -188,7 +194,7 @@ class MailCommands:
             self.QUEUE.mark_gate(c, row["id"])
             self._store.command_record(c, row["id"], answer.dest,
                                        json.dumps({"unseen": True}) if answer.unseen else None)
-            self._local_mirror(c, row)
+            self._local_mirror(c, row, answer.copy)
             self.QUEUE.finish(c, row["id"], datetime.now(timezone.utc).isoformat())
         self._commit(go)
 

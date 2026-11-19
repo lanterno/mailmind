@@ -37,6 +37,9 @@ class ServerAnswer:
     won_t: str | None = None    # one of WONT_HAPPEN; None once the server holds the change
     dest: str | None = None     # the folder it went to
     unseen: bool = False        # the server marked it read on the way to Trash: a reversal takes that off
+    # where the message is on the server now, the folder and UID its copy has there: asked as it landed, so its row
+    # follows it and it stays searchable before that folder's next sync. None where the server didn't say.
+    copy: tuple[str, int] | None = None
 
 
 def names_a_request(mutation_id: object) -> TypeGuard[str]:
