@@ -354,4 +354,35 @@ final class MeadowShellTests: XCTestCase {
         }
         window.contentView = nil
     }
+
+    /// A brief card's Snooze says where it stands, and the chooser for its message hangs there, not under the clock
+    /// of the message's row in the list beside the brief; once the card has gone, under the row's clock again.
+    func testABriefCardsSnoozeHangsTheChooserUnderItself() async throws {
+        _ = MeadowFonts.register()
+        let link = CoreLink(DeskRoutes())
+        let notices = DeskNotices()
+        let item = DeskFixture.item(140, from: "grace@example.test", name: "Grace Hopper", subject: "Notes from review")
+        let copy = BriefModel.copy(of: item)
+        let anchors = MeadowAnchors()
+        let row = CGRect(x: 300, y: 200, width: 20, height: 20)
+        anchors.rowClock = { $0 == copy ? row : nil }
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "mm-card-snooze-\(UUID().uuidString)"))
+        let card = NeedCard(item: item, model: BriefModel(link: link, notices: notices, defaults: defaults),
+                            attention: AttentionModel(link: link, notices: notices), actions: BriefActions())
+        let host = NSHostingView(rootView: card.frame(width: 640).environment(\.meadowAnchors, anchors).meadowLight(.day))
+        host.frame = NSRect(x: 0, y: 0, width: 640, height: 200)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        await until { anchors.frames[MeadowAnchors.cardSnooze(copy)] != nil }
+        let hung = try XCTUnwrap(anchors.snooze(for: [copy], open: nil))
+        XCTAssertNotEqual(hung, row, "the card's own Snooze, not the row's clock")
+        XCTAssertGreaterThan(hung.minX, 320, "on the card's right, where its Snooze stands")
+        XCTAssertEqual(anchors.snooze(for: [copy, BriefModel.copy(of: DeskFixture.item(141, from: "a@example.test",
+                                                                                      name: "A", subject: "B"))],
+                                      open: nil), row, "more than its one message: the first row's clock")
+        window.contentView = nil
+        await until { anchors.frames[MeadowAnchors.cardSnooze(copy)] == nil }
+        XCTAssertEqual(anchors.snooze(for: [copy], open: nil), row, "the card gone, the row's clock")
+    }
 }
