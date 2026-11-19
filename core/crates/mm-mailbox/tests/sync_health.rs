@@ -31,3 +31,13 @@ fn a_run_counts_its_failures_from_the_first() {
     assert_eq!(second, Failing { rounds: 2, since: 1_000, class: "Timeout", passing: true });
     assert!(second.shows(1_060));
 }
+
+#[test]
+fn a_run_heard_outside_a_sync_counts_no_failed_sync_but_its_age() {
+    let run = Failing::heard("ConnectionRefused", 1_000);
+    assert!(!run.shows(1_179) && run.shows(1_180));
+    let first = Failing::and(Some(&run), "ConnectionRefused", true, 1_060);
+    assert_eq!(first, Failing { rounds: 1, since: 1_000, class: "ConnectionRefused", passing: true });
+    assert!(!first.shows(1_060));
+    assert!(Failing::and(Some(&first), "Timeout", true, 1_120).shows(1_120));
+}

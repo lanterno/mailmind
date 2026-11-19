@@ -12,6 +12,7 @@ use std::time::Duration;
 
 use mm_content::mime::Fields;
 use mm_kernel::errors::Fault;
+use mm_kernel::events::Topic;
 use mm_kernel::seams::{Clock, Moment};
 use mm_mailbox::command_ports::{CommandStore, MoveAccount, MoveAccounts, Tx};
 use mm_mailbox::flights::Flights;
@@ -50,6 +51,12 @@ struct World {
     flights: Arc<Flights>,
     /// The accounts removed as their server is opened: their flights are stopped then.
     removing: Mutex<HashSet<String>>,
+    /// The accounts the open tabs were told had trouble (`sync-trouble`), in turn.
+    troubled: Mutex<Vec<serde_json::Value>>,
+    /// How many times a sync was asked for now.
+    soon: AtomicUsize,
+    /// Who hears that a server's opening failed, as the program's logins tell the sync of every connection's.
+    unreaching: Mutex<Option<std::sync::Weak<Syncing>>>,
 }
 
 impl World {
@@ -79,7 +86,13 @@ impl MailServers for World {
         if self.removing.lock().unwrap().contains(account) {
             self.flights.stop(account);
         }
-        Err(self.fails.lock().unwrap().get(account).copied().unwrap_or(ServerError::Unreachable("ConnectionRefused")))
+        let error =
+            self.fails.lock().unwrap().get(account).copied().unwrap_or(ServerError::Unreachable("ConnectionRefused"));
+        let unreaching = self.unreaching.lock().unwrap().as_ref().and_then(std::sync::Weak::upgrade);
+        if let Some(syncing) = unreaching {
+            syncing.unreached(account, SyncError::Server(error));
+        }
+        Err(error)
     }
 }
 
@@ -140,7 +153,11 @@ impl Classifier for World {
 }
 
 impl Events for World {
-    fn publish(&self, _: MailboxEvent) {}
+    fn publish(&self, event: MailboxEvent) {
+        if let MailboxEvent::Page { topic: Topic::SyncTrouble, data } = event {
+            self.troubled.lock().unwrap().push(data);
+        }
+    }
 }
 
 impl MoveAccounts for World {
@@ -214,6 +231,10 @@ impl AroundSync for World {
     }
 
     fn new_mail(&self) {}
+
+    fn sync_soon(&self) {
+        self.soon.fetch_add(1, Ordering::SeqCst);
+    }
 }
 
 fn syncing(world: &Arc<World>) -> Syncing {
@@ -457,4 +478,93 @@ fn a_read_of_older_mail_whose_account_is_removed_stops_and_says_nothing_more_of_
     // Ada's Inbox's read was the last of hers; Bea's went on.
     assert_eq!(world.opened.load(Ordering::SeqCst), 2);
     assert_eq!(standing(&syncing, ADA), None);
+}
+
+/// What the tabs were told had trouble: each account named, in turn.
+fn troubled(world: &World) -> Vec<serde_json::Value> {
+    world.troubled.lock().unwrap().clone()
+}
+
+#[test]
+fn a_sync_that_fails_tells_the_tabs_whether_its_failure_shows_yet_or_not() {
+    let world = World::with(&[ADA, BEA]);
+    let syncing = syncing(&world);
+    syncing.sync_guarded(Some(BTreeSet::from([ADA.to_owned()])));
+    // Trying again: nothing else would have them read the status, which no longer says it synced.
+    assert_eq!(troubled(&world), [serde_json::json!({"account": ADA})]);
+    syncing.sync_guarded(Some(BTreeSet::from([ADA.to_owned()])));
+    assert_eq!(standing(&syncing, ADA), error("ConnectionRefused"));
+    assert_eq!(troubled(&world), vec![serde_json::json!({"account": ADA}); 2]);
+}
+
+const LOST: SyncError = SyncError::Server(ServerError::Unreachable("ConnectionRefused"));
+
+#[test]
+fn a_connection_that_failed_outside_a_sync_shows_trying_again_at_once_and_asks_for_the_sync() {
+    let world = World::with(&[ADA, BEA]);
+    let syncing = syncing(&world);
+    syncing.unreached(ADA, LOST);
+    assert_eq!(standing(&syncing, ADA), trying_again());
+    assert_eq!(standing(&syncing, BEA), None);
+    assert_eq!(troubled(&world), [serde_json::json!({"account": ADA})]);
+    assert_eq!(world.soon.load(Ordering::SeqCst), 1);
+    // No sync failed: none is kept as one.
+    assert_eq!(world.recorded.load(Ordering::SeqCst), 0);
+    // Another connection that fails while it shows says nothing more, and asks for no other sync.
+    syncing.unreached(ADA, LOST);
+    assert_eq!((troubled(&world).len(), world.soon.load(Ordering::SeqCst)), (1, 1));
+}
+
+#[test]
+fn the_sync_that_fails_after_a_connection_did_is_its_runs_first() {
+    let world = World::with(&[ADA]);
+    let syncing = syncing(&world);
+    syncing.unreached(ADA, LOST);
+    syncing.sync_guarded(None);
+    assert_eq!(standing(&syncing, ADA), trying_again(), "one sync has failed");
+    syncing.sync_guarded(None);
+    assert_eq!(standing(&syncing, ADA), error("ConnectionRefused"));
+}
+
+#[test]
+fn a_connection_that_failed_outside_a_sync_shows_three_minutes_on_as_a_sync_would() {
+    let world = World::with(&[ADA]);
+    let syncing = syncing(&world);
+    syncing.unreached(ADA, LOST);
+    pass(&world, 179);
+    assert_eq!(standing(&syncing, ADA), trying_again());
+    pass(&world, 1);
+    assert_eq!(standing(&syncing, ADA), error("ConnectionRefused"));
+}
+
+#[test]
+fn trouble_that_wont_pass_or_an_account_no_longer_kept_is_left_to_the_sync() {
+    let world = World::with(&[ADA]);
+    let syncing = syncing(&world);
+    // A password refused is said by the sync that meets it, with its own words.
+    syncing.unreached(ADA, SyncError::Server(ServerError::Unreachable("LoginRefused")));
+    syncing.unreached("cy@example.test", LOST);
+    assert_eq!(standing(&syncing, ADA), None);
+    assert_eq!(standing(&syncing, "cy@example.test"), None);
+    assert_eq!((troubled(&world).len(), world.soon.load(Ordering::SeqCst)), (0, 0));
+}
+
+#[test]
+fn a_wake_starts_a_run_a_connection_began_again() {
+    let world = World::with(&[ADA]);
+    let syncing = syncing(&world);
+    syncing.unreached(ADA, LOST);
+    syncing.woke();
+    assert_eq!(standing(&syncing, ADA), None);
+}
+
+#[test]
+fn a_connection_that_fails_while_its_account_syncs_is_the_syncs_to_say() {
+    let world = World::with(&[ADA]);
+    let syncing = Arc::new(syncing(&world));
+    // The sync's own connection fails as it opens; the program tells of it, as every connection's.
+    world.unreaching.lock().unwrap().replace(Arc::downgrade(&syncing));
+    syncing.sync_guarded(None);
+    assert_eq!(standing(&syncing, ADA), trying_again(), "the sync's one failure");
+    assert_eq!((troubled(&world).len(), world.soon.load(Ordering::SeqCst)), (1, 0));
 }
