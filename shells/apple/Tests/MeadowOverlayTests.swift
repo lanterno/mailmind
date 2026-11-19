@@ -1,4 +1,5 @@
 import AppKit
+import PDFKit
 import SwiftUI
 import XCTest
 
@@ -749,6 +750,29 @@ final class MeadowOverlayTests: XCTestCase {
         }
         XCTAssertTrue(listed(false).contains("I"))
         XCTAssertEqual(listed(true), listed(false).subtracting(["I"]), "only the key AI serves goes")
+    }
+
+    /// Every line of the legend says all its words at the dialog's width: a long one wraps, never ends in “…” where
+    /// its words have none.
+    func testTheLegendSaysEachLineWhole() {
+        let status = AppStatus(newMail: NewMailAlerts(notifier: SystemNotifier.Silent(), isActive: { true },
+                                                      badge: { _ in }, announce: { _ in }))
+        let legend = KeysLegend(status: status, close: {}).frame(width: MeadowDialogPlace.keys.width).meadowLight(.day)
+        let data = NSMutableData()
+        ImageRenderer(content: legend).render { size, draw in
+            var box = CGRect(origin: .zero, size: size)
+            guard let consumer = CGDataConsumer(data: data as CFMutableData),
+                  let pdf = CGContext(consumer: consumer, mediaBox: &box, nil) else { return }
+            pdf.beginPDFPage(nil)
+            draw(pdf)
+            pdf.endPDFPage()
+            pdf.closePDF()
+        }
+        let said = PDFDocument(data: data as Data)?.string ?? ""
+        let words = KeysLegend.columns().flatMap { $0 }.flatMap(\.keys).map(\.words)
+        XCTAssertFalse(said.isEmpty)
+        XCTAssertEqual(said.filter { $0 == "…" }.count, words.joined().filter { $0 == "…" }.count,
+                       "no line cut short: \(said)")
     }
 
     func testGoToListsEveryFolderAKeyGoesTo() {
