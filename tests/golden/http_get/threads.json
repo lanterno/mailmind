@@ -14,6 +14,13 @@
      "is_junk": false,
      "key": 1,
      "seen": true,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": "Ada Park"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "Hi Ada,\n\nAre you free for lunch on Thursday? The noodle place by the station reopened.\n\nLin",
      "subject": "Lunch on Thursday?",
      "uid": 1,
@@ -29,6 +36,13 @@
      "is_junk": false,
      "key": 13,
      "seen": true,
+     "sent_to": [
+      {
+       "addr": "lin@example.test",
+       "name": "Lin Mori"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "",
      "subject": "Re: Lunch on Thursday?",
      "uid": 1,
@@ -44,6 +58,13 @@
      "is_junk": false,
      "key": 2,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": "Ada Park"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "12:30 is perfect. See you there.",
      "subject": "Re: Lunch on Thursday?",
      "uid": 2,
@@ -82,6 +103,13 @@
      "is_junk": false,
      "key": 22,
      "seen": true,
+     "sent_to": [
+      {
+       "addr": "cy@example.test",
+       "name": "Cy Okafor"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "Shall we book the library hall again?",
      "subject": "Guild meetup venue",
      "uid": 1,
@@ -97,6 +125,13 @@
      "is_junk": false,
      "key": 25,
      "seen": true,
+     "sent_to": [
+      {
+       "addr": "mae@guild.example.test",
+       "name": "Mae Lindqvist"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "",
      "subject": "Re: Guild meetup venue",
      "uid": 1,
@@ -112,6 +147,13 @@
      "is_junk": false,
      "key": 23,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "cy@example.test",
+       "name": "Cy Okafor"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "Booked for the 14th.",
      "subject": "Re: Guild meetup venue",
      "uid": 2,
@@ -150,6 +192,13 @@
      "is_junk": false,
      "key": 18,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "bea@example.test",
+       "name": "Bea Novak"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "Bea, the second draft is ready for your comments.",
      "subject": "Contract draft v2",
      "uid": 1,
@@ -165,6 +214,13 @@
      "is_junk": false,
      "key": 21,
      "seen": true,
+     "sent_to": [
+      {
+       "addr": "ivo@harbor.example.test",
+       "name": "Ivo Brandt"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "Hi Ivo, my comments are in the attached file. Two points stand out.",
      "subject": "Re: Contract draft v2",
      "uid": 1,

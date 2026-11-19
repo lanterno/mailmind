@@ -24,6 +24,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": null
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "",
      "subject": "CONGRATULATIONS you have WON $1,000,000 - claim your prize now",
      "summary": "",
@@ -50,6 +57,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": "Ada Park"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "It's done!",
      "subject": "The finished quilt",
      "summary": "",
@@ -76,6 +90,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": null
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "Notre menu d’août arrive : crêpes, galettes et café filtre.",
      "subject": "Menu d’août — nouveautés ☕",
      "summary": "",
@@ -102,6 +123,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": "Ada Park"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "Bonjour Ada, voici le planning de novembre pour l’atelier.",
      "subject": "Projet d’atelier — planning de novembre",
      "summary": "",
@@ -128,6 +156,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": null
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "This message claims to be multipart but names no boundary.\nYour statement for October is ready.",
      "subject": "Monthly statement",
      "summary": "",
@@ -154,6 +189,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": "Ada Park"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "Forwarding Lin's note, see attached.",
      "subject": "Fwd: Fabric samples",
      "summary": "",
@@ -180,6 +222,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": "Ada Park"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "Let's walk through the new layouts.",
      "subject": "Design review",
      "summary": "",
@@ -206,6 +255,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": "Ada Park"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "Thanks for your order.\n\nOrder 1042\n1 x Linen thread, natural 4.50\nTotal 4.50\n\nPaid with card ending 0000.",
      "subject": "Your receipt for order 1042",
      "summary": "",
@@ -232,6 +288,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": true,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": null
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "",
      "subject": "[quilt] Build #412 passed",
      "summary": "",
@@ -258,6 +321,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": null
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "",
      "subject": "This week: five new patterns",
      "summary": "",
@@ -284,6 +354,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": "Ada Park"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "12:30 is perfect. See you there.",
      "subject": "Re: Lunch on Thursday?",
      "summary": "",
@@ -310,6 +387,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": true,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": "Ada Park"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "Hi Ada,\n\nAre you free for lunch on Thursday? The noodle place by the station reopened.\n\nLin",
      "subject": "Lunch on Thursday?",
      "summary": "",
@@ -362,6 +446,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": null
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "",
      "subject": "CONGRATULATIONS you have WON $1,000,000 - claim your prize now",
      "summary": "",
@@ -390,6 +481,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": "Ada Park"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "It's done!",
      "subject": "The finished quilt",
      "summary": "",
@@ -418,6 +516,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": null
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "Notre menu d’août arrive : crêpes, galettes et café filtre.",
      "subject": "Menu d’août — nouveautés ☕",
      "summary": "",
@@ -446,6 +551,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": "Ada Park"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "Bonjour Ada, voici le planning de novembre pour l’atelier.",
      "subject": "Projet d’atelier — planning de novembre",
      "summary": "",
@@ -474,6 +586,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": null
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "This message claims to be multipart but names no boundary.\nYour statement for October is ready.",
      "subject": "Monthly statement",
      "summary": "",
@@ -502,6 +621,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": "Ada Park"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "Forwarding Lin's note, see attached.",
      "subject": "Fwd: Fabric samples",
      "summary": "",
@@ -530,6 +656,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": "Ada Park"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "Let's walk through the new layouts.",
      "subject": "Design review",
      "summary": "",
@@ -558,6 +691,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": "Ada Park"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "Thanks for your order.\n\nOrder 1042\n1 x Linen thread, natural 4.50\nTotal 4.50\n\nPaid with card ending 0000.",
      "subject": "Your receipt for order 1042",
      "summary": "",
@@ -586,6 +726,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": true,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": null
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "",
      "subject": "[quilt] Build #412 passed",
      "summary": "",
@@ -614,6 +761,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": null
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "",
      "subject": "This week: five new patterns",
      "summary": "",
@@ -642,6 +796,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": "Ada Park"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "12:30 is perfect. See you there.",
      "subject": "Re: Lunch on Thursday?",
      "summary": "",
@@ -694,6 +855,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": null
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "Notre menu d’août arrive : crêpes, galettes et café filtre.",
      "subject": "Menu d’août — nouveautés ☕",
      "summary": "",
@@ -720,6 +888,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": "Ada Park"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "Bonjour Ada, voici le planning de novembre pour l’atelier.",
      "subject": "Projet d’atelier — planning de novembre",
      "summary": "",
@@ -746,6 +921,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": null
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "This message claims to be multipart but names no boundary.\nYour statement for October is ready.",
      "subject": "Monthly statement",
      "summary": "",
@@ -797,6 +979,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": true,
+     "sent_to": [
+      {
+       "addr": "noor@studio.example.test",
+       "name": "Noor Haddad"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "First thoughts on the layouts:\n- the grid is too tight on mobile\n- the header colour fights the logo",
      "subject": "Notes for the review",
      "summary": "",
@@ -823,6 +1012,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": true,
+     "sent_to": [
+      {
+       "addr": "noor@studio.example.test",
+       "name": "Noor Haddad"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "First thoughts on the layouts:",
      "subject": "Notes for the review",
      "summary": "",
@@ -874,6 +1070,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": true,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": null
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "",
      "subject": "20% off all yarn this weekend",
      "summary": "",
@@ -925,6 +1128,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": true,
+     "sent_to": [
+      {
+       "addr": "bea@example.test",
+       "name": "Bea Novak"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "",
      "subject": "Kickoff notes",
      "summary": "",
@@ -977,6 +1187,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "cy@example.test",
+       "name": null
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "Parcel 77 will arrive today between 10:00 and 14:00.",
      "subject": "Your parcel is out for delivery",
      "summary": "",
@@ -1005,6 +1222,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": false,
+     "sent_to": [
+      {
+       "addr": "cy@example.test",
+       "name": "Cy Okafor"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "Booked for the 14th.",
      "subject": "Re: Guild meetup venue",
      "summary": "",
@@ -1057,6 +1281,13 @@
      "reply_worthy": false,
      "safe_to_file": false,
      "seen": true,
+     "sent_to": [
+      {
+       "addr": "mae@guild.example.test",
+       "name": "Mae Lindqvist"
+      }
+     ],
+     "sent_to_more": 0,
      "snippet": "",
      "subject": "Re: Guild meetup venue",
      "summary": "",
