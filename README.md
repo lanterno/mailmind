@@ -715,7 +715,7 @@ or on Gmail, where a folder is a label, left in All Mail. When one message comes
 and the subject, and a
 click opens it, as a meeting's reminder opens its invite, reopening the window if you closed it. It can be
 your Mac's mail app (**Mail › Settings › General › Default email reader**), so a mailto: link opens its composer, and
-**Check Mail Against the Server**, in the status menu, drops at once what another app moved or deleted.
+**Check mail against the server**, in the status menu, drops at once what another app moved or deleted.
 
 It sends and syncs only while it is open. **Settings › General › Open at login** opens it as you log in, and
 quitting saves whatever you are writing as a draft, sends a message still in its Undo window first, and asks before
