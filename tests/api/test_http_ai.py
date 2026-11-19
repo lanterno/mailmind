@@ -211,6 +211,35 @@ def test_a_brief_read_later_leaves_out_a_message_filed_since(app, world, ai):
             if m["key"] == world.copy(name)["key"]] == ["Archive"]
 
 
+def test_the_weeks_numbers_count_all_that_needs_you_and_all_you_wait_on_not_only_what_it_lists(app, world, ai):
+    """Ten more parts of Ivo's contract in Bea's Inbox, beside the three the world's mail asks, and eleven threads Ada waits
+    on an answer in: more of each than the review lists. Its numbers say how many there are in all, as the brief says the
+    same mail needs you, each alone in its conversation and none answered; its lists hold the first eight of each."""
+    from mailmind.bootstrap.mailbox import store
+    for n in range(10):
+        world.deliver(w.BEA, "INBOX", w.variant("bea-inbox-01-client.eml", Message_ID=f"<contract-v2-{n}@harbor.example.test>",
+                                                Subject=f"Contract draft v2, part {n}",
+                                                Date=f"Thu, 29 Oct 2026 14:0{n}:00 +0000"))
+    triaged(app, ai)
+    with app.stopped():
+        c = store.conn()
+        try:
+            c.executemany("INSERT INTO followups(account, thread_id, kind, state, first_sent_ts, last_msg_ts, due_ts, created_at) "
+                          "VALUES(?,?,'sent','due',?,?,1793600000,'2026-11-01T00:00:00+00:00')",
+                          [(w.ADA, f"waiting-{n}", 1793500000 + n, 1793500000 + n) for n in range(11)])
+            c.commit()
+        finally:
+            c.close()
+    needing = {it["key"] for it in app.get("/api/digest").json["items"] if it["needs_you"]}
+    ai.queue(fa.answer({"narrative": "A full week: much asks for you, and you wait on many.", "next": []}))
+    review = app.post("/api/review", {}).json
+    assert (review["stats"]["needs_you"], review["stats"]["waiting_on"]) == (len(needing), 11) == (13, 11)
+    assert (len(review["needs"]), len(review["waiting"])) == (8, 8)
+    assert {it["key"] for it in review["needs"]} < needing
+    assert [it["thread_id"] for it in review["waiting"]] == [f"waiting-{n}" for n in range(8)]
+    assert app.get("/api/review").json["stats"] == review["stats"]          # as it was kept
+
+
 def test_since_you_last_looked(app, golden, world, ai):
     triaged(app, ai)
     import time
