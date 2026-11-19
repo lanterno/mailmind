@@ -74,9 +74,25 @@ final class ScreenerModel {
         }
     }
 
-    /// Read a sender's latest message for their card: a local search, which spends nothing.
-    func readLetter(_ sender: String) async {
-        guard let routes = link.routes, letters[sender] == nil else { return }
+    /// Read the queue again and the letters with it, as mail changed: a sender whose last Inbox message was filed or
+    /// deleted leaves the gate, and the card's sender's latest message is read again and replaces the one shown as it
+    /// comes. The other letters are read again when their senders come to the gate.
+    func reload() async {
+        await load()
+        let shown = visitor?.fromAddr
+        letters = letters.filter { $0.key == shown }
+        if let shown, letters[shown] != nil { await readLetter(shown, again: true) }
+    }
+
+    /// Whether the gate's card shows `copies`' message, or one of the letters held does.
+    func shows(any copies: Set<MailCopy>) -> Bool {
+        letters.values.contains { letter in letter.map { copies.contains(MailCopy(API.FolderRow($0))) } ?? false }
+    }
+
+    /// Read a sender's latest message for their card: a local search, which spends nothing. Once read it stands,
+    /// unless read `again`.
+    func readLetter(_ sender: String, again: Bool = false) async {
+        guard let routes = link.routes, again || letters[sender] == nil else { return }
         let read = try? await routes.get(API.Get.Search.self, [
             "q": "from:" + Self.quoted(sender), "scope": API.SearchScope.account.rawValue, "account": account,
             "limit": "1", "offset": "0",
@@ -84,7 +100,8 @@ final class ScreenerModel {
         switch read {
         case .searchPage(let page)?: letters[sender] = .some(page.items.first)
         case .nothingAsked(let none)?: letters[sender] = .some(none.items.first)
-        case nil: letters[sender] = .some(nil)
+        // Not read: none, the first time; read again, the one shown stands.
+        case nil: if letters[sender] == nil { letters[sender] = .some(nil) }
         }
     }
 

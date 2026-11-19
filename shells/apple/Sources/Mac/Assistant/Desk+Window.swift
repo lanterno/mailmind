@@ -158,6 +158,7 @@ final class Desk {
             mailbox.snoozes = { rows in self?.askWhen(rows.map(MailCopy.init)) }
             mailbox.opensBrief = { self?.openBrief(deliberately: $0) }
             mailbox.undoing = { self?.undoing() ?? { _ in } }
+            mailbox.wentAway = { self?.wentAway($0) }
             mailbox.rowMenu.append { rows in
                 guard let self else { return [] }
                 return self.commands(for: rows.map(MailCopy.init), stack: self.stack).map { command in
@@ -396,10 +397,20 @@ final class Desk {
         return made
     }
 
-    /// Each account's Screener, for the sidebar's counts.
+    /// Each account's Screener, for the sidebar's counts, and the gate's card with it, as the mail changed.
     func readScreeners() async {
         for account in accounts {
-            await screener(for: account).load()
+            await screener(for: account).reload()
+        }
+    }
+
+    /// Mail a verb sent away from where it was (the gate's "Read it whole", then Delete): a gate whose card shows one
+    /// of them reads its queue and its card's letter again, so the card goes with its sender's last message, or shows
+    /// the next.
+    func wentAway(_ copies: [MailCopy]) {
+        let gone = Set(copies)
+        for screener in screeners.values where screener.shows(any: gone) {
+            Task { await screener.reload() }
         }
     }
 }

@@ -141,6 +141,8 @@ final class Mailbox {
     /// The desk's: an Undo is asked, and what it does once answered with what it put back, or nil when it failed, so
     /// mail an Undo puts back in an Inbox is never said to be new (`SinceLooked.undone`).
     @ObservationIgnored var undoing: (@MainActor () -> @MainActor (API.Undone?) -> Void)?
+    /// The desk's: mail a verb sent away from where it was, so the gate whose card shows it reads its queue again.
+    @ObservationIgnored var wentAway: (@MainActor ([MailCopy]) -> Void)?
     /// The areas that have hung their hooks here, each once a window however often its view appears.
     @ObservationIgnored private var joined: Set<String> = []
     /// Counted up each time the hooks are let go (`leave`): an area's view that is still on screen joins again when
@@ -177,6 +179,7 @@ final class Mailbox {
         translating = nil
         stopsTranslating = nil
         undoing = nil
+        wentAway = nil
         joinRound += 1
     }
 
@@ -530,8 +533,9 @@ final class Mailbox {
 
     /// `copies` were sent away from where they were (filed, deleted, junked, moved, snoozed, done with), by a verb
     /// from any window: the windows of their own that show one close, and the last that can be undone opens again
-    /// on its Undo, as the pane's message does.
+    /// on its Undo, as the pane's message does. The gate showing one reads its queue again.
     func sentAway(_ copies: [MailCopy]) {
+        wentAway?(copies)
         let gone = Set(copies)
         ownWindows.removeAll { $0.verbs == nil }
         for window in ownWindows.compactMap(\.verbs) where gone.contains(window.copy) && !window.left {
