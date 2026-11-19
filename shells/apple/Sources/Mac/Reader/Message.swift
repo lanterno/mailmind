@@ -33,6 +33,34 @@ enum MessageWords {
         return String(localized: "to \(who)") + more
     }
 
+    /// Whom a message is with, as the reader names them around it (the reply box, About, the trust line).
+    struct OtherSide: Equatable {
+        let name: String
+        let address: String?
+        /// Whether the message is yours (a draft, or mail you sent) and this is whom it went to, not who wrote it.
+        let wentTo: Bool
+    }
+
+    /// Whether a message is your own: a draft, or mail from one of your addresses.
+    static func isYours(_ opened: API.MessageOpened, mine: Set<String>) -> Bool {
+        opened.isDraft == true || SendGuard.isMine((opened.fromAddr ?? "").lowercased(), mine)
+    }
+
+    /// Who wrote the message, or for your own the first of the people it went to (To, then Cc) that isn't you, by the
+    /// name it was written with, as a reply to it goes on to them (`Seeds.reply`). Your own that went to no one else
+    /// is named by who wrote it.
+    static func otherSide(_ opened: API.MessageOpened, mine: Set<String>) -> OtherSide {
+        if isYours(opened, mine: mine) {
+            for entry in Addresses.entries(opened.to) + Addresses.entries(opened.cc) {
+                let address = Addresses.first(entry)
+                guard !SendGuard.isMine(address.lowercased(), mine) else { continue }
+                return OtherSide(name: Addresses.name(entry) ?? address, address: address, wentTo: true)
+            }
+        }
+        let name = opened.fromName.flatMap { $0.isEmpty ? nil : $0 } ?? opened.fromAddr ?? ""
+        return OtherSide(name: name, address: opened.fromAddr, wentTo: false)
+    }
+
     /// Where `sender` is from, as the server's facts on them have it.
     static func from(_ sender: String?, facts: API.SenderFacts?) -> From {
         guard let sender, let at = sender.lastIndex(of: "@") else { return .unknown }

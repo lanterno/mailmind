@@ -14,6 +14,20 @@ enum AsideWords {
         return Ledger.money(amount.currency, Ledger.isRefund(row.subject) ? -amount.value : amount.value)
     }
 
+    /// Whom the About card is about: who wrote the message, with what MailMind knows of them; or for your own mail
+    /// (a draft, or one you sent), the first it went to, of whom the server's facts say nothing, as the page shows
+    /// none of yours. Nil where there is no one to tell of: your own that went to no one else, or a sender MailMind
+    /// knows nothing of.
+    static func about(_ opened: API.MessageOpened, mine: Set<String>)
+        -> (name: String, address: String, relation: String?)?
+    {
+        let side = MessageWords.otherSide(opened, mine: mine)
+        guard let address = side.address, !address.isEmpty else { return nil }
+        if side.wentTo { return (side.name, address, nil) }
+        guard !MessageWords.isYours(opened, mine: mine), let relation = relation(opened.sender) else { return nil }
+        return (side.name, address, relation)
+    }
+
     /// What MailMind knows of a sender: how much mail, since when, and how often you answered.
     static func relation(_ facts: API.SenderFacts?) -> String? {
         guard let facts, facts.count > 0 else { return nil }
@@ -43,6 +57,8 @@ struct DocumentAside: View {
     /// Write to the sender, and see all their mail: the mailbox's, when the window has one.
     var write: ((String) -> Void)?
     var allMail: ((String) -> Void)?
+    /// Your addresses: your own mail is about the people it went to, not you.
+    var mine: Set<String> = []
     @Environment(\.meadowPaneWidth) private var width
 
     private var wide: Bool { width >= PaneLayout.twoColumnsFrom }
@@ -58,9 +74,9 @@ struct DocumentAside: View {
             }
         }
         if wide, let opened {
-            if let address = opened.fromAddr, !address.isEmpty, let about = AsideWords.relation(opened.sender) {
-                AboutSender(name: opened.fromName.flatMap { $0.isEmpty ? nil : $0 } ?? address, address: address,
-                            about: about, write: write, allMail: allMail)
+            if let about = AsideWords.about(opened, mine: mine) {
+                AboutSender(name: about.name, address: about.address, about: about.relation, write: write,
+                            allMail: allMail)
             }
             let files = AttachmentsRow.shown(opened.attachments)
             if !files.isEmpty {
@@ -114,7 +130,8 @@ struct SideCard<Content: View>: View {
 private struct AboutSender: View {
     let name: String
     let address: String
-    let about: String
+    /// What MailMind knows of them, where it knows something.
+    let about: String?
     let write: ((String) -> Void)?
     let allMail: ((String) -> Void)?
     @Environment(\.meadow) private var meadow
@@ -140,12 +157,14 @@ private struct AboutSender: View {
                 .lineLimit(1)
                 .textSelection(.enabled)
             }
-            .padding(.bottom, 10)
-            Text(about)
-                .font(.meadow(.ui, 13))
-                .lineSpacing(MeadowFace.ui.lineSpacing(size: 13, lineHeight: 1.5))
-                .foregroundStyle(meadow.ink2)
-                .fixedSize(horizontal: false, vertical: true)
+            .padding(.bottom, about == nil ? 0 : 10)
+            if let about {
+                Text(about)
+                    .font(.meadow(.ui, 13))
+                    .lineSpacing(MeadowFace.ui.lineSpacing(size: 13, lineHeight: 1.5))
+                    .foregroundStyle(meadow.ink2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if write != nil || allMail != nil {
                 HStack(spacing: 6) {
                     if let write {

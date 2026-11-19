@@ -122,6 +122,36 @@ enum Addresses {
         parse(text).first ?? ""
     }
 
+    /// The people a header names, each as it was written ("Lin Mori <lin@example.test>"): split on the commas and
+    /// semicolons between them, never on one inside a quoted name or the angle brackets.
+    static func entries(_ text: String?) -> [String] {
+        var entries: [String] = [], entry = "", quoted = false, bracketed = false
+        for character in text ?? "" {
+            switch character {
+            case "\"" where !bracketed: quoted.toggle()
+            case "<" where !quoted: bracketed = true
+            case ">" where !quoted: bracketed = false
+            case ",", ";":
+                if !quoted && !bracketed {
+                    entries.append(entry)
+                    entry = ""
+                    continue
+                }
+            default: break
+            }
+            entry.append(character)
+        }
+        entries.append(entry)
+        return entries.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !first($0).isEmpty }
+    }
+
+    /// The name an entry was written with, quotes and all taken off, else nil.
+    static func name(_ entry: String) -> String? {
+        guard let open = entry.firstIndex(of: "<") else { return nil }
+        let name = entry[..<open].trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: "\"'")))
+        return name.isEmpty || name.contains("@") ? nil : name
+    }
+
     /// Where a chip's mail goes: the <…> part, not an address in its name.
     static func recipient(_ value: String) -> String {
         let inBrackets = bracketed.firstMatch(in: value, range: NSRange(value.startIndex..., in: value))
@@ -226,10 +256,31 @@ enum Seeds {
               from: [d.fromName, d.fromAddr].compactMap { $0 }.first { !$0.isEmpty } ?? "", date: d.date)
     }
 
+    /// The people a message of your own went to, To before Cc, each once and none of them you: whom an answer to it
+    /// goes to, as a follow-up goes on to them rather than back to you.
+    static func theirs(_ d: API.MessageOpened, mine: Set<String>) -> (to: [String], cc: [String]) {
+        guard SendGuard.isMine((d.fromAddr ?? "").lowercased(), mine) else { return ([], []) }
+        var seen: Set<String> = []
+        let others = { (header: String) in
+            Addresses.parse(header).filter {
+                let key = $0.lowercased()
+                return !SendGuard.isMine(key, mine) && seen.insert(key).inserted
+            }
+        }
+        return (others(d.to), others(d.cc))
+    }
+
     static func reply(_ d: API.MessageOpened, all: Bool, mine: Set<String>) -> ComposeSeed {
+        // Your own message (in Sent, or the latest of a conversation of yours) is answered to whom it went: its To
+        // (its Cc where only they were others), and its Cc too for Reply All. One that went to no one but you is
+        // answered as any other.
+        let own = theirs(d, mine: mine)
+        let followsUp = !own.to.isEmpty || !own.cc.isEmpty
         let toAddress = [Addresses.first(d.replyTo), d.fromAddr ?? ""].first { !$0.isEmpty } ?? ""
         var cc: [String] = []
-        if all {
+        if followsUp {
+            cc = all && !own.to.isEmpty ? own.cc : []
+        } else if all {
             var seen: Set<String> = [toAddress.lowercased()]
             for address in Addresses.parse(d.to) + Addresses.parse(d.cc) {
                 let key = address.lowercased()
@@ -242,12 +293,13 @@ enum Seeds {
         var seed = ComposeSeed()
         seed.mode = all ? .replyall : .reply
         seed.from = d.account
-        seed.to = toAddress.isEmpty ? [] : [toAddress]
+        seed.to = followsUp ? (own.to.isEmpty ? own.cc : own.to) : toAddress.isEmpty ? [] : [toAddress]
         seed.cc = cc
         seed.autoCc = cc
         // Not Reply-To: a redirect to a stranger gets marked.
         seed.participants = [d.fromAddr ?? ""] + Addresses.parse(d.to) + Addresses.parse(d.cc)
-        seed.redirect = Addresses.redirect(replyTo: d.replyTo, sender: d.fromAddr)
+        // A Reply-To of your own message is yours: it sends nothing elsewhere.
+        seed.redirect = followsUp ? nil : Addresses.redirect(replyTo: d.replyTo, sender: d.fromAddr)
         seed.subject = Addresses.prefixed(d.subject, "Re:")
         seed.quote = quote(d)
         seed.origKey = d.key

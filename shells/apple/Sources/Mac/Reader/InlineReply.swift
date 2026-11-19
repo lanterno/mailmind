@@ -14,6 +14,29 @@ struct ReplyBoxWords {
     /// In Sent: the box follows up rather than answers.
     let following: Bool
 
+    /// The box under `opened`: whom a reply to it goes to (`MessageWords.otherSide`), the people your own went to.
+    init(answering opened: API.MessageOpened, mine: Set<String>, following: Bool) {
+        let side = MessageWords.otherSide(opened, mine: mine)
+        self.init(name: side.name, address: side.address, following: following)
+    }
+
+    /// The box under a conversation, answering `member`: named as it is, unless it is yours and `opened` (the latest
+    /// message, as it opened) is it, whose people are named as a reply to it goes to them.
+    init(answering member: API.ThreadMessage, opened: API.MessageOpened?, mine: Set<String>, following: Bool) {
+        if let opened, opened.key == member.key, SendGuard.isMine((member.fromAddr ?? "").lowercased(), mine) {
+            self.init(answering: opened, mine: mine, following: following)
+        } else {
+            self.init(name: member.fromName.flatMap { $0.isEmpty ? nil : $0 } ?? member.fromAddr ?? "",
+                      address: member.fromAddr, following: following)
+        }
+    }
+
+    init(name: String, address: String?, following: Bool) {
+        self.name = name
+        self.address = address
+        self.following = following
+    }
+
     /// A person by their first name, an organisation whole (`Words.calling`), else the address.
     var firstName: String {
         Words.calling(name, address: address) ?? address ?? name

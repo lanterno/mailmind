@@ -23,15 +23,13 @@ struct MessageReader: View {
         PaneDocument(chips: place.chips, subject: opened.subject.flatMap { $0.isEmpty ? nil : $0 } ?? "(no subject)",
                      measure: prefs.measure) {
             DocumentAside(context: context, opened: opened, filed: place.filed, lane: place.lane, write: place.write,
-                          allMail: place.allMail)
+                          allMail: place.allMail, mine: mine)
         } main: {
             MessageArticle(core: core, copy: copy, opened: opened, context: context, prefs: prefs, mine: mine,
                            when: row?.when, account: account(place))
             if opened.isDraft != true, place.offersReply {
                 ReplyBox(copy: copy,
-                         words: ReplyBoxWords(name: opened.fromName.flatMap { $0.isEmpty ? nil : $0 }
-                                                  ?? opened.fromAddr ?? "",
-                                              address: opened.fromAddr, following: place.role == "sent"),
+                         words: ReplyBoxWords(answering: opened, mine: mine, following: place.role == "sent"),
                          me: place.me,
                          quick: QuickReply.offered(to: opened.fromAddr, mine: mine, isJunk: row?.isJunk ?? false,
                                                    bucket: row?.bucket),
@@ -196,7 +194,7 @@ struct ConversationReader: View {
         return PaneDocument(chips: place.chips, subject: subject.isEmpty ? "(no subject)" : subject,
                             measure: prefs.measure) {
             DocumentAside(context: context, opened: latest, filed: place.filed, lane: place.lane, write: place.write,
-                          allMail: place.allMail)
+                          allMail: place.allMail, mine: mine)
         } main: {
             if members.count > 1 {
                 VStack(alignment: .leading, spacing: 4) {
@@ -215,9 +213,8 @@ struct ConversationReader: View {
             .id(MailCopy(last, account: model.account))
             if let answers, place.offersReply {
                 ReplyBox(copy: replyCopy,
-                         words: ReplyBoxWords(name: answers.fromName.flatMap { $0.isEmpty ? nil : $0 }
-                                                  ?? answers.fromAddr ?? "",
-                                              address: answers.fromAddr, following: place.role == "sent"),
+                         words: ReplyBoxWords(answering: answers, opened: latest, mine: mine,
+                                              following: place.role == "sent"),
                          me: place.me, messages: thread.count,
                          quick: QuickReply.offered(to: answers.fromAddr, mine: mine, isJunk: answers.isJunk,
                                                    bucket: row?.bucket))

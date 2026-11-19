@@ -58,7 +58,7 @@ struct MessageContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            TrustLine(from: MessageWords.from(opened.fromAddr, facts: opened.sender), blocked: blocked,
+            TrustLine(from: Self.from(opened, mine: mine), blocked: blocked,
                       loadImages: blocked > 0 ? {
                           shownImages.show(copy)
                           height = nil
@@ -79,6 +79,14 @@ struct MessageContent: View {
                     .padding(.top, 18)
             }
         }
+    }
+
+    /// Where the trust line says the mail is from: its sender, as the server's facts on them have it; for your own
+    /// mail, the people it went to, of whom the server says nothing.
+    static func from(_ opened: API.MessageOpened, mine: Set<String>) -> MessageWords.From {
+        let side = MessageWords.otherSide(opened, mine: mine)
+        return side.wentTo ? MessageWords.from(side.address, facts: nil)
+            : MessageWords.from(opened.fromAddr, facts: opened.sender)
     }
 
     private var frame: some View {
