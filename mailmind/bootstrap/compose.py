@@ -79,6 +79,11 @@ class _Messages:
         with _uow.read() as c:
             return stored_mail.get_message_by_key(c, account, key)
 
+    def answering(self, message_id):
+        from mailmind.bootstrap.mailbox import stored_mail
+        with _uow.read() as c:
+            return stored_mail.answering(c, message_id)
+
     def body(self, pk):
         from mailmind.bootstrap.mailbox import stored_mail
         with _uow.read() as c:

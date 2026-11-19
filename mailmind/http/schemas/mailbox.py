@@ -524,6 +524,13 @@ class SenderFacts(Answer):
     first_ago: str | None
 
 
+class ReplyDraft(Answer):
+    """A reply already saved to a message, which Reply opens rather than a second, empty one: its newest."""
+    draft_id: int | None                    # MailMind's own: /api/draft/resume opens it by its id, wherever it is now
+    in_drafts: Copy | None                  # another app's, by its copy in Drafts: /api/draft/resume opens that copy
+    more: int                               # how many other drafts answer the message too
+
+
 class MessageOpened(Answer):
     ok: Literal[True]
     key: int
@@ -553,6 +560,7 @@ class MessageOpened(Answer):
     draft_id: int | None = None             # these three only for a draft
     draft_mode: str | None = None
     is_draft: Literal[True] | None = None
+    reply_draft: ReplyDraft | None = None   # only for a message a draft answers
 
 
 class Prefetched(Answer):

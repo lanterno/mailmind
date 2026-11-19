@@ -58,9 +58,11 @@ class Drafts:
 
     def info(self, row: Row) -> dict[str, Any]:
         """For a draft, expose its draft_id + mode so the client can open it back into the composer.
-        Lazily registers a drafts row if one isn't tracked yet."""
+        Lazily registers a drafts row if one isn't tracked yet. For another message, the reply already saved to it, if
+        there is one, so Reply opens that rather than a second, empty one."""
         if not self.is_draft(row):
-            return {}
+            waiting = self.answering(row)
+            return {"reply_draft": waiting} if waiting else {}
         with self._uow.read() as c:                  # opening a tracked draft writes nothing, so it takes no lock
             d = self._book.draft_by_msgid(c, row["account"], row["message_id"])
         if d:
@@ -71,6 +73,34 @@ class Drafts:
             did = self._book.draft_upsert(c, draft.tracked(row["account"], row["message_id"], row["subject"], "new", now,
                                                            folder=row["folder"], uid=row["uid"], uidvalidity=uidvalidity))
         return {"draft_id": did, "draft_mode": "new", "is_draft": True}
+
+    def answering(self, row: Row) -> dict[str, Any] | None:
+        """The newest draft that answers this message, and how many more do: MailMind's own by what its last save answered,
+        wherever that save is now, and another app's by its copy in Drafts, whose In-Reply-To names the message. None a
+        send holds or a discard is taking. Reads only what is stored here."""
+        message_id = row["message_id"]
+        if not message_id:
+            return None
+        with self._uow.read() as c:
+            own = self._book.drafts_answering(c, message_id)
+        found: list[tuple[int, draft.Answer]] = [(d["saved_at"] or 0, {"draft_id": d["id"], "in_drafts": None}) for d in own]
+        ids = {d["id"] for d in own}
+        for m in self._mail.answering(message_id):
+            if draft.answers(m["in_reply_to"]) != message_id or not self.is_draft(m):
+                continue
+            with self._uow.read() as c:
+                d = self._book.draft_by_msgid(c, m["account"], m["message_id"])
+                gone = d is not None and (self._book.outbox_holds_draft(c, d["id"])
+                                          or draft_journal.asks_removal(self._book.journal_get(c, d["id"])))
+            if gone or (d is not None and d["id"] in ids):
+                continue
+            if d is not None:                        # MailMind tracks it, from before its rows said what it answers
+                ids.add(d["id"])
+                found.append((m["ts"] or 0, {"draft_id": d["id"], "in_drafts": None}))
+            else:
+                found.append((m["ts"] or 0, {"draft_id": None,
+                                             "in_drafts": {"key": m["message_key"], "folder": m["folder"], "uid": m["uid"]}}))
+        return draft.newest_answer(found)
 
     def save(self, body: Mapping[str, Any]) -> dict[str, Any]:
         """Save a draft, or discard it. Either is local and durable the moment it answers: the journal holds it, and
@@ -121,7 +151,8 @@ class Drafts:
                                                                   body.get("mode", "new"), stamp))
                 if key:
                     self._book.draft_set_key(c, new_id, key)
-            self._book.draft_note_save(c, new_id, body.get("mode", "new"), spec["subject"], version, key, stamp)
+            self._book.draft_note_save(c, new_id, body.get("mode", "new"), spec["subject"], version, key, stamp,
+                                       draft.answers(spec["in_reply_to"]))
             due, attempts = draft_journal.after_save(bool(body.get("autosave")), now, waiting, prev["pushed_at"] if prev else None,
                                                      keep=not profile.writes_allowed())   # read-only: kept here, nothing waits
             self._book.journal_put(c, new_id, version, acct["email"], built["message_id"], built["raw"], record["raw_sha"],
@@ -361,11 +392,46 @@ class Drafts:
             queued = d is not None and self._book.outbox_holds_draft(c, did)
         if queued:
             raise Locked(draft.HELD)
-        if d is None or j is None:
-            raise Conflict("That draft has reached the server. Open it from Drafts.")
+        if d is None:
+            raise Conflict(draft.REACHED)
+        if j is None:
+            return self._resume_reached(d)
         if draft_journal.asks_removal(j):
             raise Conflict(draft.DISCARDED)
         return self._opened(j["raw"], d, j, True, j["account"], d["subject"], None)
+
+    def _resume_reached(self, d: Row) -> dict[str, Any]:
+        """A draft whose save has reached its server, opened from its copy there. The copy listed in its folder opens as any
+        draft does; one not listed yet (saved since the folder was last caught up) is listed first, as opening the folder
+        would. One that has gone answers no message any more, so Reply starts afresh."""
+        if not d["folder"]:
+            raise Conflict(draft.REACHED)
+        pk = self._listed(d)
+        if pk is None:
+            acct = self._reach(d["account"])
+            if acct is None:
+                raise Refused("That draft’s account isn’t set up in MailMind any more.")
+            try:
+                gates.run(acct["email"], lambda: self._mail.sync_whole(acct, d["folder"]), priority=gates.Priority.INTERACTIVE)
+            except self._mail.unreachable() as e:
+                resume_log.warning("drafts catch-up failed: %(why)s", {"why": self._screen.quiet_error(e)})
+                raise Unreachable(_NOT_LOADED)
+            except Exception as e:
+                resume_log.warning("drafts catch-up failed: %(why)s", {"why": self._screen.quiet_error(e)})
+                raise Conflict(draft.REACHED)
+            pk = self._listed(d)
+        if pk is None:
+            with self._uow.write() as c:
+                self._book.draft_answers_nothing(c, d)
+            raise NotFound(draft.GONE)
+        return self.resume({"pk": pk})
+
+    def _listed(self, d: Row) -> int | None:
+        """The pk of the copy a draft's row names, as its folder lists it now, or None."""
+        row = self._mail.by_msgid(d["account"], d["message_id"])
+        if row is None or row["folder"] != d["folder"] or row["pending_removal"] or (d["uid"] and row["uid"] != d["uid"]):
+            return None
+        return row["pk"]
 
     def _keep_apart(self, d: Row, j: Row) -> None:
         """Another app changed the copy while a save waited here. Text can't be merged and neither may be lost, so the
@@ -373,7 +439,7 @@ class Drafts:
         with self._uow.write() as c:
             now = now_iso()
             new_id = self._book.draft_upsert(c, draft.tracked(j["account"], j["message_id"], d["subject"], d["mode"], now))
-            self._book.draft_note_save(c, new_id, d["mode"], d["subject"], d["version"], None, now)
+            self._book.draft_note_save(c, new_id, d["mode"], d["subject"], d["version"], None, now, d["in_reply_to"])
             self._book.journal_move(c, d["id"], new_id)
 
     def _opened(self, raw: bytes, d: Row, record: Row, exact: bool, account: str, subject_then: str | None,

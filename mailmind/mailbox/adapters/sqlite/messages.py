@@ -31,6 +31,14 @@ def get_message_by_key(c, account, key):
                      (account, key)).fetchone()
 
 
+def answering(c, message_id):
+    """The copies that name a message's Message-ID (`thread_links`, migration 42), none on its way out, with their
+    In-Reply-To and \\Draft flag: what a reply saved to it is found by."""
+    return c.execute("""SELECT m.pk, m.account, m.folder, m.uid, m.message_key, m.message_id, m.in_reply_to, m.ts, m.draft
+                        FROM thread_links l CROSS JOIN messages m ON m.pk=l.message_pk
+                        WHERE l.name=? AND m.pending_removal IS NULL""", (message_id,)).fetchall()
+
+
 def newest_copy_in(c, account, folder, message_id):
     """The pk, as a row, of the newest copy of a message in `folder`, on its way out or not; None if there is none."""
     return c.execute("SELECT pk FROM messages WHERE account=? AND folder=? AND message_id=? "

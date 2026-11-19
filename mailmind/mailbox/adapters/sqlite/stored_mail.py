@@ -9,13 +9,13 @@ from mailmind.mailbox.adapters.sqlite.assistant_reads import (any_copy, brief_ro
 from mailmind.mailbox.adapters.sqlite.command_log import queue_flags
 from mailmind.mailbox.adapters.sqlite.contents import get_body
 from mailmind.mailbox.adapters.sqlite.flags import set_local_flags
-from mailmind.mailbox.adapters.sqlite.messages import (copy_in_folder, copy_now, delete_by_uids, delete_message, get_message,
-    get_message_by_key, get_message_by_msgid, set_list_unsub)
+from mailmind.mailbox.adapters.sqlite.messages import (answering, copy_in_folder, copy_now, delete_by_uids, delete_message,
+    get_message, get_message_by_key, get_message_by_msgid, set_list_unsub)
 from mailmind.mailbox.adapters.sqlite.sync_state import get_uidvalidity
 
 __all__ = [
-    "any_copy", "brief_rows", "conversation_rows", "copy_in_folder", "copy_now", "delete_by_uids", "delete_message", "delta_rows",
-    "draft_candidates", "get_body", "get_message", "get_message_by_key", "get_message_by_msgid", "get_uidvalidity",
+    "answering", "any_copy", "brief_rows", "conversation_rows", "copy_in_folder", "copy_now", "delete_by_uids", "delete_message",
+    "delta_rows", "draft_candidates", "get_body", "get_message", "get_message_by_key", "get_message_by_msgid", "get_uidvalidity",
     "handled_since", "message_stamp", "message_to_reply_to", "needs_you_rows", "queue_flags", "received_by_bucket",
     "received_since", "sender_recent", "sender_stats", "sent_since", "set_list_unsub", "set_local_flags", "thread_anchor_pk",
     "thread_stamps",

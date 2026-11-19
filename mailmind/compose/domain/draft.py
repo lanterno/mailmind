@@ -5,7 +5,7 @@ import base64
 from collections.abc import Callable, Mapping
 from typing import Any, TypedDict
 
-from mailmind.compose.domain.builder import Composed
+from mailmind.compose.domain.builder import Composed, thread_ids
 from mailmind.compose.domain.resume import ResumedFile, lf
 from mailmind.kernel.ids import AccountId, FolderName
 from mailmind.kernel.row import Row
@@ -13,6 +13,8 @@ from mailmind.kernel.row import Row
 HELD = "This draft is in the outbox, waiting to be sent. Cancel it there first to change it."
 DISCARDED = "You discarded this draft. It leaves the server as soon as the server can be reached."
 CHANGED_ELSEWHERE = "This draft changed in another window."
+REACHED = "That draft has reached the server. Open it from Drafts."
+GONE = "That draft is no longer in Drafts."
 
 
 class InPlace(TypedDict):
@@ -101,3 +103,24 @@ def tracked(account: str, message_id: str | None, subject: str | None, mode: str
     """A new `drafts` row. Saved here first it has no copy yet: only another app's draft, found on the server, says where."""
     return {"id": None, "account": account, "folder": folder, "uid": uid, "message_id": message_id, "uidvalidity": uidvalidity,
             "mode": mode, "subject": subject, "created_at": at, "updated_at": at}
+
+
+def answers(in_reply_to: object) -> str | None:
+    """The Message-ID a draft answers, as its In-Reply-To names it: the first well-formed one, or None for a draft that
+    answers none."""
+    return thread_ids(in_reply_to, None)[0]
+
+
+class Answer(TypedDict):
+    """A draft that answers a message, as the reader offers it: MailMind's own by its id, another app's by its copy."""
+    draft_id: int | None
+    in_drafts: dict[str, Any] | None
+
+
+def newest_answer(found: list[tuple[int, Answer]]) -> dict[str, Any] | None:
+    """Of the drafts that answer a message, each with when it was last saved, the newest, and how many more there are. Two
+    saved in the same second go by the one MailMind saved last."""
+    if not found:
+        return None
+    _, newest = max(found, key=lambda f: (f[0], f[1]["draft_id"] or 0))
+    return {**newest, "more": len(found) - 1}

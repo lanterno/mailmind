@@ -144,10 +144,30 @@ def draft_delete(c, did):
     c.execute("DELETE FROM drafts WHERE id=?", (did,))
 
 
-def draft_note_save(c, did, mode, subject, version, saved_by, updated_at):
-    """A save's facts about the composition. What says where the copy is waits for the push."""
-    c.execute("UPDATE drafts SET mode=?, subject=?, version=?, saved_by=?, updated_at=? WHERE id=?",
-              (mode, subject, version, saved_by, updated_at, did))
+def draft_note_save(c, did, mode, subject, version, saved_by, updated_at, in_reply_to):
+    """A save's facts about the composition, the message it answers among them (migration 52). What says where the copy is
+    waits for the push."""
+    c.execute("UPDATE drafts SET mode=?, subject=?, version=?, saved_by=?, updated_at=?, in_reply_to=? WHERE id=?",
+              (mode, subject, version, saved_by, updated_at, in_reply_to, did))
+
+
+def drafts_answering(c, message_id):
+    """MailMind's drafts that answer a message, by the Message-ID their last save named, each with when that save was made
+    and the copy it reached: none a send holds or a discard is taking, and none with neither a save waiting nor a copy."""
+    return c.execute("""SELECT d.id, d.account, d.folder, d.uid, d.message_id,
+                               CASE WHEN j.raw IS NOT NULL THEN j.saved_at ELSE d.pushed_at END AS saved_at
+                        FROM drafts d LEFT JOIN draft_journal j ON j.draft_id=d.id
+                        WHERE d.in_reply_to=? AND COALESCE(j.discard, 0)=0 AND (j.raw IS NOT NULL OR d.folder IS NOT NULL)
+                          AND NOT EXISTS (SELECT 1 FROM outbox o WHERE o.draft_id=d.id AND o.state IN ('queued','sending'))""",
+                     (message_id,)).fetchall()
+
+
+def draft_answers_nothing(c, seen):
+    """Its copy has gone from the server and no save of it waits here, so it answers no message, until a save says so
+    again. `seen`: the row as read; one a save has moved on since is left as it is."""
+    c.execute("""UPDATE drafts SET in_reply_to=NULL WHERE id=? AND uid IS ? AND message_id IS ?
+                 AND NOT EXISTS (SELECT 1 FROM draft_journal j WHERE j.draft_id=drafts.id)""",
+              (seen["id"], seen["uid"], seen["message_id"]))
 
 
 def draft_note_discard(c, did, version, updated_at):
