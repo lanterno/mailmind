@@ -224,7 +224,7 @@ export function BriefPane({ m }: { m: Mailbox }) {
         )}
         <div className="bf-tallies">
           {needs.length > 0 && <button className="bf-tally sun" data-brief="needs" title="List them" onClick={() => openDigestList(m.source, { list: "needs" }, needs)}><b>{needs.length}</b> need{needs.length === 1 ? "s" : ""} you</button>}
-          {waiting > 0 && <button className="bf-tally" data-brief="__waiting__" onClick={() => m.goToFolder("__waiting__")}><b>{waiting}</b> waiting on others</button>}
+          {waiting > 0 && <button className="bf-tally" data-brief="__waiting__" onClick={() => m.goToFolder("__waiting__")}><b>{waiting}</b> waiting</button>}
           {later > 0 && <button className="bf-tally" data-brief="__replylater__" onClick={() => m.goToFolder("__replylater__")}><b>{later}</b> to reply later</button>}
           {commits > 0 && <button className="bf-tally" data-brief="commits" onClick={() => panel.set("commits")}><Icon name="todo" /><b>{commits}</b> commitment{commits > 1 ? "s" : ""}</button>}
           {offered && <button className="bf-tally" data-brief="week" onClick={() => panel.set("week")}><Icon name="cal" />Your week</button>}
