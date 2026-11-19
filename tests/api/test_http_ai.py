@@ -180,6 +180,24 @@ def test_briefing_and_review_are_written_once_and_a_get_only_reads(app, golden, 
     golden.note("calls for the refresh", len(ai.requests))
 
 
+def test_a_brief_read_later_leaves_out_a_message_filed_since(app, world, ai):
+    """The person archived a topic's message after the brief was written: it has gone from the topic, though its row
+    follows the copy to the Archive, where search finds it."""
+    triaged(app, ai)
+    name = "bea-inbox-01-client.eml"
+    ai.queue(fa.answer({"narrative": "Ivo's contract wants you.", "next": ["Answer Ivo"],
+                        "groups": [{"label": "Contracts", "count": 1, "pks": [world.pk(name)]}]}))
+    assert app.post("/api/briefing", {}).status == 200
+    [group] = app.get("/api/briefing").json["groups"]
+    assert (group["count"], [m["folder"] for m in group["messages"]]) == (1, ["INBOX"])
+    assert app.post("/api/archive", world.copy(name)).status == 200
+    app.work("commands")
+    [group] = app.get("/api/briefing").json["groups"]
+    assert (group["count"], group["messages"]) == (0, [])
+    assert [m["folder"] for m in app.get("/api/search?scope=all&q=contract+draft+v2").json["items"]
+            if m["key"] == world.copy(name)["key"]] == ["Archive"]
+
+
 def test_since_you_last_looked(app, golden, world, ai):
     triaged(app, ai)
     import time
