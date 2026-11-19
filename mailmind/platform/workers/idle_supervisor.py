@@ -2,7 +2,9 @@
 
 A worker holds a connection open and waits on it. `reconcile` starts one for each key wanted, up to
 a limit, retires one whose key has gone or is now wanted differently, and leaves the rest be. A
-worker whose connection fails rests, longer each time, then opens another. One that finds itself no
+worker whose connection fails rests, longer each time, then opens another; one whose connection served a while
+(AT_ONCE_AFTER) and was lost opens another at once, so a server gone away is found gone within moments, and one that
+dropped a connection is back on another. One that finds itself no
 longer wanted leaves on its own, and asks for a reconcile on its way out. What a connection is, and
 what a worker does with one, is the subclass's to say; this knows nothing of what they watch.
 
@@ -12,6 +14,7 @@ for the next socket opened, which the worker would then wait on and read from.
 """
 import abc
 import threading
+import time
 from collections.abc import Callable, Mapping
 from typing import Protocol
 
@@ -41,6 +44,9 @@ class IdleSupervisor[S, C: Interruptible](abc.ABC):
     """S is what a worker is started for, C its connection."""
     FIRST_REST = 5                  # seconds a worker rests after a failure, doubling each time
     LONGEST_REST = 300
+    # A connection that served this many seconds and was lost is followed by another at once, with no rest: had it served
+    # less, a server that drops each connection as it begins would have the worker log in again and again.
+    AT_ONCE_AFTER = 10
 
     def __init__(self) -> None:
         self._stop = threading.Event()
@@ -112,7 +118,7 @@ class IdleSupervisor[S, C: Interruptible](abc.ABC):
                 self._say_unwanted(spec)
                 self.reconcile()                  # changed with no one to say so: a worker for what's wanted now, if running
                 return
-            conn = None
+            conn, began = None, None
             try:
                 conn = self._connect(spec)
                 if not self._ready(spec, conn):
@@ -120,10 +126,13 @@ class IdleSupervisor[S, C: Interruptible](abc.ABC):
                 self._conns.append(conn)
                 watch.conn = conn                 # set before leaving() is asked: _retire sets quit first
                 watch.rest = self.FIRST_REST
+                began = time.monotonic()
                 self._serve(watch, conn)
             except Exception as e:
                 if not watch.leaving():
                     self._say_failed(spec, e)
+                if began is not None and time.monotonic() - began >= self.AT_ONCE_AFTER:
+                    continue                      # it served a while, then was lost: the next opens now
                 self._rest(watch, watch.rest)
                 watch.rest = min(watch.rest * 2, self.LONGEST_REST)
             finally:
