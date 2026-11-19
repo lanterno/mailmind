@@ -100,13 +100,15 @@ def test_a_raw_utf8_sender_keeps_its_name_and_address(world):
     assert (row["from_name"], row["from_addr"]) == ("Café Lumière", "hello@cafe.example.test")
 
 
-def test_inbox_mail_gets_a_snippet_and_junk_does_not(world):
-    for name, acct, folder, _, _ in w.MAIL:
+def test_inbox_mail_and_drafts_get_a_snippet_and_junk_does_not(world):
+    for name, acct, folder, flags, _ in w.MAIL:
         row = world.row(name)
-        if folder != "INBOX" or name in JUNK:
+        if (folder != "INBOX" and w.DRAFT not in flags) or name in JUNK:
             assert row["snippet"] == "", name
     assert world.row("bea-inbox-01-client.eml")["snippet"] == "Bea, the second draft is ready for your comments."
     assert world.row("ada-inbox-11-html-cid.eml")["snippet"] == "It's done!"     # from the HTML part
+    # A draft says what it says in any folder (`sync_plan.reads_text`).
+    assert world.row("bea-drafts-01-apple-mail.eml")["snippet"].startswith("Hi Ivo, my comments are in the attached file.")
 
 
 def test_snippets_hold_no_carriage_returns(world):
@@ -119,16 +121,18 @@ def test_a_multipart_with_no_boundary_keeps_its_text(world):
     assert "statement for October" in (ingest.fetch_body(world.pk("ada-inbox-08-boundaryless.eml"))["text"] or "")
 
 
-def test_the_first_sync_keeps_the_inboxs_bodies_whole_and_no_other_folders(world):
-    """The corpus is all short: each Inbox message but junk is kept whole as the sync reads it, as opening it would keep
-    it, its invite or attachment and all."""
-    inbox = {world.pk(name) for name, _, folder, *_ in w.MAIL if folder == "INBOX" and name not in JUNK}
-    assert {r["message_pk"] for r in _rows("SELECT message_pk FROM bodies")} == inbox
+def test_the_first_sync_keeps_the_inboxs_bodies_and_the_drafts_whole_and_no_others(world):
+    """The corpus is all short: each Inbox message but junk, and each draft wherever it is, is kept whole as the sync
+    reads it, as opening it would keep it, its invite or attachment and all."""
+    read = {world.pk(name) for name, _, folder, flags, _ in w.MAIL
+            if (folder == "INBOX" or w.DRAFT in flags) and name not in JUNK}
+    assert {r["message_pk"] for r in _rows("SELECT message_pk FROM bodies")} == read
     pk = world.pk("ada-inbox-06-outlook-invite.eml")
     assert {"message_pk": pk, "filename": "invite.ics", "content_type": "text/calendar", "is_inline": 1} in _rows(
         "SELECT message_pk, filename, content_type, is_inline FROM attachments")
     assert world.row("ada-inbox-06-outlook-invite.eml")["has_attach"] == 1
-    assert all(world.row(name)["body_fetched"] == 0 for name, _, folder, *_ in w.MAIL if folder != "INBOX")
+    assert all(world.row(name)["body_fetched"] == 0 for name, _, folder, flags, _ in w.MAIL
+               if folder != "INBOX" and w.DRAFT not in flags)
 
 
 def test_sync_state_records_each_folder_at_its_highest_uid(world):

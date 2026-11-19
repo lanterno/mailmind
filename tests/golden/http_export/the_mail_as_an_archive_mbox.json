@@ -65,11 +65,11 @@
     "message-id": "<draft-notes@ada.example.test>",
     "references": null,
     "subject": "Notes for the review",
-    "text": "\r\n",
-    "x-mailmind-account": "ada@example.test",
-    "x-mailmind-bucket": "other/personal-ish",
-    "x-mailmind-folder": "Drafts",
-    "x-mailmind-threadid": "rf:ada@example.test:a9a397439969c343"
+    "text": "First thoughts on the layouts:\r\n",
+    "x-mailmind-account": null,
+    "x-mailmind-bucket": null,
+    "x-mailmind-folder": null,
+    "x-mailmind-threadid": null
    },
    {
     "from": [
@@ -82,11 +82,11 @@
     "message-id": "<draft-notes@ada.example.test>",
     "references": null,
     "subject": "Notes for the review",
-    "text": "\r\n",
-    "x-mailmind-account": "ada@example.test",
-    "x-mailmind-bucket": "other/personal-ish",
-    "x-mailmind-folder": "Drafts",
-    "x-mailmind-threadid": "rf:ada@example.test:a9a397439969c343"
+    "text": "First thoughts on the layouts:\r\n- the grid is too tight on mobile\r\n- the header colour fights the logo\r\n",
+    "x-mailmind-account": null,
+    "x-mailmind-bucket": null,
+    "x-mailmind-folder": null,
+    "x-mailmind-threadid": null
    }
   ]
  },
@@ -357,11 +357,11 @@
     "message-id": "<A1B2C3D4-0000-4000-8000-000000000001@example.test>",
     "references": "<contract-v2@harbor.example.test>",
     "subject": "Re: Contract draft v2",
-    "text": "\r\n",
-    "x-mailmind-account": "bea@example.test",
-    "x-mailmind-bucket": "other/personal-ish",
-    "x-mailmind-folder": "Drafts",
-    "x-mailmind-threadid": "rf:bea@example.test:1f7815dd634a2ba6"
+    "text": "Hi Ivo, my comments are in the attached file. Two points stand out.\r\n",
+    "x-mailmind-account": null,
+    "x-mailmind-bucket": null,
+    "x-mailmind-folder": null,
+    "x-mailmind-threadid": null
    }
   ]
  },

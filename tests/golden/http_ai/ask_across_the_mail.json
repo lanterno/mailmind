@@ -86,7 +86,7 @@
    {
     "effort": "medium",
     "model": "claude-opus-5-5",
-    "prompt": "You are answering a question about the user's OWN email. Answer concisely in plain prose, grounded strictly in the messages. Put the [pk] numbers of the messages you actually relied on in cited_pks. If the messages do not contain the answer, say so plainly and return an empty cited_pks.\n\nQuestion: What did Ivo send?\n\nMessages (each begins with its [pk]; ranked by relevance):\n[18] Ivo Brandt — Contract draft v2 (2026-10-29T13:00:00+00:00)\nBea, the second draft is ready for your comments.\n",
+    "prompt": "You are answering a question about the user's OWN email. Answer concisely in plain prose, grounded strictly in the messages. Put the [pk] numbers of the messages you actually relied on in cited_pks. If the messages do not contain the answer, say so plainly and return an empty cited_pks.\n\nQuestion: What did Ivo send?\n\nMessages (each begins with its [pk]; ranked by relevance):\n[18] Ivo Brandt — Contract draft v2 (2026-10-29T13:00:00+00:00)\nBea, the second draft is ready for your comments.\n\n[21] Bea Novak — Re: Contract draft v2 (2026-11-01T20:00:00+00:00)\nHi Ivo, my comments are in the attached file. Two points stand out.\n",
     "schema": {
      "additionalProperties": false,
      "properties": {

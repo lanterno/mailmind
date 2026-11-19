@@ -426,7 +426,7 @@
   "note": "UID FETCH commands per account",
   "value": {
    "ada@example.test": 0,
-   "bea@example.test": 1,
+   "bea@example.test": 0,
    "cy@example.test": 0
   }
  }

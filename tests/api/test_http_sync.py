@@ -122,6 +122,18 @@ def test_a_draft_saved_lets_drafts_catch_up_on_its_next_open(app, world):
     assert len(catch_ups(world, "Drafts")) == 2
 
 
+def test_a_draft_saved_says_what_it_says_in_the_drafts_list(app, world):
+    # Beyond the Inbox a sync reads no message's text, but a draft's it does: its row shows what it says from the first,
+    # not only its subject until the body backfill comes to it.
+    opened(app, "Drafts")
+    saved = app.post("/api/draft", {"account": w.ADA, "mode": "new", "to": ["lin@example.test"],
+                                    "subject": "Swatch order", "text": "Two of each, in the blue."}).json
+    assert saved["ok"] and saved["pushed"]
+    opened(app, "Drafts")
+    [draft] = [r for r in opened(app, "Drafts")["items"] if r["subject"] == "Swatch order"]
+    assert "Two of each, in the blue." in draft["snippet"]
+
+
 @pytest.mark.parametrize("how", ["one", "conversation", "marked"])
 def test_a_move_lets_its_folder_catch_up_on_its_next_open(app, world, how):
     world.server.add_folder(w.ADA, CLIENTS)

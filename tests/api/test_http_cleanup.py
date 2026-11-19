@@ -294,6 +294,31 @@ def test_a_cleanup_with_the_server_away_queues_the_sweep_and_undo_takes_it_back(
     c.close()
 
 
+def test_undo_brings_a_swept_newsletter_back_saying_what_it_said(app, world):
+    # A newsletter is junk, so no sync reads its text; opened, it has some. Undo reads it as it puts it back, so its row
+    # says what it said before it left, not nothing until the body backfill comes to it.
+    from mailmind.bootstrap.mailbox import store
+    newsletter = w.message_id(NEWSLETTER)
+
+    def said():
+        c = store.conn()
+        try:
+            return [(r["folder"], r["snippet"]) for r in c.execute("SELECT folder, snippet FROM messages WHERE message_id=?",
+                                                                    (newsletter,))]
+        finally:
+            c.close()
+    assert said() == [("INBOX", "")], "junk: a sync read none of it"
+    app.get("/api/message/body?" + urlencode(world.copy(NEWSLETTER)))
+    [(_, before)] = said()
+    assert before
+    r = _clean_up_the_loom(app)
+    assert (r["swept"], r["sweep_queued"]) == (1, 0)
+    assert said() == [("Trash", before)], "its row follows it to the Trash"
+    assert app.post("/api/undo", {}).json["ok"]
+    [(folder, after)] = said()
+    assert (folder, after.split()) == ("INBOX", before.split()), "the same words, however the lines break"
+
+
 def test_a_cleanup_the_server_refuses_counts_as_failed_and_leaves_the_mail(app, world):
     world.server.fail("UID MOVE", "NO [CANNOT] not today", user=w.ADA)
     world.server.fail("UID COPY", "NO [CANNOT] not today", user=w.ADA)

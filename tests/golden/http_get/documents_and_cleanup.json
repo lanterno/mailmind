@@ -3,6 +3,22 @@
   "body": {
    "docs": [
     {
+     "account": "bea@example.test",
+     "filename": "comments.pdf",
+     "folder": "Drafts",
+     "from": "Bea Novak",
+     "group": "",
+     "key": 21,
+     "kind": "pdf",
+     "part_id": "3",
+     "preview": null,
+     "size": 45,
+     "subject": "Re: Contract draft v2",
+     "uid": 1,
+     "url": "/api/message/attachment?key=21&folder=Drafts&uid=1&part_id=3",
+     "when": "16h ago"
+    },
+    {
      "account": "ada@example.test",
      "filename": "Fabric samples.eml",
      "folder": "INBOX",
@@ -20,13 +36,14 @@
     }
    ],
    "facets": {
-    "other": 1
+    "other": 1,
+    "pdf": 1
    },
    "groups": [],
-   "matched": 1,
+   "matched": 2,
    "ok": true,
-   "shown": 1,
-   "total": 1
+   "shown": 2,
+   "total": 2
   },
   "headers": {
    "cache-control": "no-store",

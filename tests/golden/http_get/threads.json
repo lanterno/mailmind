@@ -161,11 +161,11 @@
      "folder": "Drafts",
      "from_addr": "bea@example.test",
      "from_name": "Bea Novak",
-     "has_attach": false,
+     "has_attach": true,
      "is_junk": false,
      "key": 21,
      "seen": true,
-     "snippet": "",
+     "snippet": "Hi Ivo, my comments are in the attached file. Two points stand out.",
      "subject": "Re: Contract draft v2",
      "uid": 1,
      "when": "16h ago"

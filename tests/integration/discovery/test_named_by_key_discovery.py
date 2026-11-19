@@ -9,7 +9,8 @@ def test_a_file_names_its_copy_and_its_link_fetches_it_from_there(app, world):
     for name in NAMES:                                      # a body opened stores what its files are
         assert app.get("/api/message/body?key={key}&folder={folder}".format(**world.copy(name))).status == 200
     docs = app.get("/api/documents?limit=100").json["docs"]
-    copies = {(c["key"], c["folder"]) for c in map(world.copy, NAMES)}
+    # A draft's files are known from its sync, which reads a draft whole wherever it is.
+    copies = {(c["key"], c["folder"]) for c in (world.copy(name) for name, *_ in w.MAIL)}
     assert docs and all((d["key"], d["folder"]) in copies for d in docs)
     for d in docs:
         assert d["url"].startswith("/api/message/attachment?key=")
