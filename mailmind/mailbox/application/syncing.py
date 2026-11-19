@@ -4,6 +4,13 @@ job at a time, with what each account's last try came to.
 An account shows as failing only as domain.sync_health says: trouble that may pass (a lost connection, a timeout, a
 server that can't take a login for now) once a second sync in a row has failed too, or three minutes on. Until then it shows as it did before, and its record keeps no
 error, but its status says it is trying again (`trying_again`), so nothing says it synced when its last sync didn't.
+A sync that fails tells the open tabs (`sync-trouble`), which read the status again.
+
+A connection to an account's server that couldn't be made outside its sync, by trouble that may pass (IDLE's, as it
+connects again after its connection was lost, or a job's), says so within seconds rather than at the next round, minutes
+on (`unreached`): the account shows as trying again, as after a sync that failed, the tabs are told, and the sync that
+measures it runs now. It counts no failed sync: the next that fails is the run's first. One dropped connection that
+connects again at once logs in, and says nothing.
 
 A sync that works after one of the account's failed, and a person's Retry, let go of the waits of the changes queued for its
 server (`server_back`, the commands' `release`): they go now, not minutes on.
@@ -138,12 +145,35 @@ class Syncing:
                         else:
                             self._status[a["email"]] = before
                         log.info("an account's sync failed; it shows if the next fails too", exc_info=e)
+                        sse.publish("sync-trouble", {"account": a["email"]})
                         continue
                     self._status[a["email"]] = {"health": "error", "msg": f"{type(e).__name__}"}
+                    sse.publish("sync-trouble", {"account": a["email"]})
                     with self._uow.write() as c:
                         self._store.record_sync_result(c, a["email"], False, type(e).__name__, kind)
                     log.warning("%(account)s: sync failed", {"account": a["email"]}, exc_info=e)
         return new
+
+
+    def unreached(self, email: str, e: BaseException) -> None:
+        """A connection to `email`'s server, made outside its sync, couldn't be made (IDLE's as it connects again, or a
+        job's): trouble that may pass shows at once as a sync that failed does, trying again, rather than at the next sync,
+        minutes on; the tabs hear of it, and the sync that measures it runs now. The run counts no failed sync, so the next
+        that fails is its first. Nothing changes while the account's sync runs, which says how it went, or once its syncs
+        fail already, or for an account no longer kept; any other trouble is the sync's to say."""
+        if not self._accounts.may_pass(e):
+            return
+        try:
+            kept = any(a["email"] == email for a in self._accounts.accounts())
+        except Exception:
+            return
+        if not kept or self._status.get(email, {}).get("health") == "syncing" or email in self._failing:
+            return
+        # Its next sync that works lets the changes queued for its server go, as after a sync that failed.
+        self._failing[email] = sync_health.heard(type(e).__name__, time.time())
+        log.info("a connection to an account's server failed; it is trying again", exc_info=e)
+        sse.publish("sync-trouble", {"account": email})
+        self._kick("sync")
 
 
     def sync_record(self) -> list[dict[str, Any]]:

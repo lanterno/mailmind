@@ -198,7 +198,15 @@ def session_for(acct, timeout=60) -> MailSession:
 
 
 def _open(acct, **kw):
-    return open_session(acct, **kw)
+    """open_session, for every session the Mailbox opens. One that couldn't be made is told to the sync, which says so at
+    once when the trouble may pass and its own sync isn't the one asking: not in a process that only reads, whose sync
+    never runs on its own to see the server back."""
+    try:
+        return open_session(acct, **kw)
+    except Exception as e:
+        if profile.writes_allowed():
+            syncing.unreached(acct["email"], e)
+        raise
 
 
 class _Accounts:

@@ -32,6 +32,8 @@ def hello(build):
 
 TOPICS = frozenset({
     "sync-done",          # a sync finished for an account
+    "sync-trouble",       # an account's server didn't answer: a sync of it failed, or a connection to it outside one
+                          # couldn't be made; how its sync stands (the digest's `status`) changed
     "new-mail",           # it brought new mail into INBOX
     "reconcile",          # rows of mail gone from the server went, in `folder` if it names one; or an account was
                           # removed (`removed`), and its mail left the lists (`pruned`: how many copies this Mac let

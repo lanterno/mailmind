@@ -4,7 +4,9 @@ the database or the clock.
 Trouble that may pass (Accounts says which: a connection lost or refused, a server that didn't answer in time or can't
 take a login for now) is what a sleep or a change of network leaves for a moment: it shows only once the next sync of the
 account has failed too, or once the first failure in a row is three minutes old. Any other, a password refused or a
-certificate changed, shows at once. A sync that works ends the run. The Rust core's `mm_mailbox::sync_health` is the same.
+certificate changed, shows at once. A sync that works ends the run. A run may begin before any sync has failed, with a
+connection to the server that couldn't be made outside one (`heard`): it counts from then. The Rust core's
+`mm_mailbox::sync_health` is the same.
 """
 from dataclasses import dataclass
 
@@ -31,6 +33,12 @@ def and_one_more(run: Failing | None, error: str, passing: bool, now: float) -> 
     if run is None:
         return Failing(1, now, error, passing)
     return Failing(run.rounds + 1, run.since, error, passing)
+
+
+def heard(error: str, now: float) -> Failing:
+    """A run begun at `now` by trouble that may pass, heard outside a sync (a connection to the server that couldn't be
+    made): no sync has failed in it yet, so the next that fails is its first."""
+    return Failing(0, now, error, True)
 
 
 def shows(passing: bool, rounds: int, since: float) -> bool:
