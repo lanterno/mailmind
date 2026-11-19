@@ -309,6 +309,7 @@ final class MeadowRowsTests: XCTestCase {
         XCTAssertTrue(app.mailbox.marking, "one row checked is marked, and the bulk bar shows for it")
         XCTAssertNil(app.selection.copy, "and nothing opens")
         XCTAssertEqual(controller.table.selectedRowIndexes, IndexSet(integer: 2))
+        XCTAssertEqual(PaneEmptyWords.of(app).title, "1 selected", "the empty pane says what the bulk bar holds")
         controller.press(.check, row: 2)
         XCTAssertFalse(app.mailbox.marking)
         XCTAssertTrue(app.mailbox.chosenRows.isEmpty)
