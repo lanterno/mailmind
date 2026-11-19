@@ -1026,8 +1026,8 @@ final class OpenedMessageVerbsTests: XCTestCase {
         world.mailbox.rereadOutside()
         await waiting(for: "read again") { world.mailbox.shownRow(of: filed)?.seen == true }
         XCTAssertEqual(world.mailbox.shownRow(of: filed)?.summary, "The invoice for October.")
-        XCTAssertEqual(server.asked(API.Get.Messages.path).filter { $0.query["folder"] == "Archive" }.count, 1,
-                       "its folder is read once as it opens")
+        XCTAssertEqual(server.asked(API.Get.MessageRow.path).filter { $0.query["folder"] == "Archive" }.count, 1,
+                       "its row is read once as it opens")
     }
 
     /// The document names the account and the folder as the mail window's rail does, in a message's own window
@@ -1150,9 +1150,9 @@ final class OpenedMessageVerbsTests: XCTestCase {
         XCTAssertFalse(row.isConversation(grouped: true), "it stands for itself, as the pane shows it")
         let unread = await world.mailbox.opensUnread(receipt)
         XCTAssertTrue(unread, "the dwell marks it read")
-        let messages = try XCTUnwrap(server.asked(API.Get.Messages.path).last)
-        XCTAssertEqual([messages.query["account"], messages.query["folder"], messages.query["group"]],
-                       [Fixture.ada, "Receipts", nil], "its folder, a message a row")
+        let asked = try XCTUnwrap(server.asked(API.Get.MessageRow.path).last)
+        XCTAssertEqual([asked.query["account"], asked.query["folder"], asked.query["uid"]],
+                       [Fixture.ada, "Receipts", "93"], "its row, by its folder and UID")
         await world.mailbox.starNow()
         let flag = try JSONDecoder().decode(API.FlagBody.self,
                                             from: try XCTUnwrap(server.asked(API.Post.Flag.path).first).body)
