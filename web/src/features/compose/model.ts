@@ -2,7 +2,7 @@
 // and the send-time check's input. The machine beside it runs these.
 import { guardBlocks, guardCheck, guardHard, guardLine, isMine, type GuardFix, type GuardSnapshot, type GuardWarning, type NearMiss } from "./sendGuard";
 import { resumeFields, type ResumeFields } from "./draftResume";
-import type { ComposeMode, DraftTone, PictureType, Snippet } from "../../lib/api/types";
+import type { ComposeMode, DraftTone, PictureType, ReplyDraft, Snippet } from "../../lib/api/types";
 
 export type Field = "to" | "cc" | "bcc";
 export const FIELDS: Field[] = ["to", "cc", "bcc"];
@@ -116,12 +116,17 @@ export function looksLikeAddr(v: string): boolean {
 export const splitChips = (raw: string) => raw.split(/[,;]/).map((s) => s.trim()).filter(Boolean);
 export const chip = (v: string): Recipient => ({ v, bad: !looksLikeAddr(v) });
 
-// What a reply needs of the message it answers.
+// What a reply needs of the message it answers, and the reply already saved to it, which Reply opens in place of a new one.
 export interface OriginalMail {
   account: string; subject?: string | null; text?: string | null; html?: string | null; has_html?: boolean;
   from_addr?: string | null; from_name?: string | null; reply_to?: string | null; to?: string | null; cc?: string | null; date?: string | null;
   attachments?: { travels?: boolean; size?: number }[];
+  reply_draft?: ReplyDraft | null | undefined;
 }
+
+// What the box says of the other replies saved to the message besides the one it opened.
+export const moreReplies = (more: number) =>
+  more <= 0 ? "" : more === 1 ? "There’s 1 more draft reply to this message in Drafts." : `There are ${more} more draft replies to this message in Drafts.`;
 
 const quoteOf = (d: OriginalMail): Quote => ({ html: d.has_html ? d.html ?? null : null, text: d.text ?? "", from: d.from_name || d.from_addr || "", date: d.date ?? "" });
 

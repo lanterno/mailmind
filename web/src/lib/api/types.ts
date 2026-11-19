@@ -60,3 +60,4 @@ export type PictureType = Schemas["PictureType"];
 export type Snippet = Schemas["Snippet"];
 export type SnippetVerb = Schemas["SnippetVerb"];
 export type DocumentGrouping = Schemas["DocumentGrouping"];
+export type ReplyDraft = Schemas["ReplyDraft"];

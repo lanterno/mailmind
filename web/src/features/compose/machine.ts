@@ -5,12 +5,12 @@
 import { GUARD_ARM_MS, guardFanout, guardLine, guardList, isMine, type GuardSwap, type NearMiss } from "./sendGuard";
 import { resumeHidesAi, resumeNotice, resumeOpts, resumeSig, type ReopenedDraft, type ResumeFields } from "./draftResume";
 import type { LIMITS } from "../../lib/api/limits.gen";
-import type { DraftTone, RewriteOp, Snippet, SnippetVerb } from "../../lib/api/types";
+import type { DraftTone, ReplyDraft, RewriteOp, Snippet, SnippetVerb } from "../../lib/api/types";
 import type { Copy } from "../../lib/copy";
 import type { Store } from "../../lib/store";
 import {
   blocks, chip, DRAFT_TONES, draftHash, FIELDS, fmtWhen, forwardSeed, guardView, isHard, isNewToYou, isPicture, looksLikeAddr, namesItself, nothingToSave, payloadOf,
-  pictureMark, pictureParts, placeholderAfter, placeholderBefore, QUICK, rcptAddr, recipientProblem, redirectOf, replySeed, runChecks, snippetOffered, splitChips, withoutMark, withPictures, wordBefore,
+  moreReplies, pictureMark, pictureParts, placeholderAfter, placeholderBefore, QUICK, rcptAddr, recipientProblem, redirectOf, replySeed, runChecks, snippetOffered, splitChips, withoutMark, withPictures, wordBefore,
   type AnyWarning, type Attachment, type Composer, type Field, type OpenOptions, type OriginalMail, type Payload, type Person,
 } from "./model";
 
@@ -851,13 +851,58 @@ export function createComposing(env: Env) {
     }
   };
 
-  async function reply(to: Copy, all = false): Promise<Composer | null> {
+  // Your text in the box, the quote folded below, files, Bcc and thread as saved; and `more`, what else the box says.
+  type Reopened = ReopenedDraft & { text?: string; files?: Attachment[]; notes?: Parameters<typeof resumeNotice>[0] };
+  function openReopened(d: Reopened, more = ""): Composer | null {
+    const note = [resumeNotice(d.notes), more].filter(Boolean).join(" ");
+    const x = open({ ...(resumeOpts(d) as OpenOptions), body: d.text ?? "", attachments: (d.files ?? []).slice(), note, redirect: redirectOf(d.reply_to, d.original_from) });
+    if (note) env.say(note);   // in the composer, not a toast under its backdrop: it stays until it closes
+    return x;
+  }
+
+  const BUSY = "Close the message you’re writing first";
+  const GONE = Symbol("gone");
+
+  // Reply, Reply All and r open the reply already saved to the message (`reply_draft`), with its words, and never start a second,
+  // empty one beside it; with none saved, a new one. `resuming: false` always starts a new one (a quick reply's line).
+  async function reply(to: Copy, all = false, resuming = true): Promise<Composer | null> {
+    if (resuming && closeSaves) await closeSaves;   // a reply just closed is saved before the message says what answers it
     const d = await original(to);
     if (!d) {
       env.toast("Couldn’t load the message");
       return null;
     }
+    const saved = resuming ? d.reply_draft : null;
+    if (saved) {
+      const opened = await reopenReply(saved);
+      if (opened !== GONE) return opened;
+    }
     return open({ ...replySeed(d, all, env.mine()), origKey: to.key });
+  }
+
+  // The reply saved to a message, back in the box: GONE when it has gone since, so a new one opens; null when it couldn't open,
+  // which says the draft is waiting in Drafts rather than open an empty reply over it.
+  async function reopenReply(saved: ReplyDraft): Promise<Composer | null | typeof GONE> {
+    const turn = ++resumeTurn;
+    let d: Reopened;
+    try {
+      d = await env.post("/api/draft/resume", saved.draft_id != null ? { draft_id: saved.draft_id } : saved.in_drafts);
+    } catch (e) {
+      if (turn !== resumeTurn) return null;
+      env.draftsChanged();
+      if ((e as { status?: number }).status === 404) return GONE;
+      const why = (e as { status?: number }).status === 409 ? "Open it from there." : (e instanceof Error && e.message) || "Try again in a moment.";
+      const m = `A draft reply to this message is waiting in Drafts. ${why}`;
+      env.toast(m);
+      env.say(m);
+      return null;
+    }
+    if (turn !== resumeTurn) return null;
+    if (c) {   // one opened while this loaded is never replaced
+      env.toast(BUSY);
+      return null;
+    }
+    return openReopened(d, moreReplies(saved.more));
   }
 
   async function forward(of: Copy): Promise<Composer | null> {
@@ -869,16 +914,14 @@ export function createComposing(env: Env) {
     return open({ ...forwardSeed(d, env.limits.attach_bytes), origKey: of.key });
   }
 
-  // Your text in the box, the quote folded below, files, Bcc and thread as saved.
   async function editDraft(copy: Copy | null, draftId?: number) {   // by its copy, or by its id for one the list can't show yet
-    const busy = "Close the message you’re writing first";
-    if (c) return env.toast(busy);
+    if (c) return env.toast(BUSY);
     const turn = ++resumeTurn;
     if (closeSaves) {   // the copy it saves replaces the one this row shows
       await closeSaves;
       if (turn !== resumeTurn) return;
     }
-    let d: ReopenedDraft & { text?: string; files?: Attachment[]; notes?: Parameters<typeof resumeNotice>[0] };
+    let d: Reopened;
     try {
       d = await env.post("/api/draft/resume", copy === null ? { draft_id: draftId } : { key: copy.key, folder: copy.folder, uid: copy.uid });
     } catch (e) {
@@ -892,10 +935,8 @@ export function createComposing(env: Env) {
       return;
     }
     if (turn !== resumeTurn) return;
-    if (c) return env.toast(busy);   // one opened while this loaded is never replaced
-    const note = resumeNotice(d.notes);
-    open({ ...(resumeOpts(d) as OpenOptions), body: d.text ?? "", attachments: (d.files ?? []).slice(), note, redirect: redirectOf(d.reply_to, d.original_from) });
-    if (note) env.say(note);   // in the composer, not a toast under its backdrop: it stays until it closes
+    if (c) return env.toast(BUSY);   // one opened while this loaded is never replaced
+    openReopened(d);
   }
 
   /* ---------- the AI's words ---------- */
@@ -979,7 +1020,7 @@ export function createComposing(env: Env) {
   async function quickReply(to: Copy, kind: string) {
     const q = QUICK.find((x) => x.key === kind);
     if (!q || c) return;
-    const x = await reply(to);
+    const x = await reply(to, false, false);   // the line you chose, in a reply of its own: a saved one stays as it is in Drafts
     if (!x || !stillOpen(x)) return;
     const start = q.line + x.sigBlock;
     x.body = start;   // not an edit: nothing to save until you touch it
@@ -996,6 +1037,7 @@ export function createComposing(env: Env) {
     try {
       const x = await reply(to);
       if (!x || !stillOpen(x)) return;
+      if (x.draftId !== null) return;   // the reply saved to it opened: your words are never replaced by the AI's
       let body: string | null = null;
       try {
         const d = await env.get(`/api/ai/draft-ahead?key=${to.key}&folder=${encodeURIComponent(to.folder)}&uid=${to.uid}&peek=1`);
