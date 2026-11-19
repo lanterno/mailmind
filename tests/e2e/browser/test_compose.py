@@ -364,8 +364,9 @@ def test_typing_during_a_save_is_saved_when_the_composer_closes(page, world):
     expect(page.locator("#cmpSaved")).to_contain_text("Saved")
     until(page, lambda: len(copies(world, "Thread colours")) == 1, "the first save landed")
     page.keyboard.press("Escape")
-    until(page, lambda: any(b"did you mean?" in c for c in copies(world, "Thread colours")), "the typing saved")
-    assert len(copies(world, "Thread colours")) == 1
+    # The closing save's copy is put up before the first save's is taken down: wait for the one it ends with.
+    until(page, lambda: [b"did you mean?" in c for c in copies(world, "Thread colours")] == [True],
+          "the typing saved in place of the first save")
     clean(page)
 
 
