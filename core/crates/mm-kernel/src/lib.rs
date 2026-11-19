@@ -7,6 +7,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+pub mod addressees;
 pub mod addresses;
 pub mod ago;
 pub mod ai_provider;

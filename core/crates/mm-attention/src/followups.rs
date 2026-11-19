@@ -93,8 +93,10 @@ pub fn waiting_item(r: &WaitingRow, now: mm_kernel::seams::Moment) -> Value {
     let subject = r.subject.as_deref().filter(|s| !s.is_empty()).unwrap_or("(no subject)");
     let snippet: String = r.snippet.as_deref().unwrap_or_default().chars().take(200).collect();
     let to = r.recipients.as_deref().unwrap_or_default().split(',').next().unwrap_or_default();
+    let [(_, sent_to), (_, sent_to_more)] = mm_kernel::addressees::listed(r.recipients.as_deref());
     json!({
         "key": r.key, "folder": r.folder, "uid": r.uid, "from_name": from_name, "from_addr": r.from_addr,
+        "sent_to": sent_to, "sent_to_more": sent_to_more,
         "subject": subject, "when": when, "snippet": snippet, "seen": r.seen, "flagged": r.flagged,
         "has_attach": r.has_attach, "is_junk": r.is_junk, "bucket": r.bucket, "thread_id": r.thread_id, "ts": r.ts,
         "count": r.thread_count, "waiting": true, "account": r.account, "waiting_label": label, "kind": r.kind,

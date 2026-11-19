@@ -20,6 +20,8 @@ pub struct Found {
     pub folder: String,
     pub from_addr: Option<String>,
     pub from_name: Option<String>,
+    /// To and Cc as one text, as the store keeps them (`mm_kernel::addressees`).
+    pub recipients: Option<String>,
     pub subject: Option<String>,
     pub date_iso: Option<String>,
     pub snippet: Option<String>,

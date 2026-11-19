@@ -94,7 +94,7 @@ fn add_attention(it: &mut Map<String, Value>, r: &Row) {
     }
 }
 
-/// Which copy this is and who it is from.
+/// Which copy this is, who it is from and whom it went to, which names a row of a person's own mail.
 fn who(r: &Row) -> Map<String, Value> {
     let mut it = Map::new();
     it.insert("key".into(), col(r, "message_key").clone());
@@ -102,6 +102,9 @@ fn who(r: &Row) -> Map<String, Value> {
     it.insert("uid".into(), col(r, "uid").clone());
     it.insert("from_name".into(), or(col(r, "from_name"), col(r, "from_addr").clone()));
     it.insert("from_addr".into(), col(r, "from_addr").clone());
+    for (name, value) in mm_kernel::addressees::listed(text(r, "recipients")) {
+        it.insert(name.into(), value);
+    }
     it.insert("subject".into(), or(col(r, "subject"), json!("(no subject)")));
     it
 }

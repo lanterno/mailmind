@@ -198,6 +198,7 @@ fn found(r: &Row) -> rusqlite::Result<Found> {
         folder: r.get("folder")?,
         from_addr: r.get("from_addr")?,
         from_name: r.get("from_name")?,
+        recipients: r.get("recipients")?,
         subject: r.get("subject")?,
         date_iso: r.get("date_iso")?,
         snippet: r.get("snippet")?,
@@ -213,7 +214,8 @@ fn found(r: &Row) -> rusqlite::Result<Found> {
     })
 }
 
-const COLUMNS: &str = "m.pk,m.message_key,m.uid,m.account,m.folder,m.from_addr,m.from_name,m.subject,m.date_iso,m.ts,\
+const COLUMNS: &str = "m.pk,m.message_key,m.uid,m.account,m.folder,m.from_addr,m.from_name,m.recipients,m.subject,\
+                       m.date_iso,m.ts,\
                        m.snippet,m.seen,m.flagged,m.has_attach,m.is_junk,m.bucket,m.thread_id,s.importance,s.category,\
                        s.action";
 

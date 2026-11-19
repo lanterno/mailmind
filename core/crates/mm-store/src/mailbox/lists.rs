@@ -68,9 +68,9 @@ fn in_inboxes(accounts: usize) -> String {
 
 fn message_rows_sql(picked: &str) -> String {
     format!(
-        "SELECT m.pk, m.message_key, m.uid, m.account, m.folder, m.from_addr, m.from_name, m.subject, m.date_iso, m.ts, \
-         m.snippet, m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id, s.importance, s.summary, \
-         s.action, s.category \
+        "SELECT m.pk, m.message_key, m.uid, m.account, m.folder, m.from_addr, m.from_name, m.recipients, m.subject, \
+         m.date_iso, m.ts, m.snippet, m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id, \
+         s.importance, s.summary, s.action, s.category \
          FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key \
          WHERE {} ORDER BY m.ts DESC, m.pk DESC LIMIT ? OFFSET ?",
         listed(picked)
@@ -195,8 +195,8 @@ impl StoredLists for Database {
                 rows: rows_of(
                     c,
                     &format!(
-                        "SELECT m.pk, m.message_key, m.uid, m.account, m.folder, m.from_addr, m.from_name, m.subject, \
-                         m.date_iso, m.snippet, m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id, \
+                        "SELECT m.pk, m.message_key, m.uid, m.account, m.folder, m.from_addr, m.from_name, m.recipients, \
+                         m.subject, m.date_iso, m.snippet, m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id, \
                          z.until AS snoozed_until, s.importance, s.category, s.action \
                          FROM snoozes z CROSS JOIN messages m ON m.message_key=z.message_key AND m.folder=z.folder \
                          LEFT JOIN assessments s ON s.message_key=m.message_key \
@@ -257,7 +257,7 @@ impl StoredLists for Database {
         self.read(|c| {
             rows_of(
                 c,
-                "SELECT pk, message_key, uid, folder, from_addr, from_name, subject, date_iso, ts, snippet, \
+                "SELECT pk, message_key, uid, folder, from_addr, from_name, recipients, subject, date_iso, ts, snippet, \
                  seen, flagged, answered, has_attach, is_junk, message_id \
                  FROM messages WHERE account=? AND thread_id=? AND pending_removal IS NULL \
                  ORDER BY ts ASC, pk ASC",

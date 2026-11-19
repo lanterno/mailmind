@@ -62,6 +62,9 @@ impl Digest {
                 it.insert("alias".into(), named(&faces.aliases, col(r, "account")));
                 it.insert("from_name".into(), or(col(r, "from_name"), col(r, "from_addr").clone()));
                 it.insert("from_addr".into(), col(r, "from_addr").clone());
+                for (name, value) in mm_kernel::addressees::listed(text(r, "recipients")) {
+                    it.insert(name.into(), value);
+                }
                 it.insert("subject".into(), or(col(r, "subject"), json!("(no subject)")));
                 it.insert("when".into(), Value::String(rel_time(text(r, "date_iso"), now)));
                 it.insert("summary".into(), col(r, "summary").clone());

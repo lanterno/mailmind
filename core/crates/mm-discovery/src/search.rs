@@ -125,6 +125,9 @@ pub fn hit(r: &Found, aliases: &BTreeMap<String, Option<String>>, now: Moment) -
     row.insert("alias".into(), json!(aliases.get(&r.account).cloned().flatten()));
     row.insert("from_name".into(), json!(text(&r.from_name).or(r.from_addr.as_deref())));
     row.insert("from_addr".into(), json!(r.from_addr));
+    for (name, value) in mm_kernel::addressees::listed(r.recipients.as_deref()) {
+        row.insert(name.into(), value);
+    }
     row.insert("subject".into(), json!(text(&r.subject).unwrap_or(NO_SUBJECT)));
     row.insert("when".into(), json!(relative::rel_time(r.date_iso.as_deref(), now)));
     row.insert("date".into(), json!(cut(r.date_iso.as_deref().unwrap_or_default(), 10)));
