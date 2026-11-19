@@ -72,7 +72,7 @@ struct RailEntry: Identifiable, Equatable {
     }
 }
 
-/// What the desk adds to the rail (Mac/Assistant's `Desk.rail`): today's brief, how many need you, and each account's
+/// What the desk adds to the rail (Mac/Assistant's `Desk.rail`): today's brief, what needs you, and each account's
 /// Screener with the senders waiting in it.
 struct DeskRail: Equatable {
     struct Gate: Equatable {
@@ -80,18 +80,33 @@ struct DeskRail: Equatable {
         let waiting: Int
     }
 
+    /// A message the brief says needs you: whose, and the conversation it is in.
+    struct Need: Equatable {
+        let account: String
+        let conversation: String
+    }
+
     var brief = false
     /// The mail the brief says needs you, which the Inbox counts in sunlight.
-    var needs = 0
+    var needing: [Need] = []
     /// Every account's Screener, in the accounts' order.
     var gates: [Gate] = []
+
+    /// How many rows of the Inbox's list need you: `account`'s, or every account's with none, each conversation once
+    /// where the list shows conversations, as its Needs you tab counts them.
+    func needs(in account: String?, grouped: Bool) -> Int {
+        let mine = needing.filter { account == nil || $0.account == account }
+        guard grouped else { return mine.count }
+        return Set(mine.map { [$0.account, $0.conversation] }).count
+    }
 }
 
 @MainActor
 enum RailPlaces {
-    /// Every line of the rail, open or folded (each says which it shows in), for the mailbox as it stands. `closed`
+    /// Every line of the rail, open or folded (each says which it shows in), for the mailbox as it stands. `scope` is
+    /// the account whose mail the window shows, nil for every account's (the accounts' button says which); `closed`
     /// holds the accounts whose folders are folded away, and `labelsOpen` those whose labels are shown.
-    static func entries(_ mailbox: Mailbox, desk: DeskRail, closed: Set<String> = [],
+    static func entries(_ mailbox: Mailbox, desk: DeskRail, scope: String? = nil, closed: Set<String> = [],
                         labelsOpen: Set<String> = []) -> [RailEntry] {
         var out: [RailEntry] = []
         func add(_ id: String, _ item: RailItem, _ shown: RailEntry.Shown = .always, foldsInto: String = "folders") {
@@ -101,8 +116,11 @@ enum RailPlaces {
         if desk.brief {
             add("brief", RailItem(place: .desk(.brief), icon: .sun, title: String(localized: "Today’s brief")))
         }
-        add("inbox", RailItem(place: .allInboxes, icon: .inbox, title: String(localized: "Inbox"),
-                              count: desk.needs > 0 ? .sun(desk.needs) : RailItem.Count(inboxesUnseen(mailbox))))
+        // The Inbox of the scope, as the page's rail has it: the account's own while the window shows one, every
+        // account's together under All accounts. It counts what needs you there in sunlight, else what is unread.
+        let needs = desk.needs(in: scope, grouped: mailbox.grouped)
+        add("inbox", RailItem(place: inbox(of: scope, mailbox), icon: .inbox, title: String(localized: "Inbox"),
+                              count: needs > 0 ? .sun(needs) : RailItem.Count(inboxesUnseen(mailbox, in: scope))))
         // Open, each Screener senders wait in, named where there are several accounts. Folded, one gate for them all,
         // counting everyone waiting, which opens the first that has someone waiting, else the first account's.
         let waiting = desk.gates.filter { $0.waiting > 0 }
@@ -206,11 +224,19 @@ enum RailPlaces {
         return (item.place, shown[next].id)
     }
 
-    /// Every account's Inbox unread, as a Mac's All Inboxes counts it.
-    static func inboxesUnseen(_ mailbox: Mailbox) -> Int {
-        mailbox.accounts.reduce(0) { sum, account in
+    /// The unread in `account`'s Inbox, or in every account's with none, as the server counts each folder's: messages,
+    /// as the page's rail counts them.
+    static func inboxesUnseen(_ mailbox: Mailbox, in account: String? = nil) -> Int {
+        mailbox.accounts.filter { account == nil || $0 == account }.reduce(0) { sum, account in
             sum + (mailbox.folders(of: account).first { $0.role == "inbox" }?.unseen ?? 0)
         }
+    }
+
+    /// The Inbox the rail's Inbox opens: `account`'s, or All Inboxes with none.
+    static func inbox(of account: String?, _ mailbox: Mailbox) -> Place {
+        guard let account else { return .allInboxes }
+        let inbox = mailbox.folders(of: account).first { $0.role == "inbox" }?.name
+        return .folder(account: account, folder: inbox ?? "INBOX")
     }
 
     /// The icon for a folder's part, which the server names (`FOLDER_ICON`).

@@ -26,7 +26,8 @@ struct MailboxSidebar: View {
     @FocusState private var keyed: Bool
 
     var body: some View {
-        let entries = RailPlaces.entries(mailbox, desk: desk?.rail ?? DeskRail(), closed: closed,
+        let entries = RailPlaces.entries(mailbox, desk: desk?.rail ?? DeskRail(),
+                                         scope: RailAccountButton.place(of: app)?.account, closed: closed,
                                          labelsOpen: labelsOpen)
         let shown = entries.filter { $0.shows(open: open) }
         let current = RailPlaces.current(app.place, in: entries, open: open)
