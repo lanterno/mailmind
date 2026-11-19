@@ -54,6 +54,7 @@ class Listed(TypedDict):
     next_attempt_at: int
     scheduled: bool
     retrying: bool
+    draft_id: int | None        # the draft it goes from, which it supersedes once it has gone: a shell knows the draft by this
 
 
 def new_row(built: Built, meta: SendMeta, orig: Row | None, due: int, created_at: str) -> dict[str, Any]:
@@ -171,4 +172,5 @@ def listed(r: Row) -> Listed:
         "unsure": is_unsure(r),
         "created_at": r["created_at"], "sent_at": r["sent_at"],
         "next_attempt_at": na, "scheduled": waiting == SCHEDULED, "retrying": waiting == BACKOFF,
+        "draft_id": r["draft_id"],
     }

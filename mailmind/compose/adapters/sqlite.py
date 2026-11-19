@@ -67,7 +67,7 @@ def outbox_holds_draft(c, did):
 def outbox_list(c, limit=50):
     return c.execute(
         """SELECT id,account,subject,recipients,state,attempts,last_error,created_at,sent_at,next_attempt_at,
-                  delivered,wire_begun,sent_appended,wait_kind
+                  delivered,wire_begun,sent_appended,wait_kind,draft_id
            FROM outbox ORDER BY id DESC LIMIT ?""", (limit,)).fetchall()
 
 

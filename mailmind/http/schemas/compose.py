@@ -82,6 +82,7 @@ class OutboxItem(Answer):
     next_attempt_at: int
     scheduled: bool
     retrying: bool
+    draft_id: int | None                      # the draft it goes from, which it supersedes once it has gone
 
 
 class WaitingDraft(Answer):
