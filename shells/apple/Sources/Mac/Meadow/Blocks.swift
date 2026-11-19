@@ -436,7 +436,8 @@ struct MeadowSectionLabel: View {
     }
 }
 
-/// The AI's mark (`.ai-mark`): the wind and its label, in moss, which is only ever the AI's voice.
+/// The AI's mark (`.ai-mark`): the wind and its label, in moss, which is only ever the AI's voice. It titles what
+/// the AI wrote (the summary, the brief, an answer), so VoiceOver finds it as a heading, as a section's label is.
 struct MeadowAIMark: View {
     let text: String
     @Environment(\.meadow) private var meadow
@@ -454,6 +455,7 @@ struct MeadowAIMark: View {
         .foregroundStyle(meadow.moss)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(text))
+        .accessibilityAddTraits(.isHeader)
     }
 }
 
