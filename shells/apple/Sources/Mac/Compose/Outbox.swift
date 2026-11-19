@@ -48,7 +48,10 @@ final class OutboxTray {
     private static let ops = ["trash": "Move to Trash", "archive": "Archive", "junk": "Mark as junk", "move": "Move"]
     private static let flags = ["seen": ("Mark unread", "Mark read"), "flagged": ("Remove star", "Star"),
                                 "answered": ("Mark unanswered", "Mark answered")]
+    // A folder_gone change was given back because another app deleted or renamed its folder: no retry undoes that,
+    // and the server refused nothing.
     private static let why = ["refused": "the server refused it", "no_folder": "no folder to move it to",
+                              "folder_gone": "its folder was deleted or renamed in another app",
                               "account removed": "its account is gone"]
 
     static func whatItDoes(_ change: API.PendingChange) -> String {
