@@ -10,7 +10,9 @@ mod stand_in;
 use mm_kernel::errors::Problem;
 use mm_kernel::seams::Keychain;
 use mm_mailbox::bodies::FOLDER_GONE;
+use mm_mailbox::ingest::SyncError;
 use mm_mailbox::lists::Paging;
+use mm_mailbox::session::{NO_SUCH_FOLDER, ServerError};
 use serde_json::{Value, json};
 use stand_in::{ADA, BEA, Imap, World, note, world};
 
@@ -261,6 +263,40 @@ fn a_message_opened_from_a_folder_another_client_deleted_says_so_and_leaves_the_
     let rail = w.app.folders.of_account(ADA).unwrap();
     assert!(rail.folders.iter().all(|(folder, _)| folder.name != "Plans"));
     assert_eq!(w.app.reading.bodies.message_body(pk, false), Err(Problem::not_found("not found").into()));
+}
+
+/// Undo's read back into a folder another client deleted (`Ingest::ingest_messages`): its SELECT is refused and a LIST
+/// leaves it out, so the folder is forgotten as a sync forgets it: its list is empty and the rail leaves it out.
+#[test]
+fn undos_read_back_into_a_folder_another_client_deleted_forgets_the_folder() {
+    let w = plans_of_three();
+    w.imap.delete_folder(ADA, "Plans");
+    let read = w.app.ingest.ingest_messages(ADA, "Plans", &[id(2), id(3)]);
+    assert_eq!(read, Err(SyncError::Server(ServerError::Refused(NO_SUCH_FOLDER))));
+    assert_eq!(plans_total(&w), 0);
+    let rail = w.app.folders.of_account(ADA).unwrap();
+    assert!(rail.folders.iter().all(|(folder, _)| folder.name != "Plans"));
+}
+
+/// The same read back into a folder its server won't open for now, with LIST still naming it, keeps the folder and its
+/// mail.
+#[test]
+fn undos_read_back_into_a_folder_its_server_wont_open_for_now_keeps_the_folder() {
+    let w = plans_of_three();
+    w.imap.held().selects_refused = 1;
+    assert!(w.app.ingest.ingest_messages(ADA, "Plans", &[id(2)]).is_err());
+    assert_eq!(plans_total(&w), 3);
+}
+
+/// Ada's Inbox of two notes and her Plans of three, synced.
+fn plans_of_three() -> World {
+    let imap = Imap::start();
+    imap.add(ADA, "INBOX", (1..=2).map(|uid| (uid, note(uid))));
+    imap.add(ADA, "Plans", (1..=3).map(|uid| (uid, note(uid))));
+    let w = world(imap, &[ADA], &[]);
+    w.app.syncing.sync_once();
+    assert_eq!(plans_total(&w), 3);
+    w
 }
 
 /// A move into a folder another client deleted, queued while the server was away: once the folder is found gone, the
