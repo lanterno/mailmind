@@ -1,8 +1,9 @@
 """IDLE's supervisor (realtime.reconcile): the workers follow the configuration as it changes. An
 account added is watched, one removed or disabled stops being watched at once, and one now reached
 another way gets a fresh worker; a change that doesn't touch how it is reached leaves the worker
-be. The account events it hears come from config (mailmind.accounts.domain.events). Each test has a supervisor of its own,
-and sees its workers through the sessions they open."""
+be. A worker whose connection failed asks for a sync of its account once it is connected again. The account events it
+hears come from config (mailmind.accounts.domain.events). Each test has a supervisor of its own, and sees its workers
+through the sessions they open."""
 import threading
 
 import pytest
@@ -264,3 +265,40 @@ def test_before_start_and_after_stop_the_supervisor_starts_nothing(world, superv
     assert idling(world, w.ADA)
     supervisor.stop()
     assert supervisor.reconcile() == 0 and supervisor.watching() == {}
+
+
+@pytest.fixture
+def news():
+    """The accounts IDLE's dispatcher told of (InboxChanged), in turn."""
+    from mailmind.mailbox.domain.events import InboxChanged
+    from mailmind.platform import bus
+    heard = []
+    end = bus.subscribe(InboxChanged, lambda e: heard.append(set(e.accounts)))
+    yield heard
+    end()
+
+
+def test_a_worker_whose_connection_dropped_asks_for_a_sync_once_it_is_connected_again(world, supervisor, news,
+                                                                                       monkeypatch):
+    monkeypatch.setattr(supervisor, "FIRST_REST", 0.01)
+    world.server.drop("IDLE", user=w.ADA)
+    supervisor.start()
+    assert idling(world, w.ADA, 2) and all_idling(world)
+    # The server answers again: the sync says so, and fetches what came while nothing listened. The others, whose
+    # first connection simply worked, ask for none.
+    assert wait_until(lambda: news)
+    assert news == [{w.ADA}]
+
+
+def test_a_worker_that_takes_several_tries_to_connect_again_asks_for_one_sync(world, supervisor, news, monkeypatch):
+    monkeypatch.setattr(supervisor, "IDLE_SECONDS", 0.1)
+    monkeypatch.setattr(supervisor, "FIRST_REST", 0.01)
+    monkeypatch.setattr(supervisor, "LONGEST_REST", 0.02)
+    supervisor.start()
+    assert all_idling(world)
+    logins = count(world, "LOGIN")
+    world.server.drop("LOGIN", user=w.ADA, times=2)
+    world.server.drop("IDLE", user=w.ADA)               # its server goes away, and turns the next two logins down
+    assert wait_until(lambda: news)
+    assert count(world, "LOGIN") == logins + 3
+    assert news == [{w.ADA}]
