@@ -1025,6 +1025,24 @@ final class DeskModelTests: XCTestCase {
         XCTAssertEqual(changed, 0, "nothing stored was read differently")
     }
 
+    /// What names no sender (a number pasted before the address) is refused in the server's words, which the sheet
+    /// says as the page's toast does; a rule that got no answer says it failed.
+    func testARuleTheServerRefusesSaysWhyInItsWords() async {
+        let words = "A rule names one address, such as name@example.com, or one domain, such as example.com."
+        routes.refuse("POST", "/api/rules", status: 400, detail: words)
+        let model = CurateModel(link: link, notices: notices)
+
+        let kept = await model.rule("50506 spam@lottery.example.test", .keep)
+
+        XCTAssertFalse(kept, "so the field keeps what was typed")
+        XCTAssertEqual(said, words)
+        XCTAssertNil(model.rules)
+        let none = DeskRoutes()
+        none.answer("POST", "/api/rules", status: 503, json: "{}")
+        await CurateModel(link: CoreLink(none), notices: notices).rule("spam@lottery.example.test", .block)
+        XCTAssertEqual(said, "Rule failed")
+    }
+
     // MARK: A sentence in the search field
 
     func testASentenceIsTranslatedOnceAndOnlyWithAIOn() async {
