@@ -106,6 +106,40 @@ final class MailboxPlacesTests: XCTestCase {
         XCTAssertEqual(Place.documents.title(folders: []), "Documents")
     }
 
+    /// The paper trail with no receipts says none yet; once its last receipt is filed or deleted, it had some, so it
+    /// says what the page's emptied places say. Feed says it is clear either way.
+    @MainActor
+    func testThePaperTrailEmptiedSaysNothingIsLeftNotNoneYet() async {
+        XCTAssertEqual(Words.emptyLane(.papertrail, emptied: false), "No receipts or invoices yet.")
+        XCTAssertEqual(Words.emptyLane(.papertrail, emptied: true), "Nothing left here.")
+        XCTAssertEqual(Words.emptyLane(.feed, emptied: true), "Your Feed is clear — no newsletters waiting.")
+
+        func answer(_ server: FakeServer, _ hits: [API.SearchHit]) {
+            server.on("GET", API.Get.Search.path, API.SearchAnswer.searchPage(API.SearchPage(
+                generated: "", hasMore: false, items: hits, offset: 0, ok: true, query: "", scope: "all")))
+        }
+        let server = Fixture.server()
+        answer(server, [])
+        let none = LaneModel(search: Search(q: "category:receipt", lane: .papertrail), scope: .all, wire: server.wire)
+        none.refresh()
+        await until { none.loaded }
+        XCTAssertFalse(none.emptied, "never had any: none yet")
+
+        answer(server, [Fixture.hit(41, subject: "Your receipt")])
+        let lane = LaneModel(search: Search(q: "category:receipt", lane: .papertrail), scope: .all, wire: server.wire)
+        lane.refresh()
+        await until { !lane.hits.isEmpty }
+        XCTAssertFalse(lane.emptied)
+        answer(server, [])
+        lane.refresh()
+        await until { lane.hits.isEmpty }
+        XCTAssertTrue(lane.emptied, "its last receipt went")
+        answer(server, [Fixture.hit(42, subject: "Another receipt")])
+        lane.refresh()
+        await until { !lane.hits.isEmpty }
+        XCTAssertFalse(lane.emptied)
+    }
+
     func testSnoozedIsListedEmptyAndTheOthersOnlyWithSomethingIn() {
         XCTAssertTrue(VirtualFolder.snoozed.shown(count: 0))
         XCTAssertFalse(VirtualFolder.muted.shown(count: 0))
