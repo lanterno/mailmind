@@ -4662,6 +4662,8 @@ export interface components {
             cc: string[];
             /** Created At */
             created_at: string;
+            /** Draft Id */
+            draft_id: number | null;
             /** Error */
             error: string | null;
             /** Id */
