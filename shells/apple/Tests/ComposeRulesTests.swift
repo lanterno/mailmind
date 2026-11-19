@@ -538,7 +538,25 @@ final class RecipientCompletionTests: XCTestCase {
         list.show([lin, linus], for: "lin", holding: [])
         XCTAssertTrue(list.shown)
         XCTAssertEqual(list.at, 0)
-        XCTAssertEqual(list.taken(typed: "lin"), .suggestion("lin@example.test"), "not a chip that says lin")
+        XCTAssertEqual(list.taken(typed: "lin"), .suggestion("Lin Mori <lin@example.test>"),
+                       "not a chip that says lin, but the person by name")
+    }
+
+    /// A suggestion taken makes a chip that shows the person's name, as the list did, and goes to their address; a
+    /// name an address list would read otherwise is quoted, and a suggestion with no name is its address.
+    func testAChosenSuggestionsChipShowsTheName() {
+        XCTAssertEqual(RecipientCompletion.chip(lin), "Lin Mori <lin@example.test>")
+        XCTAssertEqual(RecipientCompletion.chip(linus), "linus@example.test")
+        let ren = API.Suggestion(addr: "ren@example.test", n: 1, name: "Mori, Ren")
+        XCTAssertEqual(RecipientCompletion.chip(ren), #""Mori, Ren" <ren@example.test>"#)
+        XCTAssertEqual(Addresses.named(#"Ren "R" Mori"#, "ren@example.test"), #""Ren \"R\" Mori" <ren@example.test>"#)
+        XCTAssertEqual(Addresses.named("ren@example.test", "ren@example.test"), "ren@example.test")
+        XCTAssertEqual(ChipField.shown(RecipientCompletion.chip(lin)), "Lin Mori")
+        XCTAssertEqual(ChipField.shown(RecipientCompletion.chip(ren)), "Mori, Ren")
+        // Its chip is one recipient, comma and all, going where the suggestion does.
+        let chips = Addresses.split(RecipientCompletion.chip(ren)).map { Recipient($0) }
+        XCTAssertEqual(chips.map(\.address), ["ren@example.test"])
+        XCTAssertFalse(chips[0].bad)
     }
 
     func testAWholeAddressTypedIsKeptAsTyped() {
