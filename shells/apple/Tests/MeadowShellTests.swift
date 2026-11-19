@@ -1,3 +1,4 @@
+import PDFKit
 import SwiftUI
 import XCTest
 
@@ -244,6 +245,50 @@ final class MeadowShellTests: XCTestCase {
         XCTAssertFalse(Place.search(Search(q: "category:newsletter", lane: .feed)).spansTheWindow)
         XCTAssertFalse(Place.allInboxes.spansTheWindow)
         XCTAssertFalse(Place.desk(.brief).spansTheWindow)
+    }
+
+    // MARK: The list's head
+
+    /// The lines a head's sentence and what follows it are drawn on, `width` points wide.
+    private static func lines(_ head: some View, width: CGFloat) -> [String] {
+        let data = NSMutableData()
+        ImageRenderer(content: head.frame(width: width, alignment: .leading).font(.meadow(.ui, 12.5)).meadowLight(.day))
+            .render { size, draw in
+                var box = CGRect(origin: .zero, size: size)
+                guard let consumer = CGDataConsumer(data: data as CFMutableData),
+                      let pdf = CGContext(consumer: consumer, mediaBox: &box, nil) else { return }
+                pdf.beginPDFPage(nil)
+                draw(pdf)
+                pdf.endPDFPage()
+                pdf.closePDF()
+            }
+        return (PDFDocument(data: data as Data)?.string ?? "").split(whereSeparator: \.isNewline).map(String.init)
+    }
+
+    /// Trash's sentence and its count run on one line where they fit; in a narrow list the count takes a line of its
+    /// own, and no line starts with the "·" between them.
+    func testAHeadsSentenceAndCountShareALineOrTakeOneEach() throws {
+        let about = try XCTUnwrap(MeadowListHead.about(.folder(account: Fixture.ada, folder: "Trash"), role: "trash"))
+        let head = MeadowHeadLine(sentence: about) { Text("3 conversations") }
+        let wide = Self.lines(head, width: 900)
+        XCTAssertEqual(wide.count, 1, "\(wide)")
+        XCTAssertTrue(wide[0].contains("·"), "\(wide)")
+        let narrow = Self.lines(head, width: 340)
+        XCTAssertGreaterThan(narrow.count, 1, "\(narrow)")
+        XCTAssertEqual(narrow.last, "3 conversations", "the count on a line of its own")
+        XCTAssertFalse(narrow.contains { $0.hasPrefix("·") }, "\(narrow)")
+        XCTAssertFalse(narrow.joined().contains("·"))
+    }
+
+    /// The Feed's sentence and its scope: beside each other where they fit, else the scope under the sentence, never
+    /// squeezed beside a sentence wrapped to two lines.
+    func testALanesScopeStandsUnderItsSentenceWhereItDoesntFitBeside() {
+        let sentence = "Newsletters and digests. Nothing here asks anything of you."
+        let head = MeadowHeadLine(sentence: sentence) { Text("all accounts") }
+        XCTAssertEqual(Self.lines(head, width: 700).count, 1)
+        let narrow = Self.lines(head, width: 340)
+        XCTAssertEqual(narrow.last, "all accounts", "\(narrow)")
+        XCTAssertFalse(narrow.dropLast().contains { $0.contains("all accounts") }, "\(narrow)")
     }
 
     // MARK: The pane's bar
