@@ -540,10 +540,21 @@ final class Mailbox {
         }
     }
 
-    /// Open a message where a notification named it: its folder's list, and the message in it.
+    /// Open a message where a notification named it: its folder's list, and the message in it, chosen in its row as a
+    /// click chooses it once the list holds it. Its folder's rows come after it opens, so the row is chosen as they
+    /// come, unless another message was opened or a row chosen meanwhile.
     func openInItsFolder(_ copy: MailCopy) {
         app?.place = .folder(account: copy.account, folder: copy.folder)
         open(copy)
+        guard let app, chosenRows.isEmpty, let list = app.list else { return }
+        let turn = app.openings
+        let before = list.onceRead
+        list.onceRead = { [weak self, weak app, weak list] in
+            before?()
+            guard let self, let app, let list, app.list === list, app.openings == turn, app.selection.copy == copy,
+                  self.chosenRows.isEmpty, let row = self.row(of: copy) else { return }
+            self.chose([row])
+        }
     }
 
     /// The rows a verb acts on: those marked, else the message open, as the list, a lane or the server has its row now.
