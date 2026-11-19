@@ -477,3 +477,31 @@ final class AppStatusTests: XCTestCase {
         XCTAssertEqual(DeskPlace.screener(account: "ada@example.test").title, "At the gate", "and the window's title")
     }
 }
+
+/// What the status reads again as events come.
+@MainActor
+final class StatusHearsTests: XCTestCase {
+    /// A first sync ends, and the older-mail lane then says folder-synced at each step, for minutes: the status reads
+    /// the digest again while the steps go on, once for the burst, not only once they stop.
+    func testTheDigestIsReadWhileTheOlderMailLaneGoesOn() async {
+        let server = Fixture.server(rows: [])
+        server.on("GET", API.Get.Digest.path, Fixture.digest(accounts: [Fixture.ada]))
+        let status = AppStatus(newMail: NewMailAlerts(notifier: SystemNotifier.Silent(), isActive: { true },
+                                                      badge: { _ in }, announce: { _ in }))
+        status.wire = server.wire
+        let started = ContinuousClock.now
+        var step = 0
+        while status.digest == nil {
+            guard ContinuousClock.now - started < .seconds(3) else {
+                return XCTFail("the status waited out \(step) steps of the lane")
+            }
+            step += 1
+            await status.heard(CoreEvent(id: String(step), name: "folder-synced",
+                                         data: #"{"account": "ada@example.test", "folder": "INBOX", "ok": true, "new": 50}"#))
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        XCTAssertEqual(status.digest?.accounts, [Fixture.ada])
+        XCTAssertGreaterThan(step, 2, "the steps came faster than a read waits")
+        XCTAssertLessThan(server.asked(API.Get.Digest.path).count, step, "a read for the burst, not one a step")
+    }
+}
