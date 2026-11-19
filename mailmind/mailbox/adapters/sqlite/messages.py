@@ -167,10 +167,10 @@ def copy_in_folder(c, message_key, folder):
 
 
 def copy_now(c, key, folder):
-    """The copy a stored answer's message has now, its pk, folder and uid, or None if it has gone. Among its copies, the one
-    in the folder it was read from."""
-    return c.execute("SELECT pk, folder, uid FROM messages WHERE message_key=? AND pending_removal IS NULL "
-                     "ORDER BY folder=? DESC, pk DESC LIMIT 1", (key, folder)).fetchone()
+    """The copy a stored answer's message has now in the folder it was read from, its pk, folder and uid, or None if it
+    has gone from it, filed or deleted, though its row follows a filed copy to where it went."""
+    return c.execute("SELECT pk, folder, uid FROM messages WHERE message_key=?1 AND pending_removal IS NULL "
+                     "AND (?2 IS NULL OR folder=?2) ORDER BY pk DESC LIMIT 1", (key, folder)).fetchone()
 
 
 def copy_pk(c, key, folder, uid=None):

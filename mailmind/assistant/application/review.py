@@ -103,7 +103,7 @@ class Reviews:
 
     def _items_now(self, c: Connection, items: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
         """A stored list, as the page reads it: each with the folder and uid of its message's copy now. One whose message has
-        gone is left out, and one that named no message (a follow-up whose thread has no row) stays as it was. A list stored
+        gone from the folder it was read from, filed or deleted, is left out, and one that named no message (a follow-up whose thread has no row) stays as it was. A list stored
         before named each by its pk too, which says nothing after a renumber, and that goes."""
         now: list[dict[str, Any]] = []
         for item in items:

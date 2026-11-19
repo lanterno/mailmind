@@ -105,7 +105,7 @@ class Briefs:
 
     def _groups_now(self, groups_json: str) -> list[GroupNow]:
         """A stored brief's groups, as the page reads them: each message by its key and the folder its copy is in now. One
-        whose message has gone is left out."""
+        whose message has gone from the folder it was read from, filed or deleted, is left out."""
         with self._uow.read() as c:
             groups: list[GroupNow] = []
             for g in json.loads(groups_json):
