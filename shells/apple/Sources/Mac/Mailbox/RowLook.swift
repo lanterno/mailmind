@@ -77,7 +77,10 @@ struct RowMeasure: Equatable {
         let who = top + padTop
         let subject = who + Self.line + 2
         let third = subject + Self.line + (shape.gist ? 4 : 3)
-        var end = third + (shape.gist ? gistLine * CGFloat(lines(shape)) : Self.previewLine)
+        // A row with nothing under its subject closes up, its chips straight under it, as the page's empty line
+        // takes no room.
+        var end = shape.bare ? subject + Self.line
+            : third + (shape.gist ? gistLine * CGFloat(lines(shape)) : Self.previewLine)
         var chips: CGFloat?
         if shape.chips, self.chips {
             chips = end + Self.chipsGap
@@ -92,7 +95,7 @@ struct RowMeasure: Equatable {
     }
 }
 
-/// What decides a row's height: a day's head over it, the summary's lines or the snippet's one, and chips.
+/// What decides a row's height: a day's head over it, the summary's lines, the snippet's one or none, and chips.
 struct RowShape: Hashable {
     var head = false
     var gist = false
@@ -100,17 +103,22 @@ struct RowShape: Hashable {
     /// The summary fits on one line of the row as wide as it is now, so the row makes room for one: `.gist` is
     /// clamped to two lines, and a row is as tall as what it holds.
     var oneLine = false
+    /// Nothing under the subject: no summary, and no snippet to show in its place.
+    var bare = false
 
     /// Packed into a byte, for the table's note of every row's shape; zero is a row not read yet.
-    var packed: UInt8 { 1 | (head ? 2 : 0) | (gist ? 4 : 0) | (chips ? 8 : 0) | (oneLine ? 16 : 0) }
+    var packed: UInt8 {
+        1 | (head ? 2 : 0) | (gist ? 4 : 0) | (chips ? 8 : 0) | (oneLine ? 16 : 0) | (bare ? 32 : 0)
+    }
 
-    init(head: Bool = false, gist: Bool = false, chips: Bool = false, oneLine: Bool = false) {
-        (self.head, self.gist, self.chips, self.oneLine) = (head, gist, chips, gist && oneLine)
+    init(head: Bool = false, gist: Bool = false, chips: Bool = false, oneLine: Bool = false, bare: Bool = false) {
+        (self.head, self.gist, self.chips, self.oneLine, self.bare) = (head, gist, chips, gist && oneLine, !gist && bare)
     }
 
     init?(packed: UInt8) {
         guard packed & 1 == 1 else { return nil }
-        self.init(head: packed & 2 != 0, gist: packed & 4 != 0, chips: packed & 8 != 0, oneLine: packed & 16 != 0)
+        self.init(head: packed & 2 != 0, gist: packed & 4 != 0, chips: packed & 8 != 0, oneLine: packed & 16 != 0,
+                  bare: packed & 32 != 0)
     }
 
     /// This shape with its summary, `width` wide on one line, in a row `rowWidth` wide: on one line where it fits.
@@ -120,11 +128,12 @@ struct RowShape: Hashable {
         return shape
     }
 
-    /// A row's shape: a summary takes its lines, a receipt's amount or a snippet one, and the next step or a junk
-    /// tag a row of chips.
+    /// A row's shape: a summary takes its lines, a receipt's amount or a snippet one, an empty snippet none, and
+    /// the next step or a junk tag a row of chips.
     @MainActor
     init(_ row: API.FolderRow, head: Bool) {
-        self.init(head: head, gist: RowWords.third(row).isGist, chips: !RowWords.chips(row).isEmpty)
+        let third = RowWords.third(row)
+        self.init(head: head, gist: third.isGist, chips: !RowWords.chips(row).isEmpty, bare: third.isBare)
     }
 
     /// A row whose page hasn't come: the most usual shape, a summary and no chips.
@@ -137,7 +146,7 @@ struct RowShape: Hashable {
     @MainActor
     static func of(_ row: API.FolderRow, head: Bool, rowWidth: CGFloat) -> (shape: RowShape, gistWidth: Float?) {
         let third = RowWords.third(row)
-        let shape = RowShape(head: head, gist: third.isGist, chips: !RowWords.chips(row).isEmpty)
+        let shape = RowShape(row, head: head)
         guard case .gist(let text) = third else { return (shape, nil) }
         let width = RowFaces.gistWidth(text)
         return (shape.fitting(width, in: rowWidth), width)
@@ -158,6 +167,12 @@ enum RowWords {
 
         var isGist: Bool {
             if case .gist = self { return true }
+            return false
+        }
+
+        /// A snippet with nothing in it: the row shows no line under its subject.
+        var isBare: Bool {
+            if case .preview(let snippet) = self { return snippet.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             return false
         }
     }

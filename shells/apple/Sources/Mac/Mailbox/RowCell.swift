@@ -371,7 +371,8 @@ final class MailRowCell: NSTableCellView {
             return
         }
         // The shape the table gave the row its height by: the summary on one line where it fits this wide.
-        let shape = RowShape(head: head != nil, gist: lines.gist != nil, chips: !lines.chips.isEmpty)
+        let shape = RowShape(head: head != nil, gist: lines.gist != nil, chips: !lines.chips.isEmpty,
+                             bare: lines.third.isBare)
             .fitting(lines.gistWidth, in: bounds.width)
         let stops = measure.stops(shape)
         if let head = lines.head {
