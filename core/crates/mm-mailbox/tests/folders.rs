@@ -3,12 +3,12 @@
 #![allow(clippy::unwrap_used)]
 
 use std::collections::BTreeSet;
-use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use mm_kernel::errors::{Failure, Fault, Kind};
 use mm_kernel::seams::{Clock, Moment};
-use mm_mailbox::folders::Folders;
+use mm_mailbox::folders::{Folders, ForgetsFolders};
 use mm_mailbox::ports::{Accounts, MailSession, MailSessions, SessionError, StoredMail, ViewCounts};
 use mm_mailbox::roles::{self, Folder, RailFolder};
 
@@ -233,4 +233,93 @@ fn trash_is_the_accounts_own_where_the_server_lists_it_and_else_the_folder_that_
     let both = [folder("Trash", &[]), folder("Deleted Messages", &["\\trash"])];
     assert_eq!(roles::trash(&both, "Trash"), "Trash");
     assert_eq!(roles::trash(&[folder("INBOX", &[])], "Trash"), "Trash");
+}
+
+// -- a folder gone, and one MailMind renames ------------------------------------------------------------------------
+
+const ADA: &str = "ada@example.test";
+
+/// What the rail forgets, heard.
+#[derive(Debug, Default)]
+struct Forgotten(Mutex<Vec<String>>);
+
+impl ForgetsFolders for Forgotten {
+    fn forget(&self, _account: &str, folder: &str) -> Result<usize, Fault> {
+        self.0.lock().unwrap().push(folder.to_owned());
+        Ok(3)
+    }
+}
+
+impl Forgotten {
+    fn folders(&self) -> Vec<String> {
+        self.0.lock().unwrap().clone()
+    }
+}
+
+fn forgetting(folders: &Folders) -> Arc<Forgotten> {
+    let forgotten = Arc::new(Forgotten::default());
+    folders.forgetting_with(forgotten.clone());
+    forgotten
+}
+
+/// The Archive holds stored mail and the server's LIST no longer names it: gone, but not while MailMind renames a
+/// folder of the account's, whose server has the new name before the rows go by it.
+#[test]
+fn a_folder_the_list_leaves_out_is_forgotten_but_not_while_mailmind_renames_one() {
+    let (server, clock) = (Server::answering(vec![]), Arc::new(Ticking::default()));
+    let folders = folders(&server, &clock);
+    let forgotten = forgetting(&folders);
+    let renaming = folders.changing(ADA).unwrap();
+    rail(&folders);
+    assert_eq!(folders.gone(ADA, "Archive").unwrap(), 0, "nor does a SELECT refused meanwhile forget it");
+    assert!(forgotten.folders().is_empty());
+    drop(renaming);
+    rail(&folders);
+    assert_eq!(server.opened.load(Ordering::SeqCst), 2, "the list read meanwhile wasn't kept");
+    assert_eq!(forgotten.folders(), ["Archive"]);
+}
+
+/// Sessions whose first LIST comes once a rename of MailMind's own has begun and ended: after the refresh read what
+/// is stored, so what it read still has the old name, and the LIST the new one.
+#[derive(Debug, Default)]
+struct RenamedBeforeTheList {
+    folders: OnceLock<Weak<Folders>>,
+    renamed: AtomicBool,
+}
+
+struct ListAfterTheRename(Option<Arc<Folders>>);
+
+impl MailSession for ListAfterTheRename {
+    fn folders(&mut self) -> Result<Vec<Folder>, SessionError> {
+        if let Some(folders) = self.0.take() {
+            drop(folders.changing(ADA).unwrap());
+        }
+        Session.folders()
+    }
+
+    fn status(&mut self, folder: &str) -> Result<(i64, i64), SessionError> {
+        Session.status(folder)
+    }
+
+    fn logout(&mut self) {}
+}
+
+impl MailSessions for RenamedBeforeTheList {
+    fn open(&self, _account: &str) -> Result<Box<dyn MailSession>, SessionError> {
+        let renaming = if self.renamed.swap(true, Ordering::SeqCst) { None } else { self.folders.get() };
+        Ok(Box::new(ListAfterTheRename(renaming.and_then(Weak::upgrade))))
+    }
+}
+
+#[test]
+fn a_rename_of_mailminds_own_between_what_is_stored_and_the_list_forgets_nothing() {
+    let sessions = Arc::new(RenamedBeforeTheList::default());
+    let folders =
+        Arc::new(Folders::new(Arc::new(Ada), sessions.clone(), Arc::new(Stored), Arc::new(Ticking::default())));
+    sessions.folders.set(Arc::downgrade(&folders)).unwrap();
+    let forgotten = forgetting(&folders);
+    rail(&folders);
+    assert!(forgotten.folders().is_empty(), "what it read as stored came before the rename");
+    rail(&folders);
+    assert_eq!(forgotten.folders(), ["Archive"], "the next refresh reads it afresh");
 }
