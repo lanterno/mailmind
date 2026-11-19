@@ -8,12 +8,14 @@ final class ScheduledTests: XCTestCase {
     private static let at = 1_795_000_000
 
     private static func item(id: Int = 9, account: String = Fixture.ada, subject: String = "Second try",
-                             to: String = "lin@example.test", state: String = "queued", scheduled: Bool = true) -> String
+                             to: String = "lin@example.test", state: String = "queued", scheduled: Bool = true,
+                             draft: Int? = 4) -> String
     {
         """
         {"id": \(id), "account": "\(account)", "subject": "\(subject)", "to": ["\(to)"], "cc": [], "bcc_count": 0,
          "state": "\(state)", "attempts": 0, "error": null, "unsure": false, "created_at": "2026-11-18 12:00:00",
-         "sent_at": null, "next_attempt_at": \(at), "scheduled": \(scheduled), "retrying": false}
+         "sent_at": null, "next_attempt_at": \(at), "scheduled": \(scheduled), "retrying": false,
+         "draft_id": \(draft.map(String.init) ?? "null")}
         """
     }
 
@@ -60,6 +62,18 @@ final class ScheduledTests: XCTestCase {
         XCTAssertEqual(composing.scheduledWhen(Fixture.row(1, folder: "Drafts", subject: "Second try")),
                        "Scheduled · \(SendTimes.words(Self.at))")
         XCTAssertNil(composing.scheduledWhen(Fixture.row(2, folder: "Drafts", subject: "Half written")))
+    }
+
+    func testTheReaderKnowsADraftWaitingToGoLaterByTheDraftTheOutboxNames() async {
+        let routes = FakeRoutes()
+        routes.answer(API.Get.Outbox.path, Self.outbox([
+            Self.item(), Self.item(id: 10, subject: "Second try", draft: 5), Self.item(id: 11, draft: nil),
+        ]))
+        let composing = await composing(routes)
+        XCTAssertEqual(composing.scheduledSend(draftId: 4)?.id, 9)
+        XCTAssertEqual(composing.scheduledSend(draftId: 5)?.id, 10, "another draft with the same subject is its own")
+        XCTAssertNil(composing.scheduledSend(draftId: 6), "a draft no send goes from")
+        XCTAssertNil(composing.scheduledSend(draftId: nil), "a draft MailMind doesn't keep: no send goes from it")
     }
 
     func testTheWords() {
