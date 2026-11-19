@@ -206,6 +206,10 @@ impl StoredMail for Ada {
         Ok(Vec::new())
     }
 
+    fn synced_folder_counts(&self, _: &str) -> Result<Vec<(String, Option<i64>, i64)>, Fault> {
+        Ok(Vec::new())
+    }
+
     fn view_counts(&self, _accounts: &[String]) -> Result<ViewCounts, Fault> {
         Ok(ViewCounts::default())
     }

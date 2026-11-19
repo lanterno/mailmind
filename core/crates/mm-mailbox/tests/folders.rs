@@ -29,6 +29,10 @@ impl StoredMail for Stored {
         Ok(vec![("Trash".into(), None, 1), ("Archive".into(), Some(0), 3)])
     }
 
+    fn synced_folder_counts(&self, _: &str) -> Result<Vec<(String, Option<i64>, i64)>, Fault> {
+        Ok(Vec::new())
+    }
+
     fn view_counts(&self, _accounts: &[String]) -> Result<ViewCounts, Fault> {
         Ok(ViewCounts { snoozed: 1, muted: 2, waiting: 3, replylater: 4 })
     }

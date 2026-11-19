@@ -67,12 +67,17 @@ fn the_rail_counts_what_is_stored_and_not_on_its_way_out() {
     let database = Database::new(path, key(), outside.clone());
     database.read(|c| c.execute_batch(ROWS)).unwrap();
 
+    // The inbox's rows are snoozed, muted or on their way out, which its list leaves out too.
     let mut counts = database.stored_folder_counts("ada@example.test").unwrap();
     counts.sort();
     assert_eq!(
         counts,
-        [("Archive".to_owned(), Some(0), 1), ("INBOX".to_owned(), Some(1), 2), ("Junk".to_owned(), Some(0), 0)]
+        [("Archive".to_owned(), Some(0), 1), ("INBOX".to_owned(), Some(0), 0), ("Junk".to_owned(), Some(0), 0)]
     );
+    // The rail's: no sync has read the Archive, which holds a row MailMind filed there, so the server counts it.
+    let mut synced = database.synced_folder_counts("ada@example.test").unwrap();
+    synced.sort();
+    assert_eq!(synced, [("INBOX".to_owned(), Some(0), 0), ("Junk".to_owned(), Some(0), 0)]);
     assert_eq!(
         database.view_counts(&["ada@example.test".to_owned()]).unwrap(),
         ViewCounts { snoozed: 1, muted: 1, waiting: 1, replylater: 1 }
