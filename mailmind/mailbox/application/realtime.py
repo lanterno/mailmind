@@ -9,6 +9,10 @@ account added gets a worker, one removed or disabled loses its own, and one now 
 (mailmind.accounts.domain.events) call reconcile(), and a worker that finds its account changed
 under it leaves on its own.
 
+A worker whose connection failed asks for a sync of its account once its next one is ready: the server answers again, so
+the sync ends the trouble its status shows, lets go of the changes waiting for it, and fetches what came while nothing
+listened. One connection dropped that comes back at once costs a sync that says nothing new.
+
 Bounded (1 IDLE conn/account, capped accounts), reconnect-safe, daemon-thread clean exit.
 """
 import threading
@@ -43,6 +47,7 @@ class Realtime(IdleSupervisor[Account, MailSession]):
         self._dirty: set[str] = set()
         self._dirty_lock = threading.Lock()
         self._kick = threading.Event()
+        self._lost: set[str] = set()     # the accounts whose worker's connection failed, until its next one is ready
 
     def _trigger_sync(self, email: str) -> None:
         with self._dirty_lock:
@@ -101,6 +106,8 @@ class Realtime(IdleSupervisor[Account, MailSession]):
 
 
     def _say_failed(self, acct: Account, error: Exception, /) -> None:
+        with self._dirty_lock:
+            self._lost.add(acct["email"])
         log.warning("%(account)s: IDLE failed", {"account": acct["email"]}, exc_info=error)
 
 
@@ -115,6 +122,10 @@ class Realtime(IdleSupervisor[Account, MailSession]):
             log.warning("%(account)s: server has no IDLE — falling back to periodic sync", {"account": acct["email"]})
             return False                   # the worker closes it as it ends, as it does any connection
         session.select("INBOX", readonly=False)
+        with self._dirty_lock:
+            lost, self._lost = acct["email"] in self._lost, self._lost - {acct["email"]}
+        if lost:                           # connected again after a connection that failed: a sync now says so
+            self._trigger_sync(acct["email"])
         return True
 
 
