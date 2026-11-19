@@ -13,7 +13,7 @@ use mm_kernel::errors::Fault;
 use mm_mailbox::ingest::SyncError;
 use mm_mailbox::ports::{MailSession, SessionError};
 use mm_mailbox::roles::Folder;
-use mm_mailbox::session::{Headers, MailServer, MailServers, Search, Selected, ServerError};
+use mm_mailbox::session::{Headers, MailServer, MailServers, NO_SUCH_FOLDER, Search, Selected, ServerError};
 use mm_mailbox::warm::{WARM_RECENT, Warming, WarmingParts, Which};
 use mm_mailbox::warm_ports::{WarmAccount, WarmAccounts, WarmSync};
 
@@ -143,6 +143,8 @@ struct World {
     asked: Arc<Mutex<Vec<String>>>,
     synced: Mutex<Vec<(String, String)>>,
     failing: Mutex<BTreeSet<String>>,
+    /// The folders whose sync the server says it no longer has.
+    gone: Mutex<BTreeSet<String>>,
     accounts: Mutex<Vec<WarmAccount>>,
 }
 
@@ -163,6 +165,9 @@ impl WarmSync for World {
         self.synced.lock().unwrap().push((account.to_owned(), folder.to_owned()));
         if self.failing.lock().unwrap().contains(folder) {
             return Err(SyncError::Server(ServerError::Unreachable("abort")));
+        }
+        if self.gone.lock().unwrap().contains(folder) {
+            return Err(SyncError::Server(ServerError::Refused(NO_SUCH_FOLDER)));
         }
         Ok(1)
     }
@@ -337,6 +342,32 @@ fn a_folder_that_fails_leaves_the_rest_of_the_round_to_go() {
         rounds(&world, &warming(&world, None), 2, None)[1],
         [ada("Drafts"), ada("All Mail"), bea("Drafts"), bea("All Mail")]
     );
+}
+
+#[test]
+fn a_folder_its_server_says_is_gone_has_the_parts_found_again_next_round() {
+    let world = world(&[(ADA, Answers::Lists(folders()))]);
+    let warming = warming(&world, None);
+    // Another client renamed the Drafts: the round that finds it gone lets the account's parts go.
+    world.gone.lock().unwrap().insert("Drafts".to_owned());
+    assert_eq!(rounds(&world, &warming, 1, None), [vec![ada("Drafts")]]);
+    let mut renamed = folders();
+    renamed[1].name = "Drafts 2026".to_owned();
+    world.answers.lock().unwrap().insert(ADA.to_owned(), Answers::Lists(renamed));
+    // The next finds them again and warms the folder that plays the part now, which is kept.
+    assert_eq!(
+        rounds(&world, &warming, 2, None),
+        [vec![ada("Drafts 2026"), ada("All Mail")], vec![ada("Drafts 2026"), ada("Sent Items")]]
+    );
+    assert_eq!(*world.opened.lock().unwrap(), [ADA, ADA]);
+}
+
+#[test]
+fn a_folder_that_fails_otherwise_keeps_the_parts_found() {
+    let world = world(&[(ADA, Answers::Lists(folders()))]);
+    world.failing.lock().unwrap().insert("Drafts".to_owned());
+    rounds(&world, &warming(&world, None), 3, None);
+    assert_eq!(*world.opened.lock().unwrap(), [ADA], "a connection lost says nothing of which folder plays a part");
 }
 
 #[test]
