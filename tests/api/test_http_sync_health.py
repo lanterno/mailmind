@@ -214,3 +214,63 @@ def test_a_refused_login_outside_a_sync_is_left_to_the_sync_to_say(app, world):
     world.server.fail("LOGIN", "NO [AUTHENTICATIONFAILED] invalid credentials", user=w.ADA)
     assert app.post("/api/archive", {**world.copy(ADAS), "mutation_id": "m-refused"}).json["status"] == "queued"
     assert status(app) == synced
+
+
+def until_said(stream, said):
+    """The frames the stream sends until one begins with `said`, that one last, each without its id."""
+    frames = []
+    while not frames or not frames[-1].startswith(said):
+        assert len(frames) < 20, frames
+        frames.append("\n".join(stream.event().split("\n")[1:]))
+    return frames
+
+
+@TROUBLE
+def test_a_try_ends_trouble_that_may_pass_once_the_server_answers_with_no_sync_of_the_rounds(app, world, trouble):
+    """While trouble may pass, the background tries the account's server every few seconds (`retry`): once it answers,
+    the account says it synced and the tabs hear, within moments rather than at the next round, minutes on."""
+    sync(app)
+    s = Stream(app)
+    s.frame()
+    trouble(world.server, 1)
+    sync(app)
+    assert status(app)["trying_again"]
+    troubled(s)
+    app.work("retry")
+    assert status(app)["health"] == "ok" and "trying_again" not in status(app)
+    assert health(app)["live"] == "ok"
+    until_said(s, f'event: sync-done\ndata: {{"account": "{w.ADA}"')
+    s.close()
+
+
+@TROUBLE
+def test_a_try_that_fails_changes_nothing_says_nothing_and_counts_no_failed_sync(app, world, trouble):
+    sync(app)
+    trouble(world.server, 3)
+    sync(app)
+    tried = status(app)
+    assert tried["trying_again"]
+    s = Stream(app)
+    s.frame()
+    app.work("retry")
+    # The server is still away: the account shows as it did, nothing is kept as a failure, and no tab hears of one.
+    assert status(app) == tried
+    assert (health(app)["live"], health(app)["last_error"]) == ("ok", None)
+    assert app.post("/api/sync-retry-account", {"account": w.BEA}).json["ok"]
+    said = until_said(s, f'event: sync-done\ndata: {{"account": "{w.BEA}"')
+    assert not [f for f in said if f.startswith("event: sync-trouble")], said
+    # The round's next sync is the second that fails in a row, which shows, as it would have with no try between.
+    sync(app)
+    assert status(app)["health"] == "error"
+    s.close()
+
+
+def test_a_try_asks_nothing_of_a_server_that_answers_or_turned_the_password_down(app, world):
+    sync(app)
+    world.server.fail("LOGIN", "NO [AUTHENTICATIONFAILED] invalid credentials", user=w.ADA)
+    sync(app)
+    assert status(app)["health"] == "error"
+    asked = len(world.server.commands_for())
+    app.work("retry")
+    assert len(world.server.commands_for()) == asked
+    assert status(app)["health"] == "error"

@@ -102,7 +102,7 @@ def jobs():
             "sync": lambda account, folder: ingest.sync_folder(accounts.get(account), folder),
             "reconcile": lambda account: reconciler.auto_reconcile_one(accounts.get(account)),
             "tidy": background.tidy_round, "forget": background.forget_round, "draft-ahead": assistant.drafting.rounds(),
-            "backfill": syncing.backfill_round, "warm": warm.warm_tick}
+            "backfill": syncing.backfill_round, "warm": warm.warm_tick, "retry": syncing.try_unreached}
 
 
 def main():
