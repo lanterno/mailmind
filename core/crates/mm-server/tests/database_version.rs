@@ -11,6 +11,7 @@ use mm_kernel::seams::{Clock, Keychain, KeychainProblem, Moment, Outside, Secret
 use mm_server::environment::{Environment, Settings};
 use mm_server::real::Sanitizing;
 use mm_server::{App, Seams};
+use mm_store::migrate::BASE;
 use mm_store::schema::VERSION;
 use mm_store::{Database, DbKey, Store};
 
@@ -212,9 +213,10 @@ fn for_a_person(said: &str) {
 #[test]
 fn over_an_older_database_it_says_it_left_it_as_it_is() {
     let home = tempfile::tempdir().unwrap();
-    database(home.path(), [0x5e; 32], VERSION - 1);
+    // Older than the Python app's schema the core starts from: from there on it upgrades.
+    database(home.path(), [0x5e; 32], BASE - 1);
     let said = start(home.path()).unwrap_err();
-    assert!(said.contains(&format!("version {}", VERSION - 1)) && said.contains("was left as it is"), "{said}");
+    assert!(said.contains(&format!("version {}", BASE - 1)) && said.contains("was left as it is"), "{said}");
     for_a_person(&said);
 }
 

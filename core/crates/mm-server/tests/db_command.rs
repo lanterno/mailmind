@@ -15,7 +15,7 @@ use mm_server::Seams;
 use mm_server::db_command::run;
 use mm_server::environment::Environment;
 use mm_server::real::Sanitizing;
-use mm_store::migrate::BASE;
+use mm_store::schema::VERSION;
 use mm_store::upgrade_check::Verdict;
 use mm_store::{Database, DbKey};
 
@@ -109,7 +109,8 @@ fn it_checks_the_data_directorys_database_with_the_key_the_server_reads() {
     let (verdict, report) = checked(&["check-upgrade"], &environment, keychain.clone());
     assert_eq!(verdict, Ok(Verdict::Passed), "{report}");
     assert!(
-        report.starts_with(&format!("A copy of the database, migrated from version {BASE} to {BASE}:")),
+        // The core made it at its newest version, so a check of it migrates nothing.
+        report.starts_with(&format!("A copy of the database, migrated from version {VERSION} to {VERSION}:")),
         "{report}"
     );
     assert!(report.contains("every table kept its rows: yes"), "{report}");
