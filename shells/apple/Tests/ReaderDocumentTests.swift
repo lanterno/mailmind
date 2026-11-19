@@ -518,6 +518,37 @@ final class ReaderDocumentTests: XCTestCase {
         XCTAssertNil(composing.inline, "discarded, the box closes")
     }
 
+    /// Esc in the box, as the page's composer takes it: the reply closes, what was written in it saved as its draft to
+    /// take up again; with no reply in the box, the key is someone else's. The text's own Esc asks the box first.
+    func testEscClosesTheReplyInTheBoxKeepingWhatWasWritten() async throws {
+        let (composing, routes) = try composing()
+        routes.answer(API.Post.Draft.path,
+                      #"{"ok": true, "draft_id": 41, "version": 1, "message_id": "<d@example.test>", "pushed": true}"#)
+        composing.openWindow = { _ in XCTFail("no window") }
+        XCTAssertFalse(composing.escapeInBox(), "no reply in the box: Esc goes on")
+        let copy = MailCopy(Fixture.row(7))
+        composing.inlineSlot = copy
+        let boxed = try await replied(composing, copy)
+        boxed.setBody("Thursday works.", selection: NSRange(location: 15, length: 0))
+
+        XCTAssertTrue(composing.escapeInBox())
+        XCTAssertTrue(boxed.closed)
+        XCTAssertNil(composing.inline)
+        await eventually("what was written saved as its draft") {
+            routes.calls(to: API.Post.Draft.path).contains { $0.body["text"]?.string?.hasPrefix("Thursday works.") == true }
+        }
+        XCTAssertFalse(composing.escapeInBox(), "closed: the next Esc goes on")
+
+        let text = BodyTextView(frame: .zero)
+        var asked = 0
+        text.escape = {
+            asked += 1
+            return true
+        }
+        text.cancelOperation(nil)
+        XCTAssertEqual(asked, 1, "the text's Esc asks the box")
+    }
+
     func testTheSendGuardsFixesInTheBoxAreDoneWhereTheyCanBe() async throws {
         let (composing, _) = try composing()
         var windows: [UUID] = []
