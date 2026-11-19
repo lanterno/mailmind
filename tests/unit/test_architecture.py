@@ -32,8 +32,8 @@ IO = {"sqlite3", "smtplib", "imaplib", "socket", "ssl", "http", "subprocess", "u
 
 # All the other contexts' wiring may call of the Mailbox's store. A new crossing is an edit here and to the module, on purpose.
 STORED_MAIL = {
-    "any_copy", "brief_rows", "conversation_rows", "copy_in_folder", "copy_now", "delete_by_uids", "delete_message", "delta_rows",
-    "draft_candidates", "get_body", "get_message", "get_message_by_key", "get_message_by_msgid", "get_uidvalidity",
+    "answering", "any_copy", "brief_rows", "conversation_rows", "copy_in_folder", "copy_now", "delete_by_uids", "delete_message",
+    "delta_rows", "draft_candidates", "get_body", "get_message", "get_message_by_key", "get_message_by_msgid", "get_uidvalidity",
     "handled_since", "message_stamp", "message_to_reply_to", "needs_you_rows", "queue_flags", "received_by_bucket",
     "received_since", "sender_recent", "sender_stats", "sent_since", "set_list_unsub", "set_local_flags", "thread_anchor_pk",
     "thread_stamps",

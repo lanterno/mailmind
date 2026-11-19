@@ -21,7 +21,7 @@ from mailmind.compose.application.drafts import Drafts
 from mailmind.compose.application.outbox import Outbox
 from mailmind.compose.application.sending import Sending
 from mailmind.compose.domain.draft_journal import PUSH_EVERY, PUSH_TICK
-from mailmind.kernel.errors import Conflict, Locked
+from mailmind.kernel.errors import Conflict, Locked, NotFound
 from mailmind.platform.db.uow import UnitOfWork
 
 ADA = "ada@example.test"
@@ -78,7 +78,16 @@ class Accounts:
 
 
 class Mail:
-    """No mail stored: these drafts answer nothing."""
+    """No mail stored: these drafts answer nothing, and a folder caught up lists nothing either (`caught_up`)."""
+    def __init__(self):
+        self.caught_up = []
+
+    def sync_whole(self, acct, folder):
+        self.caught_up.append(folder)
+
+    def unreachable(self):
+        return (OSError,)
+
     def original(self, pk, account=None, message_id=None):
         return None
 
@@ -131,7 +140,7 @@ class Compose:
     """Drafts, and the send that holds one, over one temp database."""
     def __init__(self):
         uow, accounts, mail, screen = UnitOfWork(), Accounts(), Mail(), Screen()
-        self.server = Server()
+        self.server, self.mail = Server(), mail
         composing = Composing(uow, book, accounts, mail, screen)
         self.outbox = Outbox(uow, book, Unused(), self.server, accounts, mail, Unused(), screen)
         self.drafts = Drafts(uow, composing, self.outbox, book, accounts, mail, self.server, screen)
@@ -242,8 +251,11 @@ def test_a_draft_only_the_journal_holds_opens_from_the_tray(it, clock):
     assert (opened["text"], opened["bcc"], opened["version"], opened["account"]) == ("Two of each.", ["cy@example.test"], 1, ADA)
     a_minute_on(clock)
     it.drafts.push_round()
-    with pytest.raises(Conflict, match="Open it from Drafts"):           # it's in Drafts now
+    # It's in Drafts now, and opens from its copy there, which a Drafts never listed since is caught up to find. Here the
+    # Mailbox lists nothing, as when another app has deleted the copy: it has gone.
+    with pytest.raises(NotFound, match="no longer in Drafts"):
         it.drafts.resume({"draft_id": r["draft_id"]})
+    assert it.mail.caught_up == ["Drafts"]
 
 
 # -- discarding --------------------------------------------------------------------------------
