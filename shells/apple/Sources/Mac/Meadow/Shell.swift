@@ -144,9 +144,26 @@ final class MeadowShell {
         if clamped != listWidth { listWidth = clamped }
     }
 
-    /// The splitter's arrow keys: a step wider or narrower.
+    /// The list's width as the window shows it: the one asked for, or narrower where the pane keeps its least
+    /// (`ShellLayout`). The splitter moves the list from here, so in a window that narrowed it the first drag or key
+    /// moves the list at once, and the width asked for stays for a window wide enough again.
+    var shownListWidth: CGFloat {
+        ShellLayout(size: CGSize(width: width, height: 0), railOpen: railOpen, listWidth: listWidth, mode: .columns)
+            .list?.width ?? listWidth
+    }
+
+    /// The splitter's arrow keys: a step wider or narrower than the list stands.
     func nudgeList(by steps: Int) {
-        setListWidth(listWidth + CGFloat(steps) * ShellLayout.listStep)
+        setListWidth(shownListWidth + CGFloat(steps) * ShellLayout.listStep)
+    }
+
+    /// A drag of the splitter, `by` points from where it began: from `start`, the width the drag began at, which its
+    /// first move (`start` nil) takes as the width shown. Returns the width it began at, for the moves after.
+    @discardableResult
+    func dragList(from start: CGFloat?, by translation: CGFloat) -> CGFloat {
+        let from = start ?? shownListWidth
+        setListWidth(from + translation)
+        return from
     }
 
     /// A double-click on the splitter: the list's own width again.

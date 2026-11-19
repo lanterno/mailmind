@@ -245,11 +245,7 @@ struct MeadowSplitter: View {
             .onHover { hovering = $0 }
             .gesture(
                 DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                    .onChanged { drag in
-                        let from = start ?? shell.listWidth
-                        start = from
-                        shell.setListWidth(from + drag.translation.width)
-                    }
+                    .onChanged { drag in start = shell.dragList(from: start, by: drag.translation.width) }
                     .onEnded { _ in start = nil }
             )
             .simultaneousGesture(TapGesture(count: 2).onEnded { shell.resetList() })
@@ -276,7 +272,7 @@ struct MeadowSplitter: View {
             .help("Drag to resize · ←/→ · double-click resets")
             .accessibilityElement()
             .accessibilityLabel("Resize the message list")
-            .accessibilityValue("\(Int(shell.listWidth)) points wide")
+            .accessibilityValue("\(Int(shell.shownListWidth)) points wide")
             .accessibilityAdjustableAction { direction in
                 switch direction {
                 case .increment: shell.nudgeList(by: 1)
