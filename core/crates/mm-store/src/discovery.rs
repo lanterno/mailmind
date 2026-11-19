@@ -349,11 +349,22 @@ impl ContactMail for DiscoveryStore {
                            FROM messages WHERE from_addr IS NOT NULL AND from_addr != '' "
                 .to_owned();
             let mut params: Vec<String> = Vec::new();
+            let mut order = "";
             if !needle.is_empty() {
                 sql.push_str("AND (lower(from_addr) LIKE ? OR lower(from_name) LIKE ?) ");
-                params = vec![format!("%{needle}%"), format!("%{needle}%")];
+                // Whose name or address starts with what was typed first, then a later word of the name, then the
+                // rest: "li" is Lin Mori before Mae Lindqvist, however often Mae writes.
+                order = "CASE WHEN lower(MAX(from_name)) LIKE ? OR lower(from_addr) LIKE ? THEN 0 \
+                         WHEN lower(MAX(from_name)) LIKE ? THEN 1 ELSE 2 END, ";
+                params = vec![
+                    format!("%{needle}%"),
+                    format!("%{needle}%"),
+                    format!("{needle}%"),
+                    format!("{needle}%"),
+                    format!("% {needle}%"),
+                ];
             }
-            sql.push_str("GROUP BY lower(from_addr) ORDER BY n DESC, last DESC LIMIT 8");
+            sql.push_str(&format!("GROUP BY lower(from_addr) ORDER BY {order}n DESC, last DESC LIMIT 8"));
             c.prepare_cached(&sql)?
                 .query_map(params_from_iter(params), |r| Ok(Sender { addr: r.get(0)?, name: r.get(1)?, n: r.get(2)? }))?
                 .collect()
