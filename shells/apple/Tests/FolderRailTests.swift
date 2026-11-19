@@ -120,6 +120,48 @@ final class FolderRailTests: XCTestCase {
         XCTAssertEqual(said, .refused("This folder has folders inside it. Delete or move those first."))
     }
 
+    // MARK: Every place's menu
+
+    func testEveryPlaceOnTheRailHasAMenuOfWhatItsRoutesDo() async {
+        let app = await opened(Fixture.server(), place: .folder(account: Fixture.ada, folder: "INBOX"))
+        let mailbox = app.mailbox
+        func titles(_ place: Place, removable: API.ListedView? = nil, ai: Bool = true) -> [[String]] {
+            let item = RailItem(place: place, icon: .inbox, title: "", removable: removable)
+            return RailPlaceAct.groups(for: item, mailbox: mailbox, ai: ai).map { $0.map(\.title) }
+        }
+        XCTAssertEqual(titles(.allInboxes), [["Open"], ["Get New Mail"]])
+        XCTAssertEqual(titles(.folder(account: Fixture.ada, folder: "INBOX")),
+                       [["Open"], ["Get New Mail"], ["New Folder…"]], "an account's folders take a new one")
+        XCTAssertEqual(titles(.folder(account: Fixture.ada, folder: "Receipts")),
+                       [["Open"], ["Get New Mail"], ["New Folder…", "Rename Folder…", "Delete Folder…"]])
+        XCTAssertEqual(titles(.virtual(.snoozed, account: nil)), [["Open"], ["Get New Mail"]])
+        XCTAssertEqual(titles(.documents), [["Open"], ["Get New Mail"]])
+        XCTAssertEqual(titles(.desk(.screener(account: Fixture.ada))), [["Open"], ["Get New Mail"]])
+        XCTAssertEqual(titles(.desk(.brief)), [["Open"], ["Write the Brief Again"]])
+        XCTAssertEqual(titles(.desk(.brief), ai: false), [["Open"]], "no AI, no brief written")
+        let mine = API.ListedView(builtin: false, id: "v1", name: "From Grace", q: "from:grace")
+        XCTAssertEqual(titles(.search(Search(q: "from:grace")), removable: mine),
+                       [["Open"], ["Get New Mail"], ["Remove View"]])
+        XCTAssertEqual(titles(.search(Search(q: "category:newsletter"))), [["Open"], ["Get New Mail"]], "a lane stays")
+        XCTAssertTrue(RailPlaceAct.deleteFolder(account: Fixture.ada, folder: receipts).destructive)
+        XCTAssertFalse(RailPlaceAct.newFolder(account: Fixture.ada).destructive)
+    }
+
+    func testNewFolderFromTheRailMakesOneAndMovesNothing() async throws {
+        let server = Fixture.server()
+        server.on("POST", API.Post.FoldersCreate.path, API.FolderChanged(folder: "Tickets", ok: true))
+        let app = await opened(server, place: .folder(account: Fixture.ada, folder: "INBOX"))
+        app.mailbox.chose([try XCTUnwrap(app.list?.copy(at: 0))])
+        XCTAssertEqual(FolderSheet.startingName(.make(account: Fixture.ada)), "")
+        let said = await app.mailbox.newFolder("Tickets", account: Fixture.ada)
+        XCTAssertEqual(said, .done("Tickets"))
+        let body = try JSONDecoder().decode(API.NewFolderBody.self,
+                                            from: try XCTUnwrap(server.asked(API.Post.FoldersCreate.path).first).body)
+        XCTAssertEqual(body, API.NewFolderBody(account: Fixture.ada, name: "Tickets"))
+        XCTAssertTrue(server.asked(API.Post.Move.path).isEmpty, "the mail chosen stays where it is")
+        XCTAssertEqual(app.mailbox.toast?.text, "Made Tickets")
+    }
+
     func testARenameStartsFromTheFoldersOwnNameAsAPersonReadsIt() {
         let named = API.RailFolder(changeable: true, name: "Projects.R&-D", ownName: "R&D", role: "custom",
                                    takesFiling: true, total: 0, unseen: 0)
