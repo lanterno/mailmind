@@ -9,7 +9,9 @@
 //!
 //! Which folders play each part is found once for each account, over one connection, and kept: folder names are
 //! stable. An account that can't be reached, or whose connection is lost while they are listed, is asked again on the
-//! next round; a server that refuses the LIST has none found, which is kept.
+//! next round; a server that refuses the LIST has none found, which is kept. A folder the server says is gone (another
+//! client deleted or renamed it) is forgotten, as any sync forgets one (`Folders::gone`), and the account's parts are
+//! found again on the next round, so the folder that plays the part now is warmed, not the one that went.
 //!
 //! MAILMIND_WARM_FOLDERS, when set, decides for the run: on (or `all`) for every account, Proton Bridge's too, off for
 //! none, or a comma-separated list of addresses. Unset, an account's `"warm_folders": true` in the file asks for it.
@@ -21,6 +23,8 @@ use std::time::Duration;
 use mm_kernel::errors::Fault;
 use mm_kernel::log::{self, Field};
 
+use crate::folders::Folders;
+use crate::ingest::SyncError;
 use crate::session::{MailServers, ServerError, find_role};
 use crate::warm_ports::{WarmAccount, WarmAccounts, WarmSync};
 
@@ -77,6 +81,8 @@ pub struct Warming {
     resolved: Mutex<HashMap<String, Roles>>,
     /// The rounds that warmed anything so far, which say which parts are due.
     tick: Mutex<u64>,
+    /// What forgets a folder the server no longer has, where one is bound.
+    folders: Option<Arc<Folders>>,
 }
 
 /// What wires Warming.
@@ -93,7 +99,35 @@ pub struct WarmingParts {
 impl Warming {
     pub fn new(parts: WarmingParts) -> Warming {
         let WarmingParts { accounts, servers, sync, variable, pause } = parts;
-        Warming { accounts, servers, sync, variable, pause, resolved: Mutex::new(HashMap::new()), tick: Mutex::new(0) }
+        Warming {
+            accounts,
+            servers,
+            sync,
+            variable,
+            pause,
+            resolved: Mutex::new(HashMap::new()),
+            tick: Mutex::new(0),
+            folders: None,
+        }
+    }
+
+    /// The same, forgetting a folder a warming sync finds gone from its server, as the sync of a folder opened does.
+    #[must_use]
+    pub fn forgetting_gone(mut self, folders: Arc<Folders>) -> Warming {
+        self.folders = Some(folders);
+        self
+    }
+
+    /// `folder` of `email` is gone from its server: forgotten where this forgets folders, and the account's parts let
+    /// go, so the next round finds which folder plays each now.
+    fn gone(&self, email: &str, folder: &str) -> Result<(), Fault> {
+        self.resolved.lock().map_err(|_| POISONED)?.remove(email);
+        if let Some(folders) = &self.folders
+            && let Err(fault) = folders.gone(email, folder)
+        {
+            log::warning(TAG, "a folder the server no longer has wasn't forgotten", &[], Some(fault.class));
+        }
+        Ok(())
     }
 
     /// Whether the account is warmed: as the variable says when it is set, else as its entry in the file asks.
@@ -173,6 +207,7 @@ impl Warming {
                 match self.sync.sync_recent(&account.email, folder, WARM_RECENT) {
                     Ok(0) => {}
                     Ok(kept) => log::info(TAG, "a folder warmed: +%(count)s", &[(Field::Count, &kept.to_string())]),
+                    Err(SyncError::Server(error)) if error.is_gone() => self.gone(&account.email, folder)?,
                     Err(error) => log::warning(TAG, "a folder's warming failed", &[], Some(error.class())),
                 }
             }

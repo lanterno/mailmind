@@ -388,7 +388,7 @@ impl App {
                 clock: seams.clock.clone(),
             });
         // Folders beyond the Inbox, warmed as each sync round ends for the accounts asking; and the body backfill.
-        let warming = crate::backfill_wiring::warming(&directory, &servers, &ingest, environment);
+        let warming = crate::backfill_wiring::warming(&directory, &servers, &ingest, &folders, environment);
         let backfill = crate::backfill_wiring::backfill(&directory, &database, &servers, &gates, &seams.clock);
         let syncing = Arc::new(Syncing::new(SyncingParts {
             ingest: ingest.clone(),

@@ -11,6 +11,7 @@ use mm_kernel::seams::Clock;
 use mm_mailbox::backfill::{Backfill, BackfillParts};
 use mm_mailbox::destination::Provider;
 use mm_mailbox::fetching::{Fetching, FetchingParts};
+use mm_mailbox::folders::Folders;
 use mm_mailbox::gates::Gates;
 use mm_mailbox::ingest::Ingest;
 use mm_mailbox::session::MailServers;
@@ -40,20 +41,25 @@ impl WarmAccounts for DirectoryWarmAccounts {
     }
 }
 
-/// Warming, as MAILMIND_WARM_FOLDERS and each account's entry ask for it, syncing through `ingest`.
+/// Warming, as MAILMIND_WARM_FOLDERS and each account's entry ask for it, syncing through `ingest`; a folder its
+/// server no longer has is forgotten through `folders`.
 pub(crate) fn warming(
     directory: &Arc<Directory>,
     servers: &Arc<dyn MailServers>,
     ingest: &Arc<Ingest>,
+    folders: &Arc<Folders>,
     environment: &Environment,
 ) -> Arc<Warming> {
-    Arc::new(Warming::new(WarmingParts {
-        accounts: Arc::new(DirectoryWarmAccounts(directory.clone())),
-        servers: servers.clone(),
-        sync: ingest.clone(),
-        variable: environment.warm_folders(),
-        pause: mm_mailbox::warm::PAUSE,
-    }))
+    Arc::new(
+        Warming::new(WarmingParts {
+            accounts: Arc::new(DirectoryWarmAccounts(directory.clone())),
+            servers: servers.clone(),
+            sync: ingest.clone(),
+            variable: environment.warm_folders(),
+            pause: mm_mailbox::warm::PAUSE,
+        })
+        .forgetting_gone(folders.clone()),
+    )
 }
 
 /// The body backfill over the stored mail, fetching each body as a prefetch does.
