@@ -562,6 +562,26 @@ final class DeskModelTests: XCTestCase {
         XCTAssertEqual(routes.sent("GET", "/api/digest").count, 1)
     }
 
+    /// Mail a verb sent away, from any window, leaves the brief and the rail's count at once, as the page's brief leaves
+    /// out whatever is being filed: not once the server has carried it, which a server that doesn't answer puts off.
+    func testMailSentAwayFromAnyWindowLeavesTheBriefAtOnce() async {
+        scriptTheBrief(briefing: .brief(DeskFixture.brief))
+        let desk = Desk()
+        desk.connect(routes)
+        await desk.brief.keepTallied()?.value
+        await until { desk.brief.digest != nil }
+        let first = desk.brief.needs[0]
+        let reads = routes.sent("GET", "/api/digest").count
+        XCTAssertEqual(desk.rail.needs(in: nil, grouped: false), 3)
+
+        desk.wentAway([BriefModel.copy(of: first)])
+
+        XCTAssertFalse(desk.brief.needs.contains { $0.key == first.key })
+        XCTAssertEqual(desk.rail.needs(in: nil, grouped: false), 2)
+        XCTAssertEqual(routes.sent("GET", "/api/digest").count, reads, "nothing was read for it")
+        withExtendedLifetime(desk) {}
+    }
+
     func testMailChangingReadsOnlyTheTalliesUntilTheBriefIsOpenAndABurstReadsOnceMore() async {
         scriptTheBrief(briefing: .brief(DeskFixture.brief))
         let model = briefModel()
