@@ -16,6 +16,9 @@ the rule book's old file held; nothing reads or writes a file of it any more. Th
 document holds expiry rules (`expire_hours`: sender/domain → hours), enforced by
 `Expiry.account` from the CLI and by the server's `expire` job hourly (not read-only).
 `rules.remove` deliberately leaves expiry alone; clear it with `set_expiry(token, 0)`.
+`POST /api/rules` keeps or blocks only one address or one domain with a dot in it (`rulebook.names_a_sender`, and the
+core's): a number pasted before an address, two addresses or a name in brackets would make a rule that never matches,
+so it is refused in words the page and the Mac app show. A removal asks only `is_token`, so a rule kept before still goes.
 It also holds a person's filters (`curation.domain.filters`): a search that stars or marks read. `Ingest` runs them only on
 mail never seen before, on an incremental sync of the Inbox, and the server hears through the command path; a read-only process
 runs none, since a mark kept here alone would be taken back by the same sync's read of the flags. A filter takes the search's
