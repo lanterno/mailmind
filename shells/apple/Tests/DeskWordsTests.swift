@@ -51,6 +51,21 @@ final class DeskWordsTests: XCTestCase {
         XCTAssertEqual(BriefWords.needsYou(items).map(\.key), [111, 112, 110])
     }
 
+    /// A conversation needs you once, by its weightiest message, as the page's brief lists it; another account's of
+    /// the same id is another. Each message still counts where a list shows messages, not conversations.
+    func testAConversationNeedsYouOnce() {
+        let bea = "bea@example.test"
+        let items = [
+            DeskFixture.item(110, from: "a@example.test", name: "A", subject: "a", importance: 3, thread: "t1"),
+            DeskFixture.item(111, from: "a@example.test", name: "A", subject: "Re: a", importance: 5, thread: "t1"),
+            DeskFixture.item(112, from: "b@example.test", name: "B", subject: "b", importance: 3, account: bea, thread: "t1"),
+            DeskFixture.item(113, from: "c@example.test", name: "C", subject: "c", importance: 3),
+            DeskFixture.item(114, from: "c@example.test", name: "C", subject: "c again", importance: 3),
+        ]
+        XCTAssertEqual(BriefWords.needsYou(items).map(\.key), [111, 114, 113, 112])
+        XCTAssertEqual(BriefWords.everyNeed(items).map(\.key), [111, 114, 113, 112, 110])
+    }
+
     func testATopicNamesOnlyTheMailStillHeld() {
         let items = DeskFixture.digest().items
         let copies = [API.Copy(folder: "INBOX", key: 104, uid: 4), API.Copy(folder: "INBOX", key: 999, uid: 99),

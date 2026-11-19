@@ -221,12 +221,13 @@ enum DeskFixture {
     }
 
     static func item(_ key: Int, from: String, name: String, subject: String, needs: Bool = true, importance: Int = 3,
-                     action: String = "", summary: String? = nil, safe: Bool = false, commitment: Bool = false) -> API.DigestItem {
-        API.DigestItem(account: "ada@example.test", action: action, alias: "Work", commitmentWorthy: commitment, flagged: false,
+                     action: String = "", summary: String? = nil, safe: Bool = false, commitment: Bool = false,
+                     account: String = "ada@example.test", thread: String? = nil) -> API.DigestItem {
+        API.DigestItem(account: account, action: action, alias: "Work", commitmentWorthy: commitment, flagged: false,
                        folder: "INBOX", fromAddr: from, fromName: name, hasAttach: false, importance: importance, key: key,
                        kind: "message", link: "", needsYou: needs, replyWorthy: needs, safeToFile: safe, seen: false,
                        sentTo: [], sentToMore: 0,
-                       subject: subject, summary: summary, uid: key - 100, when: "9:12 am")
+                       subject: subject, summary: summary, threadId: thread, uid: key - 100, when: "9:12 am")
     }
 
     /// `ai` is the engine; "none" is AI off, for want of a key unless `off` says otherwise.
