@@ -708,8 +708,10 @@ panels, when you ask in Settings or macOS's **Increase Contrast** is on), the pa
 that folds to icons, the summary note and a reply under the message, the brief beside the Inbox, its greeting under a
 line on how your mail stands (what needs you and what's unread). It reads and
 organises as a Mac's mail app does: **File › Print** (⌘P) prints the open message, with the images you chose to show,
-⌘F goes to the search field and **Find in Message** (⌥⌘F) finds a word in what's open, a double-click opens a message
-in a window of its own, and rows dragged onto one of the rail's folders move there. Every place on the rail has a menu
+⌘F goes to the search field and **Find in Message** (⌥⌘F, or ⌘F in a message's own window) finds a word in what's
+open, a double-click opens a message in a window of its own (with the reader's single keys and cards), a link says
+where it goes in a line at the foot while the pointer is over it, and rows dragged onto one of the rail's folders move
+there. Every place on the rail has a menu
 (**Get New Mail** where mail shows). **Move To** makes a new folder and moves into it, an account's folders make one
 in their menu (**New Folder…**), and a folder of your own has **Rename Folder…** and **Delete Folder…** there (never one the server
 keeps, as Gmail's Starred); one that holds mail is deleted only once you say so again, its mail moved to Trash first,
