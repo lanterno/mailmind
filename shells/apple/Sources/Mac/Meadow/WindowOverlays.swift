@@ -385,6 +385,17 @@ enum ToastPlace {
     /// The room between a toast and the reply box it stands over.
     static let gap: CGFloat = 12
 
+    /// The least room between a toast and the window's sides.
+    static let margin: CGFloat = 16
+
+    /// How far right of the window's middle toasts `wide` points wide stand, asked to stand `dx` right of it: as
+    /// asked, or as near it as keeps them `margin` inside the window's sides, so a long toast centred over the pane
+    /// never runs past the window's edge with its Undo.
+    static func inside(_ dx: CGFloat, wide: CGFloat, window: CGFloat) -> CGFloat {
+        let most = max(0, (window - wide) / 2 - margin)
+        return min(max(dx, -most), most)
+    }
+
     /// How far right of the window's middle the toasts stand (`dx`), and how high over its foot (`bottom`).
     static func of(window: CGRect, pane: CGRect?, reply: CGRect?) -> (dx: CGFloat, bottom: CGFloat) {
         let pane = pane.flatMap { $0.intersects(window) ? $0 : nil }
@@ -400,13 +411,18 @@ enum ToastPlace {
 struct PlacedToasts<Toasts: View>: View {
     let room: ToastRoom
     @ViewBuilder let toasts: () -> Toasts
+    /// How wide the toasts stand, which keeps them inside the window.
+    @State private var wide: CGFloat = 0
 
     var body: some View {
         GeometryReader { proxy in
             let place = ToastPlace.of(window: proxy.frame(in: .global), pane: room.pane, reply: room.reply)
             toasts()
+                // No wider than the window leaves room for: a long toast's words wrap.
+                .frame(maxWidth: max(0, proxy.size.width - 2 * ToastPlace.margin))
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { wide = $0 }
                 .padding(.bottom, place.bottom)
-                .offset(x: place.dx)
+                .offset(x: ToastPlace.inside(place.dx, wide: wide, window: proxy.size.width))
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .bottom)
                 .animation(.snappy(duration: 0.2), value: place.bottom)
         }
