@@ -680,6 +680,14 @@ final class OpenedMessageVerbsTests: XCTestCase {
                                           + "to clear the selection.", everything: false))
     }
 
+    /// The reply box shows R where r opens it: under the mail window's pane, whose list takes r, and not in a
+    /// message's own window, which takes no single keys.
+    func testTheReplyBoxShowsROnlyWhereROpensIt() async {
+        let world = await world()
+        XCTAssertTrue(MessageReader.showsReplyKey(app: world.app, mailbox: world.mailbox), "the mail window's pane")
+        XCTAssertFalse(MessageReader.showsReplyKey(app: nil, mailbox: world.mailbox), "a message's own window")
+    }
+
     // MARK: Undo
 
     /// The Inbox's rows, listed one at a time.
