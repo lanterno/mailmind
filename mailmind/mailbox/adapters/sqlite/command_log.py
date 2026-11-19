@@ -78,6 +78,12 @@ def command_open(c, limit):
                      "ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
 
 
+def command_release(c, account, now):
+    """Each of the account's queued changes waiting out a backoff due at `now`: how many."""
+    return c.execute("UPDATE mail_commands SET next_attempt_at=? WHERE account=? AND state='queued' AND next_attempt_at>?",
+                     (now, account, now)).rowcount
+
+
 def command_open_counts(c):
     """{state: how many} of the changes that haven't reached a server."""
     return {r["state"]: r["n"] for r in c.execute(

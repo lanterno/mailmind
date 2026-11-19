@@ -404,7 +404,7 @@ def assemble():
                 together={"sweep_back": reversals.sweep_back})
     filing = Filing(_uow, store, _directory, commands, ingest, undo, stats, folders, _attention)
     tidying = Tidying(_uow, store, filing, undo)
-    syncing = Syncing(_uow, store, _directory, ingest, warm, folders, _attention, _kick)
+    syncing = Syncing(_uow, store, _directory, ingest, warm, folders, _attention, _kick, commands.release)
     reconciler = Reconciler(_uow, store, _directory, pool, folders, stats, reconcile_trail)
     digest = Digest(_uow, store, _directory, syncing, _ai_status)
     folder_changes = FolderChanges(_uow, store, _directory, commands, folders)

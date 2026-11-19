@@ -7,7 +7,7 @@ from mailmind.mailbox.adapters.sqlite.assistant_reads import (any_copy, brief_ro
 from mailmind.mailbox.adapters.sqlite.bound import bind_index, bind_merges
 from mailmind.mailbox.adapters.sqlite.command_log import (archives_undone, command_forget_finished, command_get,
     command_insert, command_latest_move, command_mark_begun, command_mark_reversed, command_never_begun, command_open,
-    command_open_counts, command_queued_for_folder, command_ran_under, command_record, command_set_params,
+    command_open_counts, command_queued_for_folder, command_ran_under, command_record, command_release, command_set_params,
     flag_changes_waiting, flag_command, queue_flags)
 from mailmind.mailbox.adapters.sqlite.connection import conn, init
 from mailmind.mailbox.adapters.sqlite.contents import (attachment_of, bodies_to_fetch, delete_attachments,
@@ -32,8 +32,8 @@ __all__ = [
     "bind_merges", "bodies_to_fetch", "brief_rows", "classified_from_address", "classified_from_domain", "clear_sync_error",
     "command_forget_finished", "command_get", "command_insert", "command_latest_move", "command_mark_begun",
     "command_mark_reversed", "command_never_begun", "command_open", "command_open_counts", "command_queued_for_folder",
-    "command_ran_under", "command_record", "command_set_params", "conn", "conversation_rows", "copy_in_folder", "copy_now",
-    "copy_pk", "copy_row",
+    "command_ran_under", "command_record", "command_release", "command_set_params", "conn", "conversation_rows",
+    "copy_in_folder", "copy_now", "copy_pk", "copy_row",
     "delete_attachments", "delete_by_uids", "delete_message", "delta_rows", "digest", "draft_candidates",
     "flag_changes_waiting", "flag_command", "flag_rows_newest", "flag_rows_of", "folder_conversation_count", "forget_folder",
     "folder_conversation_rows", "folder_count", "folder_rows", "forget_account", "forget_gone_messages", "fts_set_body", "get_body",

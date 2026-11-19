@@ -5,6 +5,9 @@ An account shows as failing only as domain.sync_health says: trouble that may pa
 server that can't take a login for now) once a second sync in a row has failed too, or three minutes on. Until then it shows as it did before, and its record keeps no
 error, but its status says it is trying again (`trying_again`), so nothing says it synced when its last sync didn't.
 
+A sync that works after one of the account's failed, and a person's Retry, let go of the waits of the changes queued for its
+server (`server_back`, the commands' `release`): they go now, not minutes on.
+
 An account removed (`account_removed`) stops each sync reading its mail at its next message, as its flights were told, and
 nothing is kept of how its syncs went: its status, its run of failures, its body backfill's rest; now, and again as the last
 sync reading its mail lands."""
@@ -34,7 +37,7 @@ warm_log = get_logger("warm")
 
 class Syncing:
     def __init__(self, uow: UnitOfWork, store: StoredMail, accounts: Accounts, ingest: Ingest, warm: Warming, folders: Folders,
-                 attention: Attention, kick: Callable[[str], object]):
+                 attention: Attention, kick: Callable[[str], object], server_back: Callable[[str], object] = lambda _: None):
         self._uow = uow
         self._store = store
         self._accounts = accounts
@@ -43,6 +46,7 @@ class Syncing:
         self._folders = folders
         self._attention = attention
         self._kick = kick
+        self._server_back = server_back
         self._sync: dict[str, Any] = {"running": False, "last": None, "result": "idle"}
         self._status: dict[str, dict[str, str]] = {}   # email -> {"health": ok|syncing|error, "msg": str}
         self._failing: dict[str, sync_health.Failing] = {}   # email -> its syncs failed in a row, until one works
@@ -106,10 +110,12 @@ class Syncing:
                     flight.going_on()
                     arrived = 0 if first else kept
                     new += arrived
-                    self._failing.pop(a["email"], None)
+                    unreached = self._failing.pop(a["email"], None) is not None
                     self._status[a["email"]] = {"health": "ok", "msg": f"+{kept}"}
                     with self._uow.write() as c:
                         self._store.record_sync_result(c, a["email"], True)
+                    if unreached:      # the server answers again: what was queued for it while it didn't goes now
+                        self._let_go(a["email"])
                     sse.publish("sync-done", {"account": a["email"], "kept": kept, "junk": junk})
                     if arrived > 0:     # one message names its UID, so a notification can say whose it is and open it
                         one = {"uid": newest} if arrived == 1 else {}
@@ -160,8 +166,17 @@ class Syncing:
         with self._uow.write() as c:
             self._store.clear_sync_error(c, acct)
         self._accounts.try_login_again(acct)
+        self._let_go(acct)     # a person asked: what waits for the account's server goes with its sync, whatever the last came to
         threading.Thread(target=lambda: self.sync_guarded({acct}), daemon=True).start()
         return {"ok": True, "account": acct}
+
+
+    def _let_go(self, email: str) -> None:
+        """The changes waiting for the account's server go now. One that can't be let go waits out its backoff, as before."""
+        try:
+            self._server_back(email)
+        except Exception as e:
+            log.warning("the changes waiting for a server weren't let go", exc_info=e)
 
 
     def sync_once(self) -> None:

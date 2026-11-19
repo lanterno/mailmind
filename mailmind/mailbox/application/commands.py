@@ -76,6 +76,17 @@ class MailCommands:
     def kick(self) -> None:
         self.QUEUE.kick()
 
+    def release(self, account: str) -> int:
+        """The account's server answers again, or a person asked to try it again: its changes waiting out a backoff go now,
+        rather than when their waits run out, minutes on. Their attempts stand, so one that keeps failing still gives up.
+        How many were waiting; a read-only process, which queued none, lets none go."""
+        if not profile.writes_allowed():
+            return 0
+        released = self._commit(lambda c: self._store.command_release(c, account, _now()))
+        if released:
+            self.kick()
+        return released
+
 
     def _commit[T](self, fn: Callable[[Connection], T]) -> T:
         """Run fn(c) in a write block of its own, and return what fn returned."""
