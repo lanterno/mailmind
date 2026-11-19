@@ -1116,6 +1116,10 @@ extension API {
             self.key = key
             self.uid = uid
         }
+
+        /// The keys it names, and those it requires, which a union's decoding goes by.
+        static let named: Set<String> = ["folder", "key", "uid"]
+        static let required: Set<String> = ["folder", "key", "uid"]
     }
 
     /// The test ran, and the login didn't work. `error` is its class in `conn_error.quiet`'s words, never what the server
@@ -2974,6 +2978,7 @@ extension API {
         public var messageId: String?
         public var ok: Bool
         public var references: String?
+        public var replyDraft: ReplyDraft?
         public var replyTo: String
         public var sender: SenderFacts?
         public var subject: String?
@@ -2982,7 +2987,7 @@ extension API {
         public var to: String
         public var uid: Int
 
-        public init(account: String, attachments: [AttachmentPart], blockedCssUrls: Int, blockedImages: Int, cc: String, date: String, draftId: Int? = nil, draftMode: String? = nil, folder: String, fromAddr: String? = nil, fromName: String? = nil, hasHtml: Bool, html: String? = nil, inReplyTo: String? = nil, invite: Invite? = nil, invitePart: String? = nil, isDraft: Bool? = nil, key: Int, messageId: String? = nil, ok: Bool, references: String? = nil, replyTo: String, sender: SenderFacts? = nil, subject: String? = nil, text: String? = nil, threadId: String? = nil, to: String, uid: Int) {
+        public init(account: String, attachments: [AttachmentPart], blockedCssUrls: Int, blockedImages: Int, cc: String, date: String, draftId: Int? = nil, draftMode: String? = nil, folder: String, fromAddr: String? = nil, fromName: String? = nil, hasHtml: Bool, html: String? = nil, inReplyTo: String? = nil, invite: Invite? = nil, invitePart: String? = nil, isDraft: Bool? = nil, key: Int, messageId: String? = nil, ok: Bool, references: String? = nil, replyDraft: ReplyDraft? = nil, replyTo: String, sender: SenderFacts? = nil, subject: String? = nil, text: String? = nil, threadId: String? = nil, to: String, uid: Int) {
             self.account = account
             self.attachments = attachments
             self.blockedCssUrls = blockedCssUrls
@@ -3004,6 +3009,7 @@ extension API {
             self.messageId = messageId
             self.ok = ok
             self.references = references
+            self.replyDraft = replyDraft
             self.replyTo = replyTo
             self.sender = sender
             self.subject = subject
@@ -3035,6 +3041,7 @@ extension API {
             case messageId = "message_id"
             case ok
             case references
+            case replyDraft = "reply_draft"
             case replyTo = "reply_to"
             case sender
             case subject
@@ -3045,7 +3052,7 @@ extension API {
         }
 
         /// The keys it names, and those it requires, which a union's decoding goes by.
-        static let named: Set<String> = ["account", "attachments", "blocked_css_urls", "blocked_images", "cc", "date", "draft_id", "draft_mode", "folder", "from_addr", "from_name", "has_html", "html", "in_reply_to", "invite", "invite_part", "is_draft", "key", "message_id", "ok", "references", "reply_to", "sender", "subject", "text", "thread_id", "to", "uid"]
+        static let named: Set<String> = ["account", "attachments", "blocked_css_urls", "blocked_images", "cc", "date", "draft_id", "draft_mode", "folder", "from_addr", "from_name", "has_html", "html", "in_reply_to", "invite", "invite_part", "is_draft", "key", "message_id", "ok", "references", "reply_draft", "reply_to", "sender", "subject", "text", "thread_id", "to", "uid"]
         static let required: Set<String> = ["account", "attachments", "blocked_css_urls", "blocked_images", "cc", "date", "folder", "from_addr", "from_name", "has_html", "html", "in_reply_to", "invite", "invite_part", "key", "message_id", "ok", "references", "reply_to", "sender", "subject", "text", "thread_id", "to", "uid"]
     }
 
@@ -4362,6 +4369,29 @@ extension API {
             case on
             case threadId = "thread_id"
         }
+    }
+
+    /// A reply already saved to a message, which Reply opens rather than a second, empty one: its newest.
+    public struct ReplyDraft: Codable, Hashable, Sendable {
+        public var draftId: Int?
+        public var inDrafts: Copy?
+        public var more: Int
+
+        public init(draftId: Int? = nil, inDrafts: Copy? = nil, more: Int) {
+            self.draftId = draftId
+            self.inDrafts = inDrafts
+            self.more = more
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case draftId = "draft_id"
+            case inDrafts = "in_drafts"
+            case more
+        }
+
+        /// The keys it names, and those it requires, which a union's decoding goes by.
+        static let named: Set<String> = ["draft_id", "in_drafts", "more"]
+        static let required: Set<String> = ["draft_id", "in_drafts", "more"]
     }
 
     public struct ReplyLaterBody: Codable, Hashable, Sendable {
