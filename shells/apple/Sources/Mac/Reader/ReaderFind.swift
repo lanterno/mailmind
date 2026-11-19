@@ -3,8 +3,8 @@ import AppKit
 import SwiftUI
 import WebKit
 
-/// Find in Message (⌥⌘F): a word looked for in the open message's body, or each body a conversation shows, as a Mac's
-/// find bar does. WebKit finds and selects it in a frame; the app's own script in that frame (its isolated world, never
+/// Find in Message (⌥⌘F; ⌘F in a message's own window): a word looked for in the open message's body, or each body
+/// a conversation shows, as a Mac's find bar does. WebKit finds and selects it in a frame; the app's own script in that frame (its isolated world, never
 /// the mail's) says where the selection is, and the reader scrolls to it, as the frames are as tall as their content.
 @MainActor
 @Observable
