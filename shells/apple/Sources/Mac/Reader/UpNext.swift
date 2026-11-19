@@ -66,7 +66,8 @@ struct UpNext: View {
                     }
                     .padding(.bottom, 8)
                     if let next = list.copy(at: position + 1) {
-                        NextRow(row: next, account: mailbox.accounts.firstIndex(of: next.account)) {
+                        NextRow(row: next, account: mailbox.accounts.firstIndex(of: next.account),
+                                mine: RowWords.mine(mailbox.accounts)) {
                             mailbox.move(by: 1)
                         }
                     }
@@ -110,17 +111,20 @@ struct UpNext: View {
 private struct NextRow: View {
     let row: API.FolderRow
     let account: Int?
+    /// Your addresses: your own mail is named by whom it went to, as its row in the list is (`RowWords.who`).
+    let mine: Set<String>
     let open: () -> Void
     @Environment(\.meadow) private var meadow
     @Environment(\.isFocused) private var focused
     @State private var hovering = false
 
-    private var who: String { row.fromName.flatMap { $0.isEmpty ? nil : $0 } ?? row.fromAddr ?? "" }
+    private var named: RowWords.Who { RowWords.who(row, mine: mine) }
+    private var who: String { named.name }
 
     var body: some View {
         Button(action: open) {
             HStack(spacing: 12) {
-                MeadowAvatar(name: who, account: account.map(meadow.account))
+                MeadowAvatar(name: named.avatarKey, account: account.map(meadow.account))
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(Text(verbatim: who).fontWeight(.heavy).foregroundStyle(meadow.ink)) — \(row.subject)")
                         .font(.meadow(.ui, 14))

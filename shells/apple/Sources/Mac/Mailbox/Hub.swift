@@ -340,13 +340,14 @@ private struct FeedRow: View {
         let (open, isOpen) = opening(hit, in: mailbox)
         let subject = hit.subject.isEmpty ? String(localized: "(no subject)") : hit.subject
         let row = API.FolderRow(hit)
+        let who = RowWords.who(row, mine: RowWords.mine(mailbox.accounts))
         let multi = mailbox.accounts.count > 1
         let account = meadow.account(of: hit.account, among: mailbox.accounts)
         HStack(alignment: .top, spacing: 11) {
-            MeadowAvatar(name: row.sender, account: multi ? account : nil)
+            MeadowAvatar(name: who.avatarKey, account: multi ? account : nil)
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(row.sender)
+                    Text(who.name)
                         .font(.meadow(.ui, 14, hit.seen ? .semibold : .heavy))
                         .foregroundStyle(meadow.ink)
                         .lineLimit(1)
@@ -685,7 +686,7 @@ private struct LedgerRow: View {
                     .foregroundStyle(meadow.ink)
             } from: {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(row.sender)
+                    Text(RowWords.who(row, mine: RowWords.mine(mailbox.accounts)).name)
                         .font(.meadow(.ui, 14, line.hit.seen ? .bold : .heavy))
                         .foregroundStyle(meadow.ink)
                     Text(line.hit.subject.isEmpty ? String(localized: "(no subject)") : line.hit.subject)
@@ -729,7 +730,7 @@ private struct LedgerLine: View {
         Button(action: open) {
             HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(row.sender)
+                    Text(RowWords.who(row, mine: RowWords.mine(mailbox.accounts)).name)
                         .font(.meadow(.ui, 14, line.hit.seen ? .bold : .heavy))
                         .foregroundStyle(meadow.ink)
                     Text(line.hit.subject.isEmpty ? String(localized: "(no subject)") : line.hit.subject)

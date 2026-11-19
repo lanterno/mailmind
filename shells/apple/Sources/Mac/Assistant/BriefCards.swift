@@ -15,12 +15,14 @@ struct NeedCard: View {
     var body: some View {
         let copy = BriefModel.copy(of: item)
         let subject = item.subject.isEmpty ? String(localized: "(no subject)") : item.subject
-        let who = item.fromName.flatMap { $0.isEmpty ? nil : $0 } ?? item.fromAddr ?? "—"
         let accounts = model.digest?.accounts ?? []
+        // Your own mail is named by whom it went to (`RowWords.who`), as the list's row names it.
+        let named = RowWords.who(item, mine: model.mine)
+        let who = named.name.isEmpty ? "—" : named.name
         let account = meadow.account(of: item.account, among: accounts)
         let action = item.action.trimmingCharacters(in: .whitespacesAndNewlines)
         HStack(alignment: .top, spacing: 12) {
-            MeadowAvatar(name: who, account: model.multi ? account : nil)
+            MeadowAvatar(name: named.avatarKey.isEmpty ? who : named.avatarKey, account: model.multi ? account : nil)
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 8) {
                     Text(who)
@@ -119,6 +121,8 @@ struct NeedCard: View {
 /// A message worth a read (`.read-i`): a leaf, its subject, who sent it and when, and the gist in moss.
 struct ReadRow: View {
     let item: API.DigestItem
+    /// Your addresses: your own mail is named by whom it went to (`RowWords.who`).
+    var mine: Set<String> = []
     let open: () -> Void
     @Environment(\.meadow) private var meadow
     @FocusState private var focused: Bool
@@ -136,7 +140,7 @@ struct ReadRow: View {
                         .font(.meadow(.ui, 14, .bold))
                         .foregroundStyle(meadow.ink)
                         .lineLimit(1)
-                    Text(item.fromName.flatMap { $0.isEmpty ? nil : $0 } ?? item.fromAddr ?? "—")
+                    Text(RowWords.named(item, mine: mine))
                         .font(.meadow(.ui, 12.5))
                         .foregroundStyle(meadow.ink3)
                         .lineLimit(1)

@@ -184,7 +184,7 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
 
     func setLook(_ look: RowLook) {
         let measured = look.measure != self.look.measure
-        let painted = look.inks !== self.look.inks || look.accounts != self.look.accounts
+        let painted = look.inks !== self.look.inks || look.accounts != self.look.accounts || look.mine != self.look.mine
         self.look = look
         if measured {
             keepingPlace { table.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<table.numberOfRows)) }

@@ -219,8 +219,60 @@ enum RowWords {
 
     /// The avatar's initials: the mockup's from the name, else the page's from the address.
     static func initials(_ row: API.FolderRow) -> String {
-        let named = MeadowAvatar.initials(row.fromName ?? "")
-        return named.isEmpty ? Monogram.initials(name: row.fromName, address: row.fromAddr) : named
+        initials(name: row.fromName, address: row.fromAddr)
+    }
+
+    static func initials(name: String?, address: String?) -> String {
+        let named = MeadowAvatar.initials(name ?? "")
+        return named.isEmpty ? Monogram.initials(name: name, address: address) : named
+    }
+
+    /// Your addresses, as the reader and the composer take them (`Composing.mine`): those you send from, and your
+    /// accounts'.
+    @MainActor
+    static func mine(_ accounts: [String], status: AppStatus = .shared) -> Set<String> {
+        SendGuard.mineSet((status.digest?.sendAccounts ?? []) + accounts)
+    }
+
+    /// Whom a row names, and whose avatar stands beside it.
+    struct Who: Equatable {
+        let name: String
+        let avatarName: String?
+        let avatarAddress: String?
+
+        /// What the avatar's colour goes by: the name, else the address, as a sender's does (`FolderRow.sender`).
+        var avatarKey: String { [avatarName, avatarAddress].compactMap { $0 }.first { !$0.isEmpty } ?? "" }
+    }
+
+    /// For mail from one of your own addresses, the people it went to ("To Ada", "To Ada, Lin +2"), each by first
+    /// name or an organisation whole (`Words.calling`), else by address, and the first of them in the avatar; else
+    /// who sent it. Your own that went to no one else is named by who wrote it, as the reader names it
+    /// (`MessageWords.otherSide`), as the page's `whoOf` does.
+    static func who(fromName: String?, fromAddr: String?, sentTo: [API.Addressee], sentToMore: Int,
+                    mine: Set<String>) -> Who {
+        let sender = Who(name: [fromName, fromAddr].compactMap { $0 }.first { !$0.isEmpty } ?? "",
+                         avatarName: fromName, avatarAddress: fromAddr)
+        guard let from = fromAddr, SendGuard.isMine(from.lowercased(), mine) else { return sender }
+        let others = sentTo.filter { !SendGuard.isMine($0.addr.lowercased(), mine) }
+        guard let first = others.first else { return sender }
+        let names = others.map { Words.calling($0.name, address: $0.addr) ?? $0.addr }.joined(separator: ", ")
+        let more = sentToMore > 0 ? " +\(sentToMore)" : ""
+        return Who(name: String(localized: "To \(names)\(more)"), avatarName: first.name, avatarAddress: first.addr)
+    }
+
+    static func who(_ row: API.FolderRow, mine: Set<String>) -> Who {
+        who(fromName: row.fromName, fromAddr: row.fromAddr, sentTo: row.sentTo, sentToMore: row.sentToMore, mine: mine)
+    }
+
+    static func who(_ item: API.DigestItem, mine: Set<String>) -> Who {
+        who(fromName: item.fromName, fromAddr: item.fromAddr, sentTo: item.sentTo, sentToMore: item.sentToMore,
+            mine: mine)
+    }
+
+    /// The name a brief's card gives `item`: whom it names, or a dash where it names no one.
+    static func named(_ item: API.DigestItem, mine: Set<String>) -> String {
+        let name = who(item, mine: mine).name
+        return name.isEmpty ? "—" : name
     }
 }
 

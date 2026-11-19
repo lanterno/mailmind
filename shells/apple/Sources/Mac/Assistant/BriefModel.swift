@@ -95,6 +95,9 @@ final class BriefModel {
     /// Whether there is more than one account, so each card names its own.
     var multi: Bool { (digest?.accounts.count ?? 0) > 1 }
 
+    /// Your addresses, as the digest names them: a card of your own mail names whom it went to (`RowWords.who`).
+    var mine: Set<String> { SendGuard.mineSet((digest?.sendAccounts ?? []) + (digest?.accounts ?? [])) }
+
     /// A Tidy run that can still be taken back and wasn't dismissed.
     var tidyShown: API.TidyRun? {
         guard let run = tidyRun, let group = run.group, group != dismissedTidy else { return nil }

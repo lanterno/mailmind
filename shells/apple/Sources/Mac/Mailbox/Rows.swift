@@ -10,7 +10,8 @@ extension API.FolderRow {
                   bucket: hit.bucket, commitmentWorthy: hit.commitmentWorthy, flagged: hit.flagged, folder: hit.folder,
                   fromAddr: hit.fromAddr, fromName: hit.fromName, hasAttach: hit.hasAttach, importance: hit.importance,
                   isJunk: hit.isJunk, key: hit.key, needsYou: hit.needsYou, replyWorthy: hit.replyWorthy,
-                  safeToFile: hit.safeToFile, seen: hit.seen, snippet: hit.snippet, subject: hit.subject, summary: "",
+                  safeToFile: hit.safeToFile, seen: hit.seen, sentTo: hit.sentTo, sentToMore: hit.sentToMore,
+                  snippet: hit.snippet, subject: hit.subject, summary: "",
                   threadId: hit.threadId, ts: nil, uid: hit.uid, when: hit.when)
     }
 
@@ -20,8 +21,8 @@ extension API.FolderRow {
                   flagged: row.flagged, folder: row.folder, fromAddr: row.fromAddr, fromName: row.fromName,
                   hasAttach: row.hasAttach, importance: row.importance, isJunk: row.isJunk, key: row.key,
                   needsYou: row.needsYou, replyWorthy: row.replyWorthy, safeToFile: row.safeToFile, seen: row.seen,
-                  snippet: row.snippet, subject: row.subject, summary: "", threadId: row.threadId, ts: nil, uid: row.uid,
-                  when: row.when)
+                  sentTo: row.sentTo, sentToMore: row.sentToMore, snippet: row.snippet, subject: row.subject,
+                  summary: "", threadId: row.threadId, ts: nil, uid: row.uid, when: row.when)
     }
 
     /// A muted conversation's latest message.
@@ -29,7 +30,8 @@ extension API.FolderRow {
         self.init(account: row.account, action: "", bucket: row.bucket, commitmentWorthy: false, count: row.count,
                   flagged: row.flagged, folder: row.folder, fromAddr: row.fromAddr, fromName: row.fromName,
                   hasAttach: row.hasAttach, isJunk: row.isJunk, key: row.key, needsYou: false, replyWorthy: false,
-                  safeToFile: false, seen: row.seen, snippet: row.snippet, subject: row.subject, summary: "",
+                  safeToFile: false, seen: row.seen, sentTo: row.sentTo, sentToMore: row.sentToMore,
+                  snippet: row.snippet, subject: row.subject, summary: "",
                   threadId: row.threadId, ts: row.ts, uid: row.uid, when: row.when)
     }
 
@@ -38,7 +40,8 @@ extension API.FolderRow {
         self.init(account: row.account, action: "", bucket: row.bucket, commitmentWorthy: false, count: row.count,
                   flagged: row.flagged, folder: row.folder, fromAddr: row.fromAddr, fromName: row.fromName,
                   hasAttach: row.hasAttach, isJunk: row.isJunk, key: row.key, needsYou: false, replyWorthy: false,
-                  safeToFile: false, seen: row.seen, snippet: row.snippet, subject: row.subject, summary: "",
+                  safeToFile: false, seen: row.seen, sentTo: row.sentTo, sentToMore: row.sentToMore,
+                  snippet: row.snippet, subject: row.subject, summary: "",
                   threadId: row.threadId, ts: row.ts, uid: row.uid,
                   when: row.waitingLabel.isEmpty ? row.when : row.waitingLabel)
     }
@@ -48,7 +51,8 @@ extension API.FolderRow {
         self.init(account: row.account, action: "", bucket: row.bucket, commitmentWorthy: false, count: row.count,
                   flagged: row.flagged, folder: row.folder, fromAddr: row.fromAddr, fromName: row.fromName,
                   hasAttach: row.hasAttach, isJunk: row.isJunk, key: row.key, needsYou: false, replyWorthy: false,
-                  safeToFile: false, seen: row.seen, snippet: row.snippet, subject: row.subject, summary: "",
+                  safeToFile: false, seen: row.seen, sentTo: row.sentTo, sentToMore: row.sentToMore,
+                  snippet: row.snippet, subject: row.subject, summary: "",
                   threadId: row.threadId, ts: row.ts, uid: row.uid,
                   when: row.waitingLabel.isEmpty ? row.when : row.waitingLabel)
     }
@@ -62,6 +66,7 @@ extension API.FolderRow {
                   fromName: member?.fromName ?? head?.fromName,
                   hasAttach: member?.hasAttach ?? !(head?.attachments.isEmpty ?? true), isJunk: member?.isJunk ?? false,
                   key: copy.key, needsYou: false, replyWorthy: false, safeToFile: false, seen: member?.seen ?? true,
+                  sentTo: member?.sentTo ?? [], sentToMore: member?.sentToMore ?? 0,
                   snippet: member?.snippet ?? "", subject: member?.subject ?? head?.subject ?? "", summary: "",
                   threadId: head?.threadId, uid: copy.uid, when: member?.when ?? "")
     }
@@ -125,7 +130,8 @@ extension MailCopy {
     init(key: Int, folder: String, uid: Int, account: String) {
         self.init(API.FolderRow(account: account, action: "", commitmentWorthy: false, flagged: false, folder: folder,
                                 hasAttach: false, isJunk: false, key: key, needsYou: false, replyWorthy: false,
-                                safeToFile: false, seen: true, snippet: "", subject: "", summary: "", uid: uid, when: ""))
+                                safeToFile: false, seen: true, sentTo: [], sentToMore: 0, snippet: "", subject: "",
+                                summary: "", uid: uid, when: ""))
     }
 }
 #endif

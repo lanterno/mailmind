@@ -311,7 +311,7 @@ struct BriefScreen: View {
                 sectionHead(String(localized: "Worth a read"))
                 VStack(spacing: 2) {
                     ForEach(shown, id: \.self) { item in
-                        ReadRow(item: item) { actions.open(BriefModel.copy(of: item)) }
+                        ReadRow(item: item, mine: model.mine) { actions.open(BriefModel.copy(of: item)) }
                     }
                 }
                 if reads.count > shown.count {
@@ -360,7 +360,7 @@ struct BriefScreen: View {
                         ForEach(tidy, id: \.self) { item in
                             let subject = item.subject.isEmpty ? String(localized: "(no subject)") : item.subject
                             Button { actions.open(BriefModel.copy(of: item)) } label: {
-                                TidyLine(who: item.fromName ?? item.fromAddr ?? "—", subject: subject)
+                                TidyLine(who: RowWords.named(item, mine: model.mine), subject: subject)
                             }
                             .deskTitle()
                         }

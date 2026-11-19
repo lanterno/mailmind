@@ -187,6 +187,15 @@ struct RowLook {
     let measure: RowMeasure
     /// Each account's place in the mailbox's list, for its colour.
     let accounts: [String]
+    /// Your addresses (`RowWords.mine`): a row of your own mail names whom it went to. Without them, the accounts'.
+    let mine: Set<String>
+
+    init(inks: RowInks, measure: RowMeasure, accounts: [String], mine: Set<String>? = nil) {
+        self.inks = inks
+        self.measure = measure
+        self.accounts = accounts
+        self.mine = mine ?? SendGuard.mineSet(accounts)
+    }
 
     func colour(of account: String) -> NSColor {
         inks.account(accounts.firstIndex(of: account) ?? 0)
@@ -218,6 +227,8 @@ final class MailRowCell: NSTableCellView {
 
     /// Each line's text, set once when the row is shown.
     private struct Lines {
+        /// Whom the row names: the sender, or for your own mail whom it went to (`RowWords.who`).
+        var named: RowWords.Who
         var who: TextLine
         var count: TextLine?
         var time: TextLine
@@ -261,6 +272,7 @@ final class MailRowCell: NSTableCellView {
         gistCut = nil
         lines = row.map { row in
             let unread = !row.seen
+            let named = RowWords.who(row, mine: look.mine)
             let third = RowWords.third(row)
             var gist: NSAttributedString?, gistWidth: Float?, amount: TextLine?, preview: TextLine?
             switch third {
@@ -274,14 +286,16 @@ final class MailRowCell: NSTableCellView {
                 preview = TextLine(snippet, RowFaces.preview)
             }
             return Lines(
-                who: TextLine(row.sender, unread ? RowFaces.whoUnread : RowFaces.who),
+                named: named,
+                who: TextLine(named.name, unread ? RowFaces.whoUnread : RowFaces.who),
                 count: row.conversationCount.map { TextLine(String($0), RowFaces.count) },
                 time: TextLine(row.when, RowWords.needs(row) ? RowFaces.timeNeeds : RowFaces.time),
                 subject: TextLine(row.subject.isEmpty ? String(localized: "(no subject)") : row.subject,
                                   unread ? RowFaces.subjectUnread : RowFaces.subject),
                 third: third, gist: gist, gistWidth: gistWidth, amount: amount, preview: preview,
                 chips: RowWords.chips(row).map { ($0, TextLine($0.text, RowFaces.chip)) },
-                initials: TextLine(RowWords.initials(row), RowFaces.initials, kern: 0.24),
+                initials: TextLine(RowWords.initials(name: named.avatarName, address: named.avatarAddress),
+                                   RowFaces.initials, kern: 0.24),
                 head: head.map { TextLine($0.uppercased(), RowFaces.head, kern: 1.1) })
         }
         needsDisplay = true
@@ -396,7 +410,7 @@ final class MailRowCell: NSTableCellView {
             inks.primary.setFill()
             NSBezierPath(ovalIn: mirrored(NSRect(x: box.minX + 2, y: box.minY + 22, width: 6, height: 6))).fill()
         }
-        drawAvatar(row, lines.initials, look: look, ring: fill ?? inks.paper, in: context)
+        drawAvatar(row, lines.initials, of: lines.named.avatarKey, look: look, ring: fill ?? inks.paper, in: context)
 
         let textX = box.minX + RowMeasure.textX
         let right = box.maxX - RowMeasure.side
@@ -472,11 +486,11 @@ final class MailRowCell: NSTableCellView {
         return nil
     }
 
-    private func drawAvatar(_ row: API.FolderRow, _ initials: TextLine, look: RowLook, ring: NSColor,
+    private func drawAvatar(_ row: API.FolderRow, _ initials: TextLine, of name: String, look: RowLook, ring: NSColor,
                             in context: CGContext) {
         let inks = look.inks
         let disc = mirrored(avatar)
-        let colours = inks.avatar(row.sender)
+        let colours = inks.avatar(name)
         colours.fill.setFill()
         NSBezierPath(ovalIn: disc).fill()
         initials.draw(in: context, x: disc.midX - initials.width / 2,
@@ -588,7 +602,7 @@ final class MailRowCell: NSTableCellView {
         var said: [String] = []
         if let head { said.append(head) }
         if !row.seen { said.append(String(localized: "Unread")) }
-        said.append(row.sender)
+        said.append(lines?.named.name ?? row.sender)
         if let count = row.conversationCount { said.append(String(localized: "\(count) messages")) }
         said.append(row.subject)
         said.append(row.when)
