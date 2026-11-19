@@ -69,6 +69,9 @@ extension AppStatus {
         theme.light(systemDark: systemDark, hour: Calendar.current.component(.hour, from: now))
     }
 
+    /// Whether the light is in high contrast: Settings' switch, or macOS's Increase Contrast, as a Mac app honours it.
+    var highContrast: Bool { (preferences?.highContrast ?? false) || systemIncreasesContrast }
+
     /// Go on to the next choice, here at once and on the server right after.
     @discardableResult
     func nextLight() -> Task<Void, Never>? {
@@ -76,10 +79,19 @@ extension AppStatus {
     }
 
     /// Follow macOS's appearance from now on, for Automatic: Dark Mode as the system sets it, which the windows' own
-    /// light doesn't change (they set only their own appearance). The app's status does this once, as it starts.
+    /// light doesn't change (they set only their own appearance); and Increase Contrast, for high contrast. The app's
+    /// status does this once, as it starts.
     func followSystemAppearance() {
         guard appearanceChanged == nil else { return }
         systemDark = Self.systemIsDark()
+        systemIncreasesContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+        contrastChanged = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.systemIncreasesContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+            }
+        }
         appearanceChanged = DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name("AppleInterfaceThemeChangedNotification"), object: nil, queue: .main
         ) { [weak self] _ in
@@ -93,15 +105,16 @@ extension AppStatus {
     }
 }
 
-/// A window in the light a person chose, and its high contrast: Meadow's colours for SwiftUI, and Night's dark for
-/// what AppKit draws (the list's rows, menus, the date picker), which reads the window's appearance.
+/// A window in the light a person chose, and its high contrast (`AppStatus.highContrast`): Meadow's colours for
+/// SwiftUI, and Night's dark for what AppKit draws (the list's rows, menus, the date picker), which reads the window's
+/// appearance.
 struct MeadowLit: ViewModifier {
     var status = AppStatus.shared
 
     func body(content: Content) -> some View {
         let light = status.light
         content
-            .meadowLight(light, highContrast: status.preferences?.highContrast ?? false)
+            .meadowLight(light, highContrast: status.highContrast)
             .preferredColorScheme(light.isDark ? .dark : .light)
     }
 }

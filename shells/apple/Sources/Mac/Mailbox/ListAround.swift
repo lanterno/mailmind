@@ -33,8 +33,7 @@ struct MailboxTable: View {
             }
             MailboxRowsTable(list: list, mailbox: mailbox, chosen: chosen,
                              cursor: mailbox.marking ? mailbox.app?.selection.copy : nil, showsAccount: showsAccount,
-                             look: RowLook(inks: RowInks.of(meadow, light: light,
-                                                            highContrast: status.preferences?.highContrast ?? false),
+                             look: RowLook(inks: RowInks.of(meadow, light: light, highContrast: status.highContrast),
                                            measure: measure, accounts: mailbox.accounts),
                              brief: brief, briefChosen: place == .desk(.brief),
                              sections: DayGroup.sections(place))

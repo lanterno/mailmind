@@ -25,7 +25,7 @@ struct StatusPill: View {
             .foregroundStyle(meadow.ink2)
             .padding(.horizontal, 12)
             .frame(height: 34)
-            .background(Capsule().fill(hovering ? meadow.paper3 : meadow.paper.opacity(0.62)))
+            .background(Capsule().fill(hovering ? meadow.paper3 : meadow.paper.opacity(meadow.seen(0.62))))
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)

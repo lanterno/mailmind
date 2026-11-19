@@ -1,8 +1,8 @@
 import SwiftUI
 
 // Meadow's colours (#44), as the mockup sets them for Day, Dusk and Night, with the page's account colours and its
-// high contrast (web/assets/styles/tokens.css). Written once from the mockup by a script; change a value here and in
-// the page's tokens together.
+// high contrast (web/assets/styles/tokens.css), which Settings' switch or macOS's Increase Contrast turns on. Written
+// once from the mockup by a script; change a value here and in the page's tokens together.
 
 /// The light the window is in: the `theme` preference the page and the app share.
 enum MeadowLight: String, CaseIterable, Sendable {
@@ -88,9 +88,15 @@ struct MeadowPalette: Sendable {
     let grain: Color
     /// A panel's shadow, and a raised card's or a dialog's.
     let shadow: [MeadowShadow], shadowPop: [MeadowShadow]
+    /// Whether paper is never seen through: high contrast's panels, fields and pills stand opaque over the sky, so
+    /// their text reads against the paper alone (`seen(_:)`).
+    var opaque = false
 
     /// The colour of the account at `index` in the config's order.
     func account(_ index: Int) -> Color { accounts[((index % accounts.count) + accounts.count) % accounts.count] }
+
+    /// How much of a panel's paper shows, where the mockup lets the sky through it: all of it in high contrast.
+    func seen(_ opacity: Double) -> Double { opaque ? 1 : opacity }
 
     static func of(_ light: MeadowLight, highContrast: Bool = false) -> MeadowPalette {
         switch (light, highContrast) {
@@ -235,7 +241,8 @@ struct MeadowPalette: Sendable {
                   color: Color(meadow: 0x685634, opacity: 0.12), inset: false),
             .init(x: 0, y: 28, blur: 60, spread: -28,
                   color: Color(meadow: 0x1E345A, opacity: 0.55), inset: false),
-        ])
+        ],
+        opaque: true)
 
     static let dusk = MeadowPalette(
         sky1: Color(meadow: 0xE59A6E),
@@ -369,7 +376,8 @@ struct MeadowPalette: Sendable {
                   color: Color(meadow: 0x785028, opacity: 0.13), inset: false),
             .init(x: 0, y: 28, blur: 60, spread: -28,
                   color: Color(meadow: 0x6E3228, opacity: 0.5), inset: false),
-        ])
+        ],
+        opaque: true)
 
     static let night = MeadowPalette(
         sky1: Color(meadow: 0x08122A),
@@ -503,7 +511,8 @@ struct MeadowPalette: Sendable {
                   color: Color(meadow: 0x96AFE6, opacity: 0.14), inset: false),
             .init(x: 0, y: 30, blur: 70, spread: -28,
                   color: Color(meadow: 0x000000, opacity: 0.9), inset: false),
-        ])
+        ],
+        opaque: true)
 }
 
 extension Color {

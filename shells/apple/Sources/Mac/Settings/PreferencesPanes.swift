@@ -63,7 +63,10 @@ struct GeneralPane: View {
                         ], fills: false)
                     }
                     SettingSwitch(String(localized: "High contrast"),
-                                  help: String(localized: "Darker ink and firmer lines, in every light."),
+                                  help: String(localized: """
+                                      Darker ink, firmer lines and solid panels, in every light. macOS’s Increase \
+                                      Contrast turns it on too.
+                                      """),
                                   isOn: status.preference(\.highContrast) { .init(highContrast: $0) })
                 }
                 DeskSideCard(title: String(localized: "Sending"), icon: .send) {

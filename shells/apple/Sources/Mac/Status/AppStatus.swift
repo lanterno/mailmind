@@ -37,6 +37,10 @@ final class AppStatus {
     /// (`followSystemAppearance`); a test sets it.
     var systemDark = false
     @ObservationIgnored var appearanceChanged: (any NSObjectProtocol)?
+    /// Whether macOS's Increase Contrast is on, which puts every light in high contrast (`highContrast`), followed as
+    /// Dark Mode is; a test sets it.
+    var systemIncreasesContrast = false
+    @ObservationIgnored var contrastChanged: (any NSObjectProtocol)?
     /// The accounts whose alert across the top a person closed.
     var alertsClosed: Set<String> = []
     /// The meetings whose reminder a person closed.

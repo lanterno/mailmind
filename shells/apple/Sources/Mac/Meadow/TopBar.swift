@@ -151,8 +151,10 @@ struct MeadowSearchBox: View {
         .frame(maxWidth: .infinity)
         .background {
             RoundedRectangle(cornerRadius: 12)
-                .fill(hovering || focused ? meadow.paperRaised : meadow.paperRaised.opacity(0.9))
-                .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(meadow.line2.opacity(0.7), lineWidth: 1) }
+                .fill(hovering || focused ? meadow.paperRaised : meadow.paperRaised.opacity(meadow.seen(0.9)))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12).strokeBorder(meadow.line2.opacity(meadow.seen(0.7)), lineWidth: 1)
+                }
         }
         .contentShape(RoundedRectangle(cornerRadius: 12))
         .onTapGesture { focused = true }

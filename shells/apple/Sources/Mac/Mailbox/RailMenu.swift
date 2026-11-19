@@ -69,7 +69,7 @@ struct RailAccountButton: View {
             MeadowPopoverAnchor(shown: $menuOpen, keys: { menu.key($0) }) {
                 // The panel is a window of its own, outside the frame's environment: it is lit as the frame is.
                 RailAccountMenu(model: menu)
-                    .meadowLight(light, highContrast: AppStatus.shared.preferences?.highContrast ?? false)
+                    .meadowLight(light, highContrast: AppStatus.shared.highContrast)
             }
         }
         .onChange(of: menuOpen, initial: true) { _, shown in

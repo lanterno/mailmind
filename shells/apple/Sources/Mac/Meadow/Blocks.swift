@@ -116,7 +116,7 @@ struct MeadowPanel: ViewModifier {
         content
             .background {
                 ZStack {
-                    (raised ? meadow.paperRaised : meadow.paper).opacity(opacity)
+                    (raised ? meadow.paperRaised : meadow.paper).opacity(meadow.seen(opacity))
                     MeadowGrain()
                     MeadowShadowsInside(shadows: shadows.filter(\.inset), radius: radius)
                 }

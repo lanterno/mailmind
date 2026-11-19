@@ -262,7 +262,7 @@ private struct SummaryNext: View {
         .padding(.vertical, 9)
         .padding(.leading, 12)
         .padding(.trailing, 10)
-        .background(meadow.paperRaised.opacity(0.78), in: RoundedRectangle(cornerRadius: 12))
+        .background(meadow.paperRaised.opacity(meadow.seen(0.78)), in: RoundedRectangle(cornerRadius: 12))
         .padding(.top, 10)
     }
 }

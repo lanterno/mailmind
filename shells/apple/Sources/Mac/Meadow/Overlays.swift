@@ -344,7 +344,7 @@ private struct MeadowPopover<Pop: View>: ViewModifier {
     func body(content: Content) -> some View {
         content.background {
             MeadowPopoverAnchor(shown: $isPresented, keys: keys) {
-                pop().meadowLight(light, highContrast: AppStatus.shared.preferences?.highContrast ?? false)
+                pop().meadowLight(light, highContrast: AppStatus.shared.highContrast)
             }
         }
     }
