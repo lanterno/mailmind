@@ -20,6 +20,7 @@ client can't tell whether it was sent).
 """
 import base64
 import hashlib
+import socket
 import socketserver
 import ssl
 import threading
@@ -193,6 +194,9 @@ class _Handler(socketserver.BaseRequestHandler):
     def handle(self):
         session = _Session(self.server.fake, self.request)
         try:
+            # EHLO's lines are writes of their own: without this, each after the first waits for the client's delayed
+            # acknowledgement, 40 ms on Linux (fakes/imap_server.py says more).
+            session.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             session.run()
         except (ConnectionError, OSError, ssl.SSLError):
             pass

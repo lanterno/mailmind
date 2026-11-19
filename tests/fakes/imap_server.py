@@ -849,6 +849,10 @@ class _Handler(socketserver.BaseRequestHandler):
         s = Session(srv, self.request)
         srv._sessions.add(s)
         try:
+            # Each line of an answer is a write of its own. Nagle's algorithm would hold the second until the client
+            # acknowledges the first, which Linux puts off 40 ms, so every answer of more than a line took that long on CI's
+            # runners and none on a Mac. A server writes an answer whole.
+            s.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             if srv.implicit_tls:
                 s.sock = srv.tls_context.wrap_socket(s.sock, server_side=True)
                 s.rfile, s.tls = s.sock.makefile("rb"), True
