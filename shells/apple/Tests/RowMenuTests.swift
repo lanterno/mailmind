@@ -78,13 +78,15 @@ final class RowMenuTests: XCTestCase {
         XCTAssertEqual(mailbox.chosenRows.map(\.key), [2], "and its row chosen")
     }
 
-    func testMoveToMovesTheRowClicked() async throws {
+    func testMoveToMovesTheRowClickedAndHasNoEmptyItem() async throws {
         let (app, server) = try await world()
         let mailbox = app.mailbox
         mailbox.chose([try row(app, 0)])
         let clicked = try row(app, 3)
         let move = try item("Move To", in: RowMenu.items(for: mailbox, clicked: clicked))
         let folders = try XCTUnwrap(move.submenu?.items)
+        XCTAssertFalse(folders.contains { $0.isSeparatorItem }, "nothing between the folders and Other Folder…")
+        XCTAssertFalse(folders.contains { $0.title.isEmpty }, "and no item without words")
         XCTAssertEqual(folders.last?.title, "Other Folder…")
 
         try fire(try XCTUnwrap(folders.first))
