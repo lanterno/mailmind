@@ -251,6 +251,7 @@ tests/e2e/browser/test_brief.py::test_mail_landing_elsewhere_says_so_and_takes_y
 tests/e2e/browser/test_brief.py::test_needs_you_opens_a_list_of_its_own_with_a_way_back
 tests/e2e/browser/test_brief.py::test_read_opens_the_message_and_escape_comes_back_to_the_brief
 tests/e2e/browser/test_brief.py::test_refresh_writes_it_again
+tests/e2e/browser/test_brief.py::test_see_all_under_who_youre_waiting_on_says_how_many_waiting_holds
 tests/e2e/browser/test_brief.py::test_the_brief_is_written_once_when_the_inbox_opens
 tests/e2e/browser/test_brief.py::test_the_page_has_nothing_axe_finds[day]
 tests/e2e/browser/test_brief.py::test_the_page_has_nothing_axe_finds[dusk]

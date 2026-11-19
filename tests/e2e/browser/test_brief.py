@@ -302,6 +302,33 @@ def test_the_tally_of_the_waiting_place_says_waiting_of_both_kinds_and_opens_it(
     clean(page)
 
 
+def test_see_all_under_who_youre_waiting_on_says_how_many_waiting_holds(page, app, world, ai):
+    """The card lists who you're waiting on, three of them; See all opens Waiting, which holds what others wait on you
+    for too, so it says how many Waiting holds, as the tally does."""
+    from mailmind.bootstrap.mailbox import store
+    brief_replies(ai)
+    sent = ("ada-inbox-03-newsletter.eml", "ada-inbox-04-ci.eml", RECEIPT, "ada-inbox-06-outlook-invite.eml")
+    with app.stopped():
+        c = store.conn()
+        try:
+            for name, kind in ((LUNCH[0], "received"), *((name, "sent") for name in sent)):
+                c.execute("INSERT OR REPLACE INTO followups(account, thread_id, kind, state, first_sent_ts, last_msg_ts, "
+                          "due_ts, created_at) VALUES(?,?,?,'due',1793500000,1793500000,1793600000,?)",
+                          (w.ADA, world.row(name)["thread_id"], kind, NOW))
+            c.commit()
+        finally:
+            c.close()
+    page.goto("/")
+    expect(page.locator(".bs-wt")).to_have_count(3)
+    more = page.locator(".bs-more")
+    expect(more).to_have_text("See all 5")
+    expect(page.locator(".bf-tally[data-brief='__waiting__']")).to_have_text("5 waiting")
+    more.click()
+    expect(page.locator("#listTitle")).to_have_text("Waiting")
+    expect(page.locator("#rows .row[data-key]")).to_have_count(5)
+    clean(page)
+
+
 def test_a_topic_from_the_brief_lists_its_mail(page, app, world, ai):
     lunch_needs_a_reply(app, world)
     brief_replies(ai, [{"label": "Lunch", "count": 1, "pks": [world.pk(LUNCH[1])]}])
