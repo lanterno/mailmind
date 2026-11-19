@@ -80,6 +80,13 @@ final class OutboxButtonTests: XCTestCase {
         XCTAssertEqual(host.fittingSize.width, 0)
     }
 
+    /// The button counts what waits, and says no "0" while its tray stays open with nothing left in it.
+    func testTheButtonCountsWhatWaitsAndNeverSaysNought() {
+        XCTAssertNil(OutboxButton.badge(0))
+        XCTAssertEqual(OutboxButton.badge(1), "1")
+        XCTAssertEqual(OutboxButton.badge(12), "12")
+    }
+
     /// Reads in flight together answer in any order: the tray shows the newest one's.
     func testAnOlderReadThatAnswersLateIsLetGo() async {
         let routes = FakeRoutes()
