@@ -83,6 +83,12 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
     private var briefWidth: Float?
     /// The day the heads were worked out on.
     private var now = Date()
+    /// Whether the list stood at its top as it last settled, its height then, whether its height has changed since,
+    /// and whether it settles at the end of this turn (`keepAtTop`).
+    private var stoodAtTop = true
+    private var heightSeen: CGFloat = 0
+    private var resized = false
+    private var settling = false
     /// The row under the pointer, and which of its parts.
     private var hovered: (row: Int, target: RowTarget?)?
     /// A choice the mailbox asked for is being shown: the table doesn't tell it back.
@@ -233,11 +239,41 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
     // MARK: The scroll position, once a frame
 
     @objc private func moved(_ note: Notification) {
+        keepAtTop()
         report.request(framesPerSecond: scrollView.window?.screen?.maximumFramesPerSecond ?? 60)
         // A row scrolled under a pointer that didn't move is under it all the same.
         if let window = table.window, hovered != nil {
             hover(at: table.convert(window.mouseLocationOutsideOfEventStream, from: nil))
         }
+    }
+
+    /// A list at its top stays at its top as it grows or shrinks, as the offline note comes over it or goes: its rows
+    /// make room under the note, as the page's do, rather than holding their place on the screen and passing under
+    /// the note's edge with the brief's row and the first day's head. A list scrolled down is left where it is.
+    /// The frame and the scroll position change in either order as the list's height does, so the list settles once
+    /// the turn's changes are in, by where it stood before them. Its first height is no change: a list opened on a
+    /// row further down stays scrolled to it.
+    private func keepAtTop() {
+        let height = scrollView.contentView.frame.height
+        if height != heightSeen {
+            resized = resized || heightSeen > 0
+            heightSeen = height
+        }
+        guard !settling else { return }
+        settling = true
+        DispatchQueue.main.async { [weak self] in self?.settle() }
+    }
+
+    private func settle() {
+        settling = false
+        let clip = scrollView.contentView
+        let top = -scrollView.contentInsets.top
+        if resized, stoodAtTop, clip.bounds.minY != top {
+            clip.scroll(to: NSPoint(x: clip.bounds.minX, y: top))
+            scrollView.reflectScrolledClipView(clip)
+        }
+        resized = false
+        stoodAtTop = clip.bounds.minY <= top + 0.5
     }
 
     private func reportVisible() {
