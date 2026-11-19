@@ -126,6 +126,20 @@ describe("what the stream says changed", () => {
     await send("sync-done", { account: "a@example.test", kept: 0, junk: 3 });
     expect(readKeys()).toContain("messages");                      // junk it filed is mail a list shows too
   });
+  it("summaries landing read the lists, their tabs and Tidy again at once, and the brief's tallies a moment later", async () => {
+    await open();
+    await send("summarized", { count: 9 });
+    expect(readKeys()).toEqual(["messages", "tidy"]);
+    await act(async () => vi.advanceTimersByTime(400));
+    expect(readKeys()).toEqual(["messages", "tidy", "digest"]);
+  });
+  it("summaries landing beside mail changing read the digest once for both", async () => {
+    await open();
+    await send("new-mail");
+    await send("summarized", { count: 1 });
+    await act(async () => vi.advanceTimersByTime(400));
+    expect(readKeys().filter((k) => k === "digest")).toHaveLength(1);
+  });
   it("a server that didn't answer reads the status again, and nothing else", async () => {
     await open();
     await send("sync-trouble", { account: "a@example.test" });
