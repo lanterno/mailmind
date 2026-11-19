@@ -64,7 +64,8 @@ enum Lane: String, Hashable, Sendable {
     var title: String {
         switch self {
         case .feed: String(localized: "Feed")
-        case .papertrail: String(localized: "Paper Trail")
+        // As the rail names it (the server's view, which the page's rail shows), and every card beside it.
+        case .papertrail: String(localized: "Paper trail")
         }
     }
 }
