@@ -338,6 +338,7 @@ function Rules() {
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ["rules"], queryFn: () => get("/api/rules") });
   const [text, setText] = useState("");
+  // Whether the rule was kept. A refusal says why in the server's words (what isn't one address or one domain, say).
   const send = async (token: string, verdict: RuleChange, say: string) => {
     try {
       const d = await post("/api/rules", { token, verdict });
@@ -345,8 +346,10 @@ function Rules() {
       void qc.invalidateQueries({ queryKey: ["rules"] });
       void qc.invalidateQueries({ queryKey: ["stats"] });
       if ((d as { reclassified?: unknown }).reclassified) readAgain(qc);     // a rule changed how stored mail reads
-    } catch {
-      toast("Rule failed");
+      return true;
+    } catch (e) {
+      toast(refusalOf(e)?.detail || "Rule failed");
+      return false;
     }
   };
   const r = data?.rules;
@@ -367,8 +370,10 @@ function Rules() {
         onKeyDown={(e) => {
           const t = text.trim();
           if (e.key !== "Enter" || !t) return;
-          setText("");
-          void send(t, e.shiftKey ? "block" : "keep", `${e.shiftKey ? "Blocked" : "Keeping"} ${t}`);
+          // What was typed stays until it is kept, so a refused one can be put right rather than typed again.
+          void send(t, e.shiftKey ? "block" : "keep", `${e.shiftKey ? "Blocked" : "Keeping"} ${t}`).then((kept) => {
+            if (kept) setText((now) => (now.trim() === t ? "" : now));
+          });
         }}
       />
     </>
