@@ -3,6 +3,10 @@
 //! failed too, or once the first failure in a row is three minutes old. Any other, a password refused, a certificate
 //! changed or a panic, shows at once. A sync that works ends the run. A run may begin before any sync has failed,
 //! with a connection to the server that couldn't be made outside one (`Failing::heard`): it counts from then.
+//!
+//! While a run of trouble that may pass lasts, the account's server is tried again every `RETRY_SECONDS`, so the
+//! sync that ends it comes within moments of the server answering again, not at the next round, minutes on. A try
+//! that fails changes nothing: it is no sync of the round's, and counts toward nothing.
 
 /// The kinds of trouble that may pass (`error_kind`'s): a connection lost or refused, a name not found, a server that
 /// didn't answer in time.
@@ -13,6 +17,8 @@ pub const UNAVAILABLE: &str = "LoginUnavailable";
 pub const SHOWS_AFTER_ROUNDS: u32 = 2;
 /// The seconds since the first failure in a row at which trouble that may pass shows.
 pub const SHOWS_AFTER_SECONDS: i64 = 180;
+/// The seconds between tries of an account's server while its trouble may pass.
+pub const RETRY_SECONDS: i64 = 20;
 
 /// Whether a failure of `class`, of `kind`, is trouble that may pass (`accounts.may_pass`): one of the `PASSING`
 /// kinds, or a login its server couldn't take for now. A login it refused never is.

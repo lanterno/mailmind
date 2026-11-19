@@ -2,7 +2,8 @@
 //! (`serve_python.py` says what each does). Those this server has yet: a folder's sync, waking what is snoozed, the
 //! minute's round of follow-ups, a pass of the change queue, an account's reconcile, a pass of the outbox and a round
 //! of the drafts' pushes; the forget round; a round of the body backfill and one of warming folders beyond the Inbox;
-//! and the assistant's triage, a reply drafted ahead and a run of Tidy. A job the Rust server doesn't run yet says so.
+//! a try of the accounts whose servers didn't answer; and the assistant's triage, a reply drafted ahead and a run of
+//! Tidy. A job the Rust server doesn't run yet says so.
 
 use mm_server::App;
 use serde_json::Value;
@@ -39,6 +40,11 @@ pub fn work(app: &App, argument: &str) -> String {
         // The Mailbox's: a round of the body backfill, and one of warming folders beyond the Inbox, every account's.
         "backfill" => app.backfill.round().map(drop).map_err(|fault| fault.class.to_owned()),
         "warm" => app.warming.tick(None).map_err(|fault| fault.class.to_owned()),
+        // The accounts whose servers didn't answer, tried again.
+        "retry" => {
+            app.syncing.try_unreached();
+            Ok(())
+        }
         _ => return format!("failed {job}: not on the Rust server yet"),
     };
     match done {

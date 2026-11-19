@@ -30,6 +30,11 @@
 //! told, and the sync that measures it runs now. It counts no failed sync: the next that fails is the run's first.
 //! One dropped connection that connects again at once logs in, and says nothing.
 //!
+//! While an account's trouble may pass, the background tries it again every `sync_health::RETRY_SECONDS` (`try_unreached`),
+//! so it says it synced within moments of its server answering again, rather than at the next round. A try is its
+//! sync, run on its own: one that fails changes nothing and says nothing, and counts no failed sync, so trouble shows
+//! as it would have, after the round's next sync or three minutes on.
+//!
 //! A sync that works after one of the account's failed, a wake between them or not, and a person's Retry, let go of
 //! the waits of the changes queued for its server (`AroundSync::server_back`): they go now, not minutes on.
 //!
@@ -104,6 +109,8 @@ struct Held {
     /// Each account whose last sync failed, kept through a wake: its next sync that works lets the changes queued for
     /// its server go.
     unreached: BTreeSet<String>,
+    /// The accounts whose sync now is a try of a server that didn't answer (`try_unreached`).
+    retrying: BTreeSet<String>,
 }
 
 /// The coarse, scrubbed kind of a sync's failure, from its class alone (`accounts.domain.health.error_kind`). MailMind
@@ -303,6 +310,7 @@ impl Syncing {
         held.again.remove(account);
         held.older_failed.remove(account);
         held.unreached.remove(account);
+        held.retrying.remove(account);
     }
 
     /// The account was removed: each sync reading its mail stops at its next step (its flights were told), and nothing
@@ -372,6 +380,7 @@ impl Syncing {
                 Ok(0)
             }
             Ok(synced) => {
+                self.held().retrying.remove(email);
                 self.held().failing.remove(email);
                 if self.held().unreached.remove(email) {
                     // The server answers again: what was queued for it while it didn't goes now.
@@ -407,6 +416,12 @@ impl Syncing {
             }
             Err(error) => {
                 let (class, kind, now) = (error.class(), error_kind(error), self.seconds());
+                let tried = self.held().retrying.remove(email);
+                if tried && sync_health::may_pass(class, kind) {
+                    // A try of a server that still doesn't answer: the account shows as it did, its run as it was.
+                    self.show_as_before(email, before);
+                    return Ok(0);
+                }
                 let run = {
                     let mut held = self.held();
                     held.unreached.insert(email.to_owned());
@@ -509,6 +524,42 @@ impl Syncing {
         let _turn = self.warming.lock().unwrap_or_else(PoisonError::into_inner);
         if let Err(fault) = caught(|| self.warm.tick(Some(&warmed))).and_then(|ticked| ticked) {
             log::warning("warm", "tick error", &[], Some(fault.class));
+        }
+    }
+
+    /// Try again each account whose syncs fail by trouble that may pass and whose sync isn't running: its sync, on its
+    /// own, each on a thread of its own when there are several. One that works ends the trouble as any sync that works
+    /// does; one that fails changes nothing (`sync_account`). Nothing else a round does goes with it: no snooze wakes,
+    /// no folder is warmed, and the round's last end stays as it was. New mail sets its triage going.
+    pub fn try_unreached(&self) {
+        let trying: Vec<String> = {
+            let mut held = self.held();
+            let trying: Vec<String> = held
+                .failing
+                .iter()
+                .filter(|(account, run)| run.passing && !held.flying.contains(*account))
+                .map(|(account, _)| account.clone())
+                .collect();
+            for account in &trying {
+                held.flying.insert(account.clone());
+                held.retrying.insert(account.clone());
+            }
+            trying
+        };
+        if trying.is_empty() {
+            return;
+        }
+        let flights: Vec<Flight<'_>> =
+            trying.iter().map(|account| Flight { syncing: self, account, landed: false }).collect();
+        let new: usize = std::thread::scope(|scope| {
+            let flying: Vec<_> = flights.into_iter().map(|flight| scope.spawn(move || self.fly(flight))).collect();
+            flying.into_iter().map(|flight| flight.join().unwrap_or(0)).sum()
+        });
+        if new > 0 {
+            if let Err(fault) = self.folders.invalidate(None) {
+                log::warning(TAG, "the rail's counts kept couldn't go", &[], Some(fault.class));
+            }
+            self.around.new_mail();
         }
     }
 

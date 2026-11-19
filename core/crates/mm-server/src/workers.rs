@@ -25,6 +25,8 @@ const TAG: &str = "jobs";
 pub const SYNC_INTERVAL: i64 = 300;
 /// The job that reads what a first scan left of a folder's older mail.
 pub const OLDER_MAIL: &str = "older-mail";
+/// The job that tries an account's server again while its trouble may pass.
+pub const RETRY: &str = "retry";
 /// Seconds between the minute's rounds: snoozes woken, follow-ups brought up to date.
 pub const CLOCKED_INTERVAL: i64 = 60;
 
@@ -261,6 +263,17 @@ impl Workers {
                 Box::new(move || {
                     warmed.call_once(|| crate::one_password::warm(&warming));
                     syncing.sync_once();
+                    Ok(None)
+                }),
+            ));
+            // An account whose server didn't answer, tried again every few seconds while its trouble may pass, so
+            // the trouble ends within moments of the server answering. With none, a round does nothing.
+            let retrying = app.syncing.clone();
+            let every = mm_mailbox::sync_health::RETRY_SECONDS;
+            lanes.push((
+                app.jobs.add(RETRY, every, every),
+                Box::new(move || {
+                    retrying.try_unreached();
                     Ok(None)
                 }),
             ));
