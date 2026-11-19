@@ -68,7 +68,30 @@ final class FakeServer: @unchecked Sendable {
             log.append(asked)
             return routes["\(method) \(path)"]
         }
-        return route?(asked) ?? Self.refused(404, "No such route in this test")
+        if let route { return route(asked) }
+        if method == "GET", path == API.Get.MessageRow.path { return listedCopy(asked) }
+        return Self.refused(404, "No such route in this test")
+    }
+
+    /// One message's row, as the server reads it from what its folder lists: here, the folder's listing the test gives
+    /// `/api/messages`, read whole, unasked and unlogged. Not found where it holds none.
+    private func listedCopy(_ asked: Asked) -> CoreAnswer {
+        guard let listing = lock.withLock({ routes["GET \(API.Get.Messages.path)"] }) else {
+            return Self.refused(404, "No such route in this test")
+        }
+        var query = asked.query
+        let uid = query.removeValue(forKey: "uid").flatMap { Int($0) }
+        let key = query.removeValue(forKey: "key").flatMap { Int($0) }
+        let folder = query["folder"] ?? "INBOX"
+        query["offset"] = "0"
+        query["limit"] = "1000000"
+        let read = listing(Asked(method: "GET", path: API.Get.Messages.path, query: query, body: Data()))
+        guard case .folderListing(let page)? = try? Core.decoded(API.MessagesAnswer.self, from: read),
+              let row = page.items.first(where: {
+                  $0.folder == folder && (uid == nil || $0.uid == uid) && (key == nil || $0.key == key)
+              })
+        else { return Self.refused(404, "not listed") }
+        return Self.ok(API.ListedCopy(ok: true, row: row))
     }
 }
 
