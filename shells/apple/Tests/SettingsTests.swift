@@ -1256,8 +1256,8 @@ final class AccountFixTests: XCTestCase {
         }
         XCTAssertEqual(gmail.inSheet(.failed("Gmail didn't accept that password.", link: page,
                                              detail: "AUTHENTICATIONFAILED")),
-                       .failed(AccountDraft.gmailTurnedDown, link: nil, detail: "AUTHENTICATIONFAILED"),
-                       "the class stays, in small type")
+                       .failed(AccountDraft.gmailTurnedDown, link: nil, detail: nil),
+                       "its kind isn't said again under the sentence that says it")
         let signIn = Tested.failed("Google wants you to sign in on the web first.", link: nil)
         XCTAssertEqual(gmail.inSheet(signIn), signIn, "no App Password fixes it: its own words")
         XCTAssertEqual(gmail.inSheet(.connected), .connected)
@@ -1278,10 +1278,32 @@ final class AccountFixTests: XCTestCase {
         XCTAssertEqual(icloud.passwordPage, apple?.url)
         XCTAssertEqual(icloud.inSheet(.failed("iCloud didn't accept that password.", link: apple,
                                               detail: "AUTHENTICATIONFAILED")),
-                       .failed("iCloud didn't accept that password.", link: nil, detail: "AUTHENTICATIONFAILED"))
+                       .failed("iCloud didn't accept that password.", link: nil, detail: nil))
         // An edited Other IMAP account's row shows no page: the test's stays.
         let ada = AccountDraft(editing: StatusFixtures.account("ada@example.test"))
         XCTAssertEqual(ada.inSheet(.failed("No.", link: apple)), .failed("No.", link: apple))
+    }
+}
+
+extension AccountFixTests {
+    /// A wrong password at an Other IMAP account is said once: the core's sentence, never "The server turned down the
+    /// password" again under it. A kind of trouble the core says only in general, a connection lost, keeps its plain
+    /// words in small type.
+    func testTheSheetSaysATestsTroubleOnce() {
+        let ada = AccountDraft(editing: StatusFixtures.account("ada@example.test"))
+        let wrong = Tested.failed("The server didn't accept that address and password. Check them; if your provider "
+                                  + "offers app passwords, make one and paste it here.", detail: "AUTHENTICATIONFAILED")
+        XCTAssertEqual(ada.inSheet(wrong), .failed("The server didn't accept that address and password. Check them; if "
+                                                   + "your provider offers app passwords, make one and paste it here."))
+        for said in ["no password", "SMTP AUTHENTICATIONFAILED", "connection refused", "timeout", "host not found",
+                     "certificate changed", "SSLCertVerificationError", "SMTP SSLError", "SMTP port must be 1–65535"] {
+            XCTAssertTrue(Tested.saidInFull(said), said)
+        }
+        let lost = Tested.failed("MailMind couldn't log in. Check the address, the password and the server's settings.",
+                                 detail: "ConnectionResetError")
+        XCTAssertEqual(ada.inSheet(lost), lost, "the general sentence: what kind of trouble it was stays")
+        XCTAssertEqual(Tested.plainWords(of: "ConnectionResetError"), "The connection to the server was lost.")
+        XCTAssertFalse(Tested.saidInFull(nil))
     }
 }
 
