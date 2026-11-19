@@ -6,8 +6,20 @@ import type { Row } from "./rows";
 
 export type DigestItem = GetAnswers["/api/digest"]["items"][number];
 
-export const needsYou = (items: DigestItem[]) =>
-  items.filter((it) => it.needs_you).sort((a, b) => (b.importance || 0) - (a.importance || 0) || b.key - a.key);
+// What needs you, the weightiest first, then the newest: a conversation once, by its weightiest message, so the brief
+// lists and counts a conversation as the Inbox shows it, not one card for each message in it that asks something.
+export function needsYou(items: DigestItem[]) {
+  const listed = new Set<string>();
+  return items
+    .filter((it) => it.needs_you)
+    .sort((a, b) => (b.importance || 0) - (a.importance || 0) || b.key - a.key)
+    .filter((it) => {
+      const conversation = `${it.account}\n${it.thread_id ?? `message ${it.key}`}`;
+      if (listed.has(conversation)) return false;
+      listed.add(conversation);
+      return true;
+    });
+}
 
 export const safeToFile = (items: DigestItem[]) => items.filter((it) => it.safe_to_file);
 
