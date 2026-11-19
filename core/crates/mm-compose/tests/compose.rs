@@ -52,6 +52,12 @@ fn one_that_went_out_is_sent_until_its_copy_in_sent_is_owed_and_failed() {
 }
 
 #[test]
+fn a_send_names_the_draft_it_goes_from() {
+    assert_eq!(listed(&send(json!({"draft_id": 7})))["draft_id"], 7);
+    assert_eq!(listed(&send(json!({})))["draft_id"], Value::Null);
+}
+
+#[test]
 fn a_send_whose_answer_never_came_is_unsure() {
     assert_eq!(listed(&send(json!({"state": "error", "wire_begun": 1})))["unsure"], true);
     assert_eq!(listed(&send(json!({"state": "error", "wire_begun": 1, "delivered": 1})))["unsure"], false);
