@@ -50,8 +50,8 @@ class Copies:
     def append_to_drafts(self, acct: Account, raw: bytes, prev_uid: int | None = None, prev_uidvalidity: int | None = None,
                          prev_msgid: str | None = None, prev_folder: str | None = None, message_id: str | None = None,
                          tried: str | None = None) -> tuple[FolderName, int | None, int | None, int | None]:
-        """APPEND a draft (flagged \\Draft) to the account's Drafts folder, then delete the previous
-        copy (single-UID expunge — NEVER a bulk expunge). Returns
+        """APPEND a draft (flagged \\Seen and \\Draft, as a mail app files its own) to the account's Drafts folder,
+        then delete the previous copy (single-UID expunge — NEVER a bulk expunge). Returns
         (folder, new_uid|None, uidvalidity|None, removed_uid|None). Append first, so a save that fails or
         a crash never leaves none: at worst the old copy stays beside the new one. prev_folder: where the
         previous copy is; when that isn't this Drafts folder, nothing is deleted here (its UID means
@@ -82,7 +82,7 @@ class Copies:
                     del_uid = None
             left = self._left_by(s, tried)
             landed = left if left and tried == message_id else None
-            new_uid = landed or s.append(drafts, raw, flags=["\\Draft"], when=datetime.now().astimezone())
+            new_uid = landed or s.append(drafts, raw, flags=["\\Seen", "\\Draft"], when=datetime.now().astimezone())
             if left and not landed:
                 try:
                     s.add_flags([left], ["\\Deleted"])
