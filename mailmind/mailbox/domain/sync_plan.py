@@ -49,6 +49,14 @@ def reads_bodies(folder: str) -> bool:
     return folder.upper() == "INBOX"
 
 
+def reads_text(*, inbox: bool, restoring: bool, junk: bool, draft: bool) -> bool:
+    """Whether a sync reads a message's text from its opening as it stores it: in a folder that reads bodies (`inbox`),
+    what isn't junk, for the AI's snippet; a draft wherever it is, as drafts are few and a person's own, so its row says what
+    it says from the first; and whatever Undo brings back (`restoring`), junk too, so its row shows as it did before it
+    left. The Rust core's `sync_plan::reads_text` says the same."""
+    return restoring or draft or (inbox and not junk)
+
+
 def asked_again(asked: Sequence[frozenset[str] | None]) -> set[str] | None:
     """What the next sync round covers, of the accounts each ask named while one ran; None, every account, wins."""
     return None if None in asked else {e for one in asked if one is not None for e in one}

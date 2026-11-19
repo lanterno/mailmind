@@ -117,11 +117,12 @@ class Ingest:
 
     def _process(self, session: MailSession, acct: Account, uids: Sequence[int], folder: FolderName = INBOX,
                  with_body: bool = False, advance: bool = True, stored: list[int] | None = None, arriving: bool = False,
-                 flight: Flight | None = None) -> Stored:
+                 flight: Flight | None = None, restoring: bool = False) -> Stored:
         """Store ALL of the given UIDs (junk kept as a badge, with flags) for the folder `session`
-        has selected. Bodies are fetched only when with_body (INBOX, for the AI snippet), and one
+        has selected. Bodies are fetched only where `sync_plan.reads_text` says: with_body (INBOX, for the AI snippet)
+        for what isn't junk, a draft in any folder, and with `restoring` (Undo's) each, junk too; one
         shorter than WHOLE_BELOW, or carrying an invite, is kept as opening it would keep it;
-        other folders get headers+flags only (fast) and fetch the body lazily on open.
+        the rest get headers+flags only (fast) and fetch the body lazily on open.
         advance=False stores them without touching the folder's watermark: only a sync that has
         seen every UID up to a point may say the folder is synced to there.
         `stored` gets the pks of what threading has yet to hear of.
@@ -162,7 +163,8 @@ class Ingest:
         queued = False
         for r in rows:
             snippet, body = "", None
-            if with_body and not r["is_junk"]:
+            if sync_plan.reads_text(inbox=with_body, restoring=restoring, junk=bool(r["is_junk"]),
+                                    draft=bool(r["flags"]["draft"])):
                 try:
                     try:
                         raw = session.body(r["uid"]) or b""
@@ -326,8 +328,9 @@ class Ingest:
 
 
     def ingest_messages(self, acct: Account, folder: FolderName, message_ids: Sequence[str]) -> int:
-        """The same for each of `message_ids`, on one session: Undo's way to bring back a sweep's hundreds at once.
-        Returns how many it stored."""
+        """The same for each of `message_ids`, on one session: Undo's way to bring back a sweep's hundreds at once. Each is
+        read with its text, junk too and whatever the folder, so its row shows as it did before it left, not bare until
+        the body backfill comes to it. Returns how many it stored."""
         wanted = [m for m in message_ids if m]
         if not wanted:
             return 0
@@ -354,7 +357,7 @@ class Ingest:
                 return 0
             stored: list[int] = []
             self._process(s, acct, sorted(uids), folder, with_body=sync_plan.reads_bodies(folder), advance=False,
-                          stored=stored, flight=flight)
+                          stored=stored, flight=flight, restoring=True)
             with self._uow.write() as c:
                 self._store.thread_stored(c, acct["email"], stored)
                 self._attention.on_ingest(c, acct["email"])
