@@ -102,8 +102,8 @@ final class CoreHomeTests: XCTestCase {
         XCTAssertEqual(CoreHome.variables(["MAILMIND_PROFILE": "dev"], readOnly: true), ["MAILMIND_PROFILE": "dev"])
     }
 
-    /// The switch is the person's own MailMind's: a demo or test run shares the app's defaults, so with the switch on
-    /// it still runs only as it was started.
+    /// The switch is the person's own MailMind's: a demo or test run keeps preferences of its own, and with the switch
+    /// on still runs only as it was started.
     func testTheReadOnlySwitchNeverReachesADemoOrTestRun() throws {
         XCTAssertEqual(try CoreHome.ofThisProcess(["MAILMIND_HOME": "/private/tmp/home"], readOnly: true).variables, [:])
         let started = try CoreHome.ofThisProcess(["MAILMIND_HOME": "/private/tmp/home", "MAILMIND_PROFILE": "read-only"],

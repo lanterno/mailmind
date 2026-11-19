@@ -320,7 +320,7 @@ final class ReadOnlyRunTests: XCTestCase {
         await fulfillment(of: [openedLater], timeout: 0.3)
     }
 
-    /// A test run shares the app's defaults, so it has no switch: it says how it runs in the switch's place.
+    /// A test run runs only as it was started, so it has no switch: it says how it runs in the switch's place.
     func testADemoOrTestRunHasNoSwitchAndSaysHowItRuns() {
         XCTAssertFalse(ReadOnlyRun.switchable)
         XCTAssertEqual(ReadOnlyRun.notSwitchable(running: "read-only"), """
