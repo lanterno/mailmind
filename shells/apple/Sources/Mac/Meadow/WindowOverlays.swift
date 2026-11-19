@@ -73,6 +73,8 @@ struct WindowOverlays: ViewModifier {
             .environment(\.toastRoom, toastRoom)
             .background { DialogFocusWindow(focus: focus) }
             .background { TypingWatch { mailbox.editingText = $0 } }
+            // The list's single keys that nothing else in the window took, as after a click on the brief's card.
+            .background { UntakenKeys(mailbox: mailbox) }
             .onAppear { focus.waits = { [status] in status.firstRun } }
             .overlay(alignment: .topLeading) { snoozeAnchor }
             .overlay {

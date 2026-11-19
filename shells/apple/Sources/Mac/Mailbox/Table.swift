@@ -988,6 +988,99 @@ enum RowKeys {
     }
 }
 
+/// The single keys nothing in the mail window takes, as after a click on the brief's card or a lane, which leaves the
+/// keyboard with the window's SwiftUI and no key of the list's working: they go on to the list, which takes the
+/// keyboard with them, and where no list is shown they run as the list runs them, so z, j and k do what the toasts and
+/// the legend say. It stands last in the window's chain of responders, so whatever takes a key first keeps it: a
+/// field, the gate, the rail's arrows, a dialog. A key typed in a field never reaches it.
+struct UntakenKeys: NSViewRepresentable {
+    let mailbox: Mailbox
+
+    func makeNSView(context: Context) -> NSView { Probe(mailbox) }
+
+    func updateNSView(_ view: NSView, context: Context) {}
+
+    final class Probe: NSView {
+        let mailbox: Mailbox
+
+        init(_ mailbox: Mailbox) {
+            self.mailbox = mailbox
+            super.init(frame: .zero)
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let window { Catcher.hang(on: window, for: mailbox) }
+        }
+    }
+
+    /// The responder after the window, once a window, which the window holds: its chain doesn't.
+    final class Catcher: NSResponder {
+        weak var mailbox: Mailbox?
+        weak var window: NSWindow?
+        /// When g was pressed with no list to wait for its letter.
+        private var chordAt: Date?
+        private nonisolated(unsafe) static var held: UInt8 = 0
+
+        /// Stand after `window` in its chain, once.
+        @discardableResult
+        static func hang(on window: NSWindow, for mailbox: Mailbox) -> Catcher {
+            var next = window.nextResponder
+            while let responder = next {
+                if let held = responder as? Catcher {
+                    held.mailbox = mailbox
+                    return held
+                }
+                next = responder.nextResponder
+            }
+            let catcher = Catcher()
+            catcher.mailbox = mailbox
+            catcher.window = window
+            catcher.nextResponder = window.nextResponder
+            window.nextResponder = catcher
+            objc_setAssociatedObject(window, &held, catcher, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            return catcher
+        }
+
+        override func keyDown(with event: NSEvent) {
+            guard let mailbox, let window, let key = Self.single(event, in: window, mailbox: mailbox) else {
+                return super.keyDown(with: event)
+            }
+            if let table = ListTable.find(in: window.contentView), !table.isHiddenOrHasHiddenAncestor {
+                window.makeFirstResponder(table)
+                return table.keyDown(with: event)
+            }
+            let lower = Character(key.lowercased())
+            if let at = chordAt, Date().timeIntervalSince(at) < 1.8 {
+                chordAt = nil
+                return mailbox.go(chord: lower)
+            }
+            if !RowKeys.run(lower, on: mailbox, chord: { [weak self] in self?.chordAt = Date() }) {
+                super.keyDown(with: event)
+            }
+        }
+
+        /// The single key `event` is, when it is one the list's keys take and nothing is being typed: a character
+        /// with no ⌘, ⌃ or ⌥ (⇧ only for # and ?), never Space, Return, Esc, Delete, Tab or the arrows.
+        static func single(_ event: NSEvent, in window: NSWindow, mailbox: Mailbox) -> Character? {
+            guard mailbox.singleKeys, !mailbox.typing, !typesText(window.firstResponder),
+                  event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
+                  let typed = event.charactersIgnoringModifiers, typed.count == 1, let key = typed.first,
+                  let scalar = key.unicodeScalars.first, scalar.value > 0x20, scalar.value < 0x7F
+            else { return nil }
+            guard !event.modifierFlags.contains(.shift) || "#?".contains(key) else { return nil }
+            return key
+        }
+
+        /// Whether `responder` takes typed text: a field's editor, or a text view that can be edited.
+        static func typesText(_ responder: NSResponder?) -> Bool {
+            responder is NSTextField || (responder as? NSTextView)?.isEditable == true
+        }
+    }
+}
+
 /// A row's context menu: the mailbox's verbs on the rows chosen, a move to one of the account's folders, and the
 /// sender's card and mail.
 @MainActor
