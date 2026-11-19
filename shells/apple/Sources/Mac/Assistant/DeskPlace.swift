@@ -17,7 +17,7 @@ enum DeskPlace: Hashable, Sendable {
         switch self {
         case .brief: String(localized: "Today’s Brief")
         case .ask: String(localized: "Answer")
-        case .screener: String(localized: "Screener")
+        case .screener: String(localized: "At the gate")
         }
     }
 }

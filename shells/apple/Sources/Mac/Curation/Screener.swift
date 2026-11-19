@@ -237,12 +237,13 @@ struct ScreenerScreen: View {
 
     // MARK: The header
 
-    /// The gate in the meadow, 210 high, with "Screener" and "At the gate" on its sky (`.gate-art`).
+    /// The gate in the meadow, 210 high, with who waits and "At the gate" on its sky (`.gate-art`). The place has one
+    /// name, the rail's, so the line over it says who stands there, not another name for it.
     private var header: some View {
         ZStack(alignment: .topLeading) {
             MeadowScene(seed: 5, gate: true, alignment: .bottom)
             VStack(alignment: .leading, spacing: 0) {
-                Text((name.map { String(localized: "Screener · \($0)") } ?? String(localized: "Screener")).uppercased())
+                Text((name.map { String(localized: "New senders · \($0)") } ?? String(localized: "New senders")).uppercased())
                     .font(.meadow(.ui, 12, .heavy))
                     .tracking(12 * 0.14)
                     .foregroundStyle(meadow.ink2)

@@ -191,8 +191,9 @@ enum Guide {
             steps.append(Step(id: "ask", symbol: "questionmark.bubble", title: String(localized: "Ask, or tell it what to do"),
                               text: String(localized: "Start the search field with ? to ask your mail a question, or with ! to say what you want done. A ! shows you what it would do, and nothing happens until you confirm.")))
         }
-        steps.append(Step(id: "screener", symbol: "person.crop.circle.badge.questionmark", title: String(localized: "The Screener"),
-                          text: String(localized: "Someone new has written? They wait in the Screener for you to decide. Allow keeps them, and Screen out stops their mail reaching your Inbox.")))
+        // Named as the rail and the gate name it, with the gate's own buttons.
+        steps.append(Step(id: "screener", symbol: "person.crop.circle.badge.questionmark", title: String(localized: "At the gate"),
+                          text: String(localized: "Someone new has written? They wait at the gate for you to decide. Let in keeps them, and Screen out stops their mail reaching your Inbox.")))
         return steps
     }
 
