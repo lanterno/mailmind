@@ -4,7 +4,7 @@ import SwiftUI
 import XCTest
 
 /// A message in a window of its own shows and does what the pane's reader does for it: the cards the desk puts in a
-/// reader, what its verbs say with their Undo, the reader's single keys.
+/// reader, what its verbs say with their Undo, the reader's single keys; and it opens clear of the others.
 @MainActor
 final class OwnWindowTests: XCTestCase {
     private static let key = "5c7e9a1b3d5f7a9c2e4b6d8f0a1c3e5b7d9f2a4c6e8b0d1f3a5c7e9b2d4f6a8c"
@@ -219,5 +219,33 @@ final class OwnWindowTests: XCTestCase {
                                                   charactersIgnoringModifiers: "#", isARepeat: false, keyCode: 20))
         XCTAssertEqual(MessageWindowKeys.Catcher.single(hash, in: window, verbs: verbs), "#", "⇧ for # and ?")
         window.contentView = nil
+    }
+
+    // MARK: Where it opens
+
+    /// A second window over the first opens a step down and to the right of it, a third further on, as a Mac cascades;
+    /// one with room where it stands stays there.
+    func testAMessagesWindowOpensClearOfTheOthers() {
+        let frame = NSRect(x: 200, y: 100, width: 820, height: 760)
+        XCTAssertEqual(OwnWindowPlace.topLeft(of: frame, among: []), NSPoint(x: 200, y: 860))
+        XCTAssertEqual(OwnWindowPlace.topLeft(of: frame, among: [frame]), NSPoint(x: 222, y: 838))
+        XCTAssertEqual(OwnWindowPlace.topLeft(of: frame, among: [frame, frame.offsetBy(dx: 22, dy: -22)]),
+                       NSPoint(x: 244, y: 816))
+        XCTAssertEqual(OwnWindowPlace.topLeft(of: frame, among: [frame.offsetBy(dx: 300, dy: 0)]),
+                       NSPoint(x: 200, y: 860))
+
+        func opened() -> NSWindow {
+            let window = NSWindow(contentRect: frame, styleMask: [.titled], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.alphaValue = 0
+            window.orderFront(nil)
+            OwnWindowPlace.opened(window)
+            return window
+        }
+        let first = opened(), second = opened()
+        defer { [first, second].forEach { $0.orderOut(nil) } }
+        XCTAssertNotEqual(second.frame.origin, first.frame.origin, "the second doesn't hide the first")
+        XCTAssertEqual(second.frame.minX - first.frame.minX, OwnWindowPlace.step)
+        XCTAssertEqual(first.frame.maxY - second.frame.maxY, OwnWindowPlace.step)
     }
 }
