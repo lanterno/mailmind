@@ -180,7 +180,7 @@ enum Addresses {
     /// A person as a recipient is written with their name: `Lin Mori <lin@example.test>`, the name quoted where it
     /// holds what an address list reads (`"Mori, Ren" <ren@example.test>`); the address alone with no name.
     static func named(_ name: String, _ address: String) -> String {
-        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = oneLine(name)
         guard !name.isEmpty, !name.contains("@") else { return address }
         guard name.unicodeScalars.contains(where: nameSpecials.contains) else { return "\(name) <\(address)>" }
         let escaped = name.replacingOccurrences(of: #"\"#, with: #"\\"#).replacingOccurrences(of: #"""#, with: #"\""#)
@@ -189,6 +189,19 @@ enum Addresses {
 
     /// What a name can't hold unquoted in an address list (RFC 5322's specials).
     private static let nameSpecials = CharacterSet(charactersIn: #"()<>[]:;,.\""#)
+
+    /// A name on one line: each control character (a line break, a tab, a NUL) and each line or paragraph separator
+    /// as a space, and a run of spaces as one. A name comes from other people's headers, and both servers refuse a
+    /// header that runs over lines, so a name that kept one would fail the send.
+    static func oneLine(_ name: String) -> String {
+        let spaced = String(String.UnicodeScalarView(name.unicodeScalars.map { scalar -> Unicode.Scalar in
+            switch scalar.properties.generalCategory {
+            case .control, .lineSeparator, .paragraphSeparator: return " "
+            default: return scalar
+            }
+        }))
+        return spaced.split(separator: " ").joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     /// Where a Reply-To sends a reply instead of to the mail's sender, or nil if it sends it to them.
     static func redirect(replyTo: String?, sender: String?) -> Redirect? {
