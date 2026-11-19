@@ -77,8 +77,9 @@ _AT = {"os.remove": ((0, 1),), "os.rename": ((0, 2), (1, 3)), "os.chmod": ((0, 2
 
 
 def _at(path, dir_fd):
-    """`path` as the call names it: relative to `dir_fd`'s directory when it has one, else as it is."""
-    if not isinstance(dir_fd, int) or not isinstance(path, (str, bytes, os.PathLike)):
+    """`path` as the call names it: relative to `dir_fd`'s directory when it has one, else as it is. An event names a
+    call given no directory with -1, which no descriptor is."""
+    if not isinstance(dir_fd, int) or dir_fd < 0 or not isinstance(path, (str, bytes, os.PathLike)):
         return path
     p = os.fsdecode(os.fspath(path))
     if os.path.isabs(p):
@@ -89,7 +90,7 @@ def _at(path, dir_fd):
             d = os.fsdecode(fcntl.fcntl(dir_fd, fcntl.F_GETPATH, bytes(1024)).split(b"\0", 1)[0])
         else:
             d = os.readlink(f"/proc/self/fd/{dir_fd}")
-    except OSError:
+    except (OSError, ValueError):
         return path                                     # a directory it can't name is judged as the name alone
     return os.path.join(d, p)
 
