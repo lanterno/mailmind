@@ -5,13 +5,15 @@ import SwiftUI
 /// folder's new name; or whether to delete a folder.
 enum FolderAsk: Equatable {
     case create(MoveAsk, name: String)
+    /// The rail's New Folder…: a folder of the account's and nothing moved into it.
+    case make(account: String)
     case rename(account: String, folder: API.RailFolder)
     case delete(account: String, folder: API.RailFolder)
 
     var account: String {
         switch self {
         case .create(let move, _): move.account
-        case .rename(let account, _), .delete(let account, _): account
+        case .make(let account), .rename(let account, _), .delete(let account, _): account
         }
     }
 }
@@ -36,6 +38,13 @@ extension Mailbox {
         } catch {
             return FolderWords.refusal(error)
         }
+    }
+
+    /// The rail's New Folder…: make it, and say so once the rail lists it.
+    func newFolder(_ name: String, account: String) async -> FolderChange {
+        let made = await makeFolder(name, account: account)
+        if case .done = made { say(String(localized: "Made \(name.trimmingCharacters(in: .whitespaces))")) }
+        return made
     }
 
     /// New Folder in Move To: make it, then move what Move To was moving into it.
@@ -141,7 +150,7 @@ struct FolderSheet: View {
 
     private var title: String {
         switch ask {
-        case .create: String(localized: "New folder")
+        case .create, .make: String(localized: "New folder")
         case .rename(_, let folder): String(localized: "Rename “\(folder.ownName)”")
         case .delete(_, let folder): String(localized: "Delete “\(folder.ownName)”?")
         }
@@ -150,6 +159,7 @@ struct FolderSheet: View {
     private var line: String {
         switch ask {
         case .create: String(localized: "The mail you chose moves into it.")
+        case .make: String(localized: "It’s made on the account’s server.")
         case .rename: String(localized: "The folder keeps its place and its mail.")
         case .delete: holds?.words ?? String(localized: "The folder is deleted on the server.")
         }
@@ -158,6 +168,7 @@ struct FolderSheet: View {
     private var action: String {
         switch ask {
         case .create: String(localized: "Make and Move")
+        case .make: String(localized: "Make Folder")
         case .rename: String(localized: "Rename")
         case .delete: Self.deleteAction(holds.map(\.toTrash))
         }
@@ -232,7 +243,7 @@ struct FolderSheet: View {
         switch ask {
         case .create(_, let given): given
         case .rename(_, let folder): folder.ownName
-        case .delete: ""
+        case .make, .delete: ""
         }
     }
 
@@ -255,6 +266,7 @@ struct FolderSheet: View {
             let said: FolderChange
             switch ask {
             case .create(let move, _): said = await mailbox.makeFolderAndMove(typed, ask: move)
+            case .make(let account): said = await mailbox.newFolder(typed, account: account)
             case .rename(let account, let folder): said = await mailbox.renameFolder(folder, to: typed, account: account)
             case .delete(let account, let folder):
                 said = await mailbox.deleteFolder(folder, account: account, confirm: holds != nil)

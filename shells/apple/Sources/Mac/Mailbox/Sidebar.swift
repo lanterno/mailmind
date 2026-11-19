@@ -62,6 +62,21 @@ struct MailboxSidebar: View {
         .accessibilityLabel("Mailboxes")
     }
 
+    /// Do what a place's menu offers (`RailPlaceAct`).
+    private func run(_ act: RailPlaceAct, on place: Place) {
+        switch act {
+        case .open: app.place = place
+        case .getMail: Task { await AppStatus.shared.syncNow() }
+        case .refreshBrief:
+            app.place = place
+            if let desk { Task { await desk.brief.write(again: true) } }
+        case .newFolder(let account): mailbox.folderAsk = .make(account: account)
+        case .renameFolder(let account, let folder): mailbox.folderAsk = .rename(account: account, folder: folder)
+        case .deleteFolder(let account, let folder): mailbox.folderAsk = .delete(account: account, folder: folder)
+        case .removeView(let view): mailbox.removeView(view)
+        }
+    }
+
     @ViewBuilder private func line(_ entry: RailEntry, current: String?) -> some View {
         switch entry.kind {
         case .item(let item):
@@ -70,15 +85,8 @@ struct MailboxSidebar: View {
                 app.place = item.place
             }
             .contextMenu {
-                if let view = item.removable {
-                    Button("Remove View", role: .destructive) { mailbox.removeView(view) }
-                }
-                if let (account, folder) = mailbox.changeableFolder(item.place) {
-                    Button("Rename Folder…") { mailbox.folderAsk = .rename(account: account, folder: folder) }
-                    Button("Delete Folder…", role: .destructive) {
-                        mailbox.folderAsk = .delete(account: account, folder: folder)
-                    }
-                }
+                RailPlaceMenu(groups: RailPlaceAct.groups(for: item, mailbox: mailbox, ai: !(desk?.aiTurnedOff ?? true)),
+                              syncing: AppStatus.shared.syncing) { run($0, on: item.place) }
             }
             .modifier(RailDrop(mailbox: mailbox, place: item.place, id: entry.id, on: $dropOn))
         case .head(let title):
@@ -334,6 +342,79 @@ private struct RailFold: View {
         .meadowFocusRing(focused, radius: 10)
         .onHover { hovering = $0 }
         .accessibilityValue(Text(open ? "Shown" : "Hidden"))
+    }
+}
+
+/// What a rail place's menu offers on a right-click, each a thing a route does: open it; get new mail where mail
+/// shows; write the brief again, with AI on; a new folder in an account's folders; renaming or deleting one the
+/// server says a person may change; removing a view of their own. Nothing the core has no route for, such as
+/// marking a whole folder read.
+enum RailPlaceAct: Equatable {
+    case open
+    case getMail
+    case refreshBrief
+    case newFolder(account: String)
+    case renameFolder(account: String, folder: API.RailFolder)
+    case deleteFolder(account: String, folder: API.RailFolder)
+    case removeView(API.ListedView)
+
+    var title: String {
+        switch self {
+        case .open: String(localized: "Open")
+        case .getMail: String(localized: "Get New Mail")
+        case .refreshBrief: String(localized: "Write the Brief Again")
+        case .newFolder: String(localized: "New Folder…")
+        case .renameFolder: String(localized: "Rename Folder…")
+        case .deleteFolder: String(localized: "Delete Folder…")
+        case .removeView: String(localized: "Remove View")
+        }
+    }
+
+    var destructive: Bool {
+        switch self {
+        case .deleteFolder, .removeView: true
+        default: false
+        }
+    }
+
+    /// The menu of `item`'s place, in groups a divider parts: opening it, then what reaches the server or the AI, then
+    /// what changes the place itself.
+    @MainActor
+    static func groups(for item: RailItem, mailbox: Mailbox, ai: Bool) -> [[RailPlaceAct]] {
+        var groups: [[RailPlaceAct]] = [[.open]]
+        switch item.place {
+        case .desk(.brief): if ai { groups.append([.refreshBrief]) }
+        case .desk(.ask): break
+        default: groups.append([.getMail])
+        }
+        var changes: [RailPlaceAct] = []
+        if case .folder(let account, _) = item.place {
+            changes.append(.newFolder(account: account))
+            if let (account, folder) = mailbox.changeableFolder(item.place) {
+                changes += [.renameFolder(account: account, folder: folder), .deleteFolder(account: account, folder: folder)]
+            }
+        }
+        if let view = item.removable { changes.append(.removeView(view)) }
+        if !changes.isEmpty { groups.append(changes) }
+        return groups
+    }
+}
+
+/// A rail place's menu (`RailPlaceAct`).
+struct RailPlaceMenu: View {
+    let groups: [[RailPlaceAct]]
+    /// A sync already running: Get New Mail waits for it.
+    let syncing: Bool
+    let run: (RailPlaceAct) -> Void
+
+    var body: some View {
+        ForEach(Array(groups.enumerated()), id: \.offset) { index, group in
+            if index > 0 { Divider() }
+            ForEach(Array(group.enumerated()), id: \.offset) { _, act in
+                Button(act.title, role: act.destructive ? .destructive : nil) { run(act) }
+                    .disabled(act == .getMail && syncing)
+            }
+        }
     }
 }
 #endif
