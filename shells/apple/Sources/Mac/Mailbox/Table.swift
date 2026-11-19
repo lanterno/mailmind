@@ -12,6 +12,8 @@ struct MailboxRowsTable: NSViewRepresentable {
     /// The rows chosen as the mailbox holds them: the table follows a choice made elsewhere (a key, the palette, a verb
     /// moving on to the next row).
     let chosen: [MailCopy]
+    /// The row the keyboard is on while rows are marked: the message open beside them. Nil while none are marked.
+    var cursor: MailCopy?
     /// Whether each row says its account to VoiceOver: everywhere but one account's own folder.
     let showsAccount: Bool
     let look: RowLook
@@ -42,6 +44,7 @@ struct MailboxRowsTable: NSViewRepresentable {
         controller.setLook(look)
         controller.setBrief(brief, chosen: briefChosen)
         controller.follow(chosen)
+        controller.setCursor(cursor)
     }
 
     static func dismantleNSView(_ scrollView: NSScrollView, coordinator: MailboxTableController) {
@@ -84,6 +87,8 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
     private var hovered: (row: Int, target: RowTarget?)?
     /// A choice the mailbox asked for is being shown: the table doesn't tell it back.
     private var following = false
+    /// The row the keyboard is on while rows are marked, as the window last said: scrolled into view as it moves.
+    private(set) var cursor: MailCopy?
     /// Where the window's buttons stand, for what opens beside them: a row's snooze clock says where it is, so the
     /// chooser it opens hangs from it and not from the pane's Snooze, which is the open message's.
     weak var anchors: MeadowAnchors?
@@ -385,19 +390,30 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
         if scroll, let first = rows.first, copies.count == 1 { table.scrollRowToVisible(first) }
     }
 
+    /// Show `copy` as the row the keyboard is on while rows are marked, and scroll it into view as j and k move it.
+    func setCursor(_ copy: MailCopy?) {
+        guard copy != cursor else { return }
+        cursor = copy
+        refreshStates()
+        if let copy, let position = list.position(of: copy) { table.scrollRowToVisible(row(at: position)) }
+    }
+
     // MARK: How each row stands
 
     func refreshStates() {
         let chosen = table.selectedRowIndexes
-        let selecting = chosen.count > 1
+        // Rows marked show their checks, even one marked alone; the row the keyboard is on shows as the chosen one.
+        let selecting = mailbox?.marking ?? (chosen.count > 1)
         let keyed = table.keyed && table.window?.firstResponder === table
+        let cursor = selecting ? mailbox?.app?.selection.copy : nil
         table.enumerateAvailableRowViews { rowView, row in
             let hover = hovered?.row == row
             if let cell = rowView.view(atColumn: 0) as? MailRowCell {
                 let isChosen = chosen.contains(row)
-                cell.state = RowState(chosen: isChosen && !selecting, checked: isChosen && selecting, hovering: hover,
+                let here = selecting ? cursor != nil && cell.row.map(MailCopy.init) == cursor : isChosen
+                cell.state = RowState(chosen: here, checked: isChosen && selecting, hovering: hover,
                                       target: hover ? hovered?.target : nil, selecting: selecting,
-                                      keyed: keyed && isChosen && !selecting)
+                                      keyed: keyed && here)
             } else if let cell = rowView.view(atColumn: 0) as? BriefRowCell {
                 cell.state = RowState(chosen: briefChosen, hovering: hover, keyed: keyed && briefChosen)
             }
@@ -432,11 +448,9 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
         guard let mailbox, let position = position(row), let mail = list.copy(at: position) else { return }
         switch target {
         case .check:
-            if table.selectedRowIndexes.contains(row) {
-                table.deselectRow(row)
-            } else {
-                table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: true)
-            }
+            // As x marks the row open, and the table shows the marks the mailbox now holds.
+            mailbox.toggleMark(mail)
+            follow(mailbox.marked, scroll: false)
         case .act(.file): mailbox.file(.archive, rows: [mail])
         case .act(.delete): mailbox.file(.trash, rows: [mail])
         case .act(.snooze):
@@ -455,14 +469,20 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
         return frame
     }
 
-    /// Esc with several rows chosen: only the one chosen last stays chosen, and opens, so j and k go on from it.
+    /// Esc with several rows chosen: only the one chosen last stays chosen, and opens, so j and k go on from it. One
+    /// row marked alone is chosen alone the same way.
     func keepLastChosen() {
         let last = table.selectedRow
-        guard last >= 0, let position = position(last), list.copy(at: position) != nil else {
+        guard last >= 0, let position = position(last), let mail = list.copy(at: position) else {
             mailbox?.clearMarks()
             return
         }
-        table.selectRowIndexes(IndexSet(integer: last), byExtendingSelection: false)
+        if table.selectedRowIndexes == IndexSet(integer: last) {
+            mailbox?.chose([mail])
+            refreshStates()
+        } else {
+            table.selectRowIndexes(IndexSet(integer: last), byExtendingSelection: false)
+        }
     }
 
     // MARK: NSTableViewDataSource, NSTableViewDelegate
@@ -514,7 +534,8 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
-        refreshStates()
+        // Once the mailbox holds the choice, which says whether the rows are marks.
+        defer { refreshStates() }
         guard !following, let mailbox else { return }
         var rows: [API.FolderRow] = []
         var unheld = IndexSet()
@@ -790,6 +811,11 @@ final class MailboxTableView: NSTableView {
             ReaderPage.turn(in: window, down: !event.modifierFlags.contains(.shift))
             return
         }
+        // While rows are marked, ↑ and ↓ move the row the keyboard is on as k and j do, and the marks stay.
+        if mailbox.marking, !event.modifierFlags.contains(.shift),
+           scalar == NSUpArrowFunctionKey || scalar == NSDownArrowFunctionKey {
+            return mailbox.move(by: scalar == NSDownArrowFunctionKey ? 1 : -1)
+        }
         // The table's own: the arrows, Page Up and Down, Home and End, Tab.
         if Self.tablesOwn(scalar) { return super.keyDown(with: event) }
         guard mailbox.singleKeys, event.modifierFlags.intersection([.shift]).isEmpty || "#?".contains(key) else {
@@ -802,14 +828,21 @@ final class MailboxTableView: NSTableView {
         }
         // Any other key does nothing: no row is chosen by its letter, and the place stays.
         _ = RowKeys.run(lower, on: mailbox, chord: { chordAt = Date() })
+        // x marks here and now: the table shows the marks without waiting for the window to draw again.
+        if lower == "x" { controller?.follow(mailbox.marked, scroll: false) }
     }
 
-    /// Esc in the list, once nothing over it wants it: several rows chosen keep only the one chosen last; out of a
-    /// search, back where it was asked.
+    /// Esc in the list, once nothing over it wants it: rows marked lose their marks, the message open beside them
+    /// staying open, or with none open only the one chosen last stays, open; out of a search, back where it was asked.
     func escape() {
         guard let mailbox else { return }
-        if mailbox.chosenRows.count + mailbox.unheld.count > 1 {
-            if let controller { controller.keepLastChosen() } else { mailbox.clearMarks() }
+        if mailbox.marking {
+            if mailbox.app?.selection.copy != nil || controller == nil {
+                mailbox.clearMarks()
+                controller?.follow(mailbox.marked, scroll: false)
+            } else {
+                controller?.keepLastChosen()
+            }
         } else {
             mailbox.leaveSearch()
         }
@@ -907,6 +940,7 @@ enum RowKeys {
         case "m": mailbox.askMove()
         case "s": mailbox.star()
         case "u": mailbox.setSeen(false)
+        case "x": mailbox.markOpen()
         case "z": mailbox.undo()
         case "v": if mailbox.app?.place?.search != nil, !mailbox.onSavedView { mailbox.savingView = mailbox.app?.place?.search?.q }
         case "/": mailbox.searchFocus = true

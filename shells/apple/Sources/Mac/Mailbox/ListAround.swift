@@ -28,10 +28,11 @@ struct MailboxTable: View {
         let briefWidth = brief.map { RowFaces.gistWidth($0.gist) }
         VStack(spacing: 0) {
             OfflineNote(mailbox: mailbox, account: mailbox.app?.listed?.account, status: status)
-            if mailbox.chosenRows.count + mailbox.unheld.count > 1 {
+            if mailbox.marking {
                 BulkBar(mailbox: mailbox, inTrash: inTrash)
             }
-            MailboxRowsTable(list: list, mailbox: mailbox, chosen: chosen, showsAccount: showsAccount,
+            MailboxRowsTable(list: list, mailbox: mailbox, chosen: chosen,
+                             cursor: mailbox.marking ? mailbox.app?.selection.copy : nil, showsAccount: showsAccount,
                              look: RowLook(inks: RowInks.of(meadow, light: light,
                                                             highContrast: status.preferences?.highContrast ?? false),
                                            measure: measure, accounts: mailbox.accounts),
@@ -63,8 +64,8 @@ struct MailboxTable: View {
     }
 }
 
-/// The bulk bar (`.bulk`), while rows are checked: how many, then filing, deleting and snoozing them, or in Trash
-/// restoring them, and clearing the selection.
+/// The bulk bar (`.bulk`), while rows are checked (several, or one marked with x or its check box): how many, then
+/// filing, deleting and snoozing them, or in Trash restoring them, and clearing the selection.
 struct BulkBar: View {
     let mailbox: Mailbox
     let inTrash: Bool

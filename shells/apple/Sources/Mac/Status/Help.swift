@@ -350,7 +350,8 @@ struct KeysLegend: View {
         Key("H", String(localized: "Snooze…")), Key("L", String(localized: "Reply later")),
         Key("W", String(localized: "Mute thread")), Key("S", String(localized: "Star")),
         Key("U", String(localized: "Mark unread")), Key("I", String(localized: "Summarize")),
-        Key("V", String(localized: "Save search as view")), Key("Z", String(localized: "Undo")),
+        Key("X", String(localized: "Select")), Key("V", String(localized: "Save search as view")),
+        Key("Z", String(localized: "Undo")),
     ])
 
     /// Triage with AI turned off: Summarize, which only AI serves, left out.

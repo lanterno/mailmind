@@ -64,7 +64,7 @@ extension Mailbox {
             say(Words.filed(words.done, count: filed.count, failed: filed.failed, queued: filed.queued),
                 undo: filed.undoable ? (n > 1 ? "\(words.done) \(n)" : words.done) : nil)
             if filed.undoable { offerUndo(words.undo) }
-            moveOn(after)
+            moveOn(after, leaving: rows)
             took = true
         } catch let refusal as Problem where refusal.isReadOnly {
             say(ReadOnlyWords.refused, refused: true)
@@ -159,7 +159,7 @@ extension Mailbox {
             say(Words.filed("Moved", count: filed.count, failed: filed.failed, queued: filed.queued, to: label),
                 undo: filed.undoable ? (n > 1 ? "Moved \(n)" : "Moved") : nil)
             if filed.undoable { offerUndo(String(localized: "Move")) }
-            moveOn(after)
+            moveOn(after, leaving: rows)
             took = true
         } catch let refusal as Problem where refusal.isReadOnly {
             say(ReadOnlyWords.refused, refused: true)
@@ -411,7 +411,7 @@ extension Mailbox {
             : chunked.partial ? "\(said(n)) — some messages stayed" : said(n)
         say(text, undo: chunked.undoable ? undoSaid.map { $0(done) } ?? said(done) : nil)
         if chunked.undoable { offerUndo(undoName) }
-        if done > 0 { moveOn(after) }
+        if done > 0 { moveOn(after, leaving: rows) }
         readAgain()
         return done > 0
     }
@@ -457,15 +457,33 @@ extension Mailbox {
     /// File goes.
     func leaving(_ copies: [MailCopy]) -> @MainActor () -> Void {
         let after = nextOpen(leaving: Set(copies))
-        return { [weak self] in self?.moveOn(after) }
+        return { [weak self] in self?.moveOn(after, leaving: copies) }
     }
 
     /// Open what comes next, chosen as a click on its row chooses it, or close the message. Where what moved it on
-    /// can be undone, its Undo opens the message that left again (`undoNow`).
-    private func moveOn(_ after: MailCopy??) {
-        guard let after else { return }
+    /// can be undone, its Undo opens the message that left again (`undoNow`). With the message open staying, the rows
+    /// that left lose their marks.
+    private func moveOn(_ after: MailCopy??, leaving rows: [API.FolderRow]) {
+        moveOn(after, leaving: rows.map(MailCopy.init))
+    }
+
+    private func moveOn(_ after: MailCopy??, leaving: [MailCopy]) {
+        guard let after else { return unmark(Set(leaving)) }
         if reopenable, let left = app?.selection.copy { reopens = left }
         chose(after.flatMap(heldRow(of:)).map { [$0] } ?? [])
+    }
+
+    /// Rows that left the list keep no mark: the others stay marked, and with none left the row open is chosen alone.
+    private func unmark(_ leaving: Set<MailCopy>) {
+        guard marking, !leaving.isEmpty else { return }
+        let left = chosenRows.filter { !leaving.contains(MailCopy($0)) }
+        guard left.count != chosenRows.count else { return }
+        if left.isEmpty, unheld.isEmpty {
+            clearMarks()
+        } else {
+            chosenRows = left
+            markedAlone = true
+        }
     }
 
     /// A verb with nothing chosen or open: said, so a key or a command never does nothing without a word.

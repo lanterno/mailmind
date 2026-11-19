@@ -72,11 +72,12 @@ extension Mailbox {
     // MARK: Up and down the list
 
     /// The row `by` rows from the open one, or the first. Up from the Inbox's first row is today's brief, over it, as
-    /// the up arrow goes there; at either end of the list, the list says so, as n and p do.
+    /// the up arrow goes there; at either end of the list, the list says so, as n and p do. While rows are marked
+    /// the marks stay, and the row moved to opens beside them.
     func move(by: Int) {
         guard let list = app?.list, list.total > 0 else { return }
-        let at = app?.selection.copy.flatMap { list.position(of: $0) }
-        if by < 0, at == 0, showsBrief { return openBrief(deliberately: false) }
+        let at = app?.selection.copy.flatMap { list.position(of: $0) } ?? markedEnd(by, in: list)
+        if by < 0, at == 0, showsBrief, !marking { return openBrief(deliberately: false) }
         // On the brief already, there is nothing above it.
         if by < 0, at == nil, app?.place == .desk(.brief) { return }
         if let at, at + by < 0 || at + by >= list.total {
@@ -84,7 +85,19 @@ extension Mailbox {
                        refused: true)
         }
         let target = at.map { $0 + by } ?? 0
-        if let row = list.copy(at: target) { chose([row]) }
+        if let row = list.copy(at: target) { go(to: row) }
+    }
+
+    /// Open `row` as j, k, n and p go to it: chosen alone, or beside the rows marked, which stay marked.
+    private func go(to row: API.FolderRow) {
+        if marking { openBeside(row) } else { chose([row]) }
+    }
+
+    /// Where j and k start while rows are marked and none is open: from the last mark going down, the first going up.
+    private func markedEnd(_ by: Int, in list: MailListModel) -> Int? {
+        guard marking else { return nil }
+        let positions = chosenRows.compactMap { list.position(of: MailCopy($0)) }
+        return by > 0 ? positions.max() : positions.min()
     }
 
     /// Whether today's brief stands over the list, as its first row: in an Inbox, where the desk has joined.
@@ -96,11 +109,12 @@ extension Mailbox {
     @discardableResult
     func moveUnread(by: Int) -> Bool {
         guard let list = app?.list else { return false }
-        let at = app?.selection.copy.flatMap { list.position(of: $0) } ?? (by > 0 ? -1 : list.total)
+        let at = app?.selection.copy.flatMap { list.position(of: $0) } ?? markedEnd(by, in: list)
+            ?? (by > 0 ? -1 : list.total)
         var position = at + by
         while position >= 0, position < list.total, let row = list.copy(at: position) {
             if !row.seen {
-                chose([row])
+                go(to: row)
                 return true
             }
             position += by
@@ -263,6 +277,9 @@ extension Mailbox {
                 [weak self] in self?.star(on: !unstars)
             })
             out.append(MailCommand(id: "unread", group: .actions, label: "Mark unread", hint: "⇧⌘U") { [weak self] in self?.setSeen(false) })
+        }
+        if let open = app?.selection.copy, row(of: open) != nil {
+            out.append(MailCommand(id: "mark", group: .actions, label: "Select", hint: "x") { [weak self] in self?.markOpen() })
         }
         out.append(MailCommand(id: "undo", group: .commands, label: "Undo last action", hint: "⌘Z") { [weak self] in self?.undo() })
         for view in views {

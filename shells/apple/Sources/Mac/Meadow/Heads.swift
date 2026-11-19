@@ -130,7 +130,7 @@ private struct MeadowSelectButton: View {
     let mailbox: Mailbox
 
     var body: some View {
-        let marked = mailbox.chosenRows.count + mailbox.unheld.count > 1
+        let marked = mailbox.marking
         Button {
             if marked { mailbox.clearMarks() } else { ListTable.selectAll(in: NSApp.keyWindow) }
         } label: {
@@ -262,7 +262,7 @@ private struct MeadowSearchHead: View {
 
     /// The conversation open in the reader, which a search can be held to (`m.conversation`).
     private var conversation: API.FolderRow? {
-        guard mailbox.chosenRows.count == 1, let row = mailbox.chosenRows.first,
+        guard !mailbox.marking, mailbox.chosenRows.count == 1, let row = mailbox.chosenRows.first,
               row.isConversation(grouped: mailbox.grouped) else { return nil }
         return row
     }

@@ -48,6 +48,13 @@ final class Mailbox {
     /// marked. Kept whole, so a verb reaches rows scrolled far from the screen, whose pages the list has let go.
     var chosenRows: [API.FolderRow] = []
     var marked: [MailCopy] { chosenRows.map(MailCopy.init) }
+    /// One row marked on its own (x, or its check box): the row chosen is a mark, as several are, not the one open.
+    var markedAlone = false
+    /// Rows are marked: several chosen, or one marked on its own. The verbs and the bulk bar act on the marks, and the
+    /// message open, if any, is only the row the keyboard is on, which j and k move without losing them.
+    var marking: Bool {
+        chosenRows.count + unheld.count > 1 || (markedAlone && !(chosenRows.isEmpty && unheld.isEmpty))
+    }
     /// Whether a verb has anything to act on.
     var hasTarget: Bool { !chosenRows.isEmpty || !unheld.isEmpty || app?.selection.copy != nil }
     /// Positions chosen whose rows weren't held when chosen (Select All in a long list): read before a verb acts.
@@ -423,9 +430,53 @@ final class Mailbox {
         }
         chosenRows = rows
         self.unheld = unheld
+        markedAlone = false
         let one = rows.count == 1 && unheld.isEmpty ? MailCopy(rows[0]) : nil
         app?.open(one)
         if let one { warmNext(after: one) }
+    }
+
+    /// Open `row` beside the rows marked, which stay marked: the row the keyboard is on, as j and k move it.
+    func openBeside(_ row: API.FolderRow) {
+        let copy = MailCopy(row)
+        app?.open(copy)
+        warmNext(after: copy)
+    }
+
+    /// x, or a row's check box: mark `row`, or take its mark off (`toggleMark`). The message open stays open: x on its
+    /// row marks it alone, a check box beside it marks both, and once only the open message's row is left, or none,
+    /// that row is chosen alone again.
+    func toggleMark(_ row: API.FolderRow) {
+        let copy = MailCopy(row)
+        var rows = chosenRows
+        if marking {
+            if let at = rows.firstIndex(where: { MailCopy($0) == copy }) { rows.remove(at: at) } else { rows.append(row) }
+        } else if rows.isEmpty || rows.map(MailCopy.init) == [copy] {
+            rows = [row]
+        } else {
+            rows.append(row)
+        }
+        let open = app?.selection.copy
+        let removed = rows.count < chosenRows.count
+        if unheld.isEmpty, rows.isEmpty || (removed && rows.map(MailCopy.init) == [open]) {
+            markedAlone = false
+            chosenRows = open.flatMap(self.row(of:)).map { [$0] } ?? []
+            return
+        }
+        // In the list's order, as rows chosen together are.
+        if let list = app?.list {
+            let at = rows.map { list.position(of: MailCopy($0)) ?? Int.max }
+            rows = rows.indices.sorted { (at[$0], $0) < (at[$1], $1) }.map { rows[$0] }
+        }
+        chosenRows = rows
+        markedAlone = true
+    }
+
+    /// x: mark the row the keyboard is on, the message open in the list, or take its mark off. With no row of the
+    /// list open, it says so.
+    func markOpen() {
+        guard let open = app?.selection.copy, let row = row(of: open) else { return saysNothingChosen() }
+        toggleMark(row)
     }
 
     /// Show today's brief in the pane beside the list: opened on purpose, or arrived at by the arrow keys.
@@ -449,6 +500,7 @@ final class Mailbox {
         }
         chosenRows = []
         unheld = []
+        markedAlone = false
         app?.open(copy)
         // How it stands is read as the reader opens it, so the menus' Star and Mark as Read say what they will do.
         Task { _ = await readOutside(copy) }
@@ -464,7 +516,7 @@ final class Mailbox {
     /// Rows marked that weren't held are read first. A verb that names the message by its copy alone (File, Move,
     /// Snooze) passes `standing: false`, and never waits on the reader or the server to say how it stands.
     func targets(standing: Bool = true) async -> [API.FolderRow] {
-        guard chosenRows.count > 1 || !unheld.isEmpty else {
+        guard marking || !unheld.isEmpty else {
             if let open = app?.selection.copy { return [standing ? await openRow(open) : knownRow(open)] }
             return chosenRows
         }
@@ -507,7 +559,7 @@ final class Mailbox {
     /// What a verb would act on, as the window knows it without asking, for a menu's words: the rows marked, else the
     /// message open.
     var shownRows: [API.FolderRow] {
-        guard chosenRows.count <= 1, unheld.isEmpty, let open = app?.selection.copy else { return chosenRows }
+        guard !marking, unheld.isEmpty, let open = app?.selection.copy else { return chosenRows }
         return [knownRow(open)]
     }
 
