@@ -83,8 +83,10 @@ class Reviews:
             cleaned = 0
 
         handled = self._mail.handled_since(c, accounts_set, since_iso)
+        # Each list holds the first TOP_OPEN, and its number counts them all.
         stats: Stats = {"sent": sent, "received": received, "by_bucket": by_bucket,
-                        "needs_you": len(needs), "waiting_on": len(waiting), "reply_later": replylater,
+                        "needs_you": self._mail.needs_you_count(c, accounts_set),
+                        "waiting_on": self._mail.awaited_count(c, accounts_set), "reply_later": replylater,
                         "cleaned": cleaned, "handled": handled}
         return stats, needs, waiting
 

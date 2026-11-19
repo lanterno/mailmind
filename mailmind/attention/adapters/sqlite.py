@@ -300,6 +300,12 @@ def awaited_threads(c, accounts, n):
         + " ORDER BY f.first_sent_ts ASC LIMIT ?", [*fap, n]).fetchall()
 
 
+def awaited_count(c, accounts):
+    """How many threads the person is waiting on: all of what awaited_threads lists the first of, a row of it each."""
+    fac, fap = _among(accounts)
+    return c.execute("SELECT COUNT(*) FROM followups f WHERE f.state='due' AND f.kind='sent'" + fac, fap).fetchone()[0]
+
+
 def replylater_due(c, accounts):
     fac, fap = _among(accounts)
     return c.execute(

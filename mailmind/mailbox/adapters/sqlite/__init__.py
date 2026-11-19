@@ -2,8 +2,8 @@
 conn and init takes its caller's connection and leaves the commit to it. A module for each concern, and this names what
 the package offers, so the app says `store.x` whichever module holds it."""
 from mailmind.mailbox.adapters.sqlite.assistant_reads import (any_copy, brief_rows, conversation_rows, delta_rows,
-    draft_candidates, handled_since, message_stamp, message_to_reply_to, needs_you_rows, received_by_bucket, received_since,
-    sender_recent, sender_stats, sent_since, thread_anchor_pk, thread_stamps)
+    draft_candidates, handled_since, message_stamp, message_to_reply_to, needs_you_count, needs_you_rows, received_by_bucket,
+    received_since, sender_recent, sender_stats, sent_since, thread_anchor_pk, thread_stamps)
 from mailmind.mailbox.adapters.sqlite.bound import bind_index, bind_merges
 from mailmind.mailbox.adapters.sqlite.command_log import (archives_undone, command_forget_finished, command_get,
     command_insert, command_latest_move, command_mark_begun, command_mark_reversed, command_never_begun, command_open,
@@ -41,7 +41,8 @@ __all__ = [
     "get_watermark", "handled_since", "has_attachments", "has_copy_in", "inboxes_conversation_count",
     "inboxes_conversation_rows", "inboxes_count", "inboxes_rows", "init", "insert_attachments", "is_known", "is_listed_in",
     "labels_of_account", "mark_has_attachments", "mark_pending_removal", "mark_verified", "message_pk", "message_stamp",
-    "message_to_reply_to", "mint_key", "names_of", "needs_threading", "needs_you_rows", "newest_copy_in", "pending_removal_pks",
+    "message_to_reply_to", "mint_key", "names_of", "needs_threading", "needs_you_count", "needs_you_rows", "newest_copy_in",
+    "pending_removal_pks",
     "pk_in", "queue_flags", "received_by_bucket", "received_since", "recipients_of", "recompute_threads", "reconcile",
     "record_sync_result", "relocate", "rename_folders", "repair_keys", "reset_folder", "restore_pending", "sender_recent", "sender_stats",
     "sent_since",

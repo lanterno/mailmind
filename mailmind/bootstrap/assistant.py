@@ -223,6 +223,9 @@ class _Mail:
     def needs_you_rows(self, c, accounts, n):
         return mailbox.stored_mail.needs_you_rows(c, accounts, n)
 
+    def needs_you_count(self, c, accounts):
+        return mailbox.stored_mail.needs_you_count(c, accounts)
+
     def sender_recent(self, c, addr, n):
         return mailbox.stored_mail.sender_recent(c, addr, n)
 
@@ -234,6 +237,9 @@ class _Mail:
 
     def awaited_threads(self, c, accounts, n):
         return attention.book.awaited_threads(c, accounts, n)
+
+    def awaited_count(self, c, accounts):
+        return attention.book.awaited_count(c, accounts)
 
     def replylater_due(self, c, accounts):
         return attention.book.replylater_due(c, accounts)

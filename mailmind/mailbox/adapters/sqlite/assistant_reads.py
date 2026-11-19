@@ -104,19 +104,31 @@ def sender_stats(c, addrs):
             GROUP BY addr ORDER BY n DESC""", addrs).fetchall()
 
 
-def needs_you_rows(c, accounts, n):
-    """Who's waiting on the person to reply: open, important, unanswered INBOX mail (mirrors the brief's "needs you"
-    set; joins assessments so we get importance/action, excludes junk/snoozed/muted/answered)."""
+def _needs_you(accounts):
+    """Who's waiting on the person to reply: open, important, unanswered INBOX mail (the brief's "needs you" verdict; joins
+    assessments so we get importance/action, excludes junk/snoozed/muted/answered), each message on its own. Its FROM and
+    WHERE, and their parameters."""
     ac, ap = _among(accounts, "m.account")
+    return ("FROM messages m JOIN assessments s ON s.message_key=m.message_key "
+            f"WHERE m.folder='INBOX' AND m.is_junk=0 AND {not_snoozed_sql()} AND m.answered=0 "
+            "  AND m.pending_removal IS NULL "
+            f"  AND {verdict.needs_you_sql()} "
+            "  AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id) " + ac), ap
+
+
+def needs_you_rows(c, accounts, n):
+    """The first `n` of the mail that needs the person, the most important first, then the newest."""
+    within, params = _needs_you(accounts)
     return c.execute(
         "SELECT m.pk, m.message_key, m.uid, m.folder, m.account, m.thread_id, m.from_name, m.from_addr, m.subject, m.ts, "
         "       s.importance, s.action, s.category "
-        "FROM messages m JOIN assessments s ON s.message_key=m.message_key "
-        f"WHERE m.folder='INBOX' AND m.is_junk=0 AND {not_snoozed_sql()} AND m.answered=0 "
-        "  AND m.pending_removal IS NULL "
-        f"  AND {verdict.needs_you_sql()} "
-        "  AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id) "
-        + ac + " ORDER BY s.importance DESC, m.ts DESC LIMIT ?", [*ap, n]).fetchall()
+        + within + " ORDER BY s.importance DESC, m.ts DESC LIMIT ?", [*params, n]).fetchall()
+
+
+def needs_you_count(c, accounts):
+    """How many messages need the person: all of what needs_you_rows lists the first of."""
+    within, params = _needs_you(accounts)
+    return c.execute("SELECT COUNT(*) " + within, params).fetchone()[0]
 
 
 _DRAFT_CAND_SQL = """
