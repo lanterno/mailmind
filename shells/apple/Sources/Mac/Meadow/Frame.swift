@@ -270,14 +270,21 @@ struct MeadowSplitter: View {
                 return .handled
             }
             .help("Drag to resize · ←/→ · double-click resets")
-            .accessibilityElement()
-            .accessibilityLabel("Resize the message list")
-            .accessibilityValue("\(Int(shell.shownListWidth)) points wide")
-            .accessibilityAdjustableAction { direction in
-                switch direction {
-                case .increment: shell.nudgeList(by: 1)
-                case .decrement: shell.nudgeList(by: -1)
-                @unknown default: break
+            // VoiceOver reads it as what it does, a slider: the list's width shown, a step wider or narrower as the
+            // arrow keys move it. A plain element with an adjustable action had no role.
+            .accessibilityRepresentation {
+                Slider(value: Binding(get: { Double(shell.shownListWidth) },
+                                      set: { shell.setListWidth(CGFloat($0)) }),
+                       in: Double(ShellLayout.listMin)...Double(ShellLayout.listMax)) {
+                    Text("Resize the message list")
+                }
+                .accessibilityValue("\(Int(shell.shownListWidth)) points wide")
+                .accessibilityAdjustableAction { direction in
+                    switch direction {
+                    case .increment: shell.nudgeList(by: 1)
+                    case .decrement: shell.nudgeList(by: -1)
+                    @unknown default: break
+                    }
                 }
             }
     }

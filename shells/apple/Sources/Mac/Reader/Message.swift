@@ -174,7 +174,10 @@ struct MessageHead: View {
                 .lineLimit(1)
                 .fixedSize()
         }
+        // One heading a message, read whole (who, to whom, when): VoiceOver's rotor goes from message to message in
+        // a conversation by them. Combined alone, the head was an element of no role.
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
     }
 }
 
