@@ -23,6 +23,27 @@ final class ReaderTests: XCTestCase {
         }
     }
 
+    /// The link under the pointer comes as its href alone, and only a web or mail address MailMind would open is said:
+    /// none for an empty href, a script's, a file's or a fragment, and nothing at all for a message with more in it.
+    func testTheLinkUnderThePointerIsReadNarrowly() {
+        XCTAssertEqual(FrameMessage(["kind": "hover", "href": "https://a.example.test/x?y=1"]),
+                       .hover(URL(string: "https://a.example.test/x?y=1")))
+        XCTAssertEqual(FrameMessage(["kind": "hover", "href": "mailto:bo@example.test?subject=Hi"]),
+                       .hover(URL(string: "mailto:bo@example.test?subject=Hi")))
+        XCTAssertEqual(FrameMessage(["kind": "hover", "href": ""]), .hover(nil), "off the link")
+        for unsaid in ["javascript:alert(1)", "file:///etc/hosts", "#top", "data:text/html,x", "https://",
+                       "https://a.example.test/\u{0}x", String(repeating: "h", count: 9000)] {
+            XCTAssertEqual(FrameMessage(["kind": "hover", "href": unsaid]), .hover(nil), unsaid)
+        }
+        XCTAssertNil(FrameMessage(["kind": "hover", "href": "https://a.example.test/", "text": "A"]), "only the href")
+        XCTAssertNil(FrameMessage(["kind": "hover", "href": NSNumber(value: 1)]), "a string")
+        XCTAssertNil(FrameMessage(["kind": "hover"]))
+
+        XCTAssertEqual(LinkHover.words(URL(string: "https://a.example.test/x")!), "https://a.example.test/x")
+        XCTAssertEqual(LinkHover.words(URL(string: "mailto:bo%40example.test?subject=Hi")!), "bo@example.test",
+                       "a mail address as the address")
+    }
+
     func testALinkOpensTheComposerTheBrowserOrNothing() {
         XCTAssertEqual(LinkOpening.of(href: "mailto:Bo%20B%20<bo@example.test>?subject=Lunch%20plans&body=x", text: "", senderDomain: nil),
                        .compose(to: ["bo@example.test"], subject: "Lunch plans"))
