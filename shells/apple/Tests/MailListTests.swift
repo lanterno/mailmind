@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import XCTest
 
 /// The window's list keeps only the pages near the screen, reads again what it holds on a refresh, keeps the chosen
@@ -56,6 +57,22 @@ final class MailListTests: XCTestCase {
         list.refresh()
         await until { list.total == 52 }
         XCTAssertEqual(list.chosenPosition, 9, "two new messages above it moved it down")
+    }
+
+    /// A list opened under a message already open finds where it stands once its first page comes, and what shows
+    /// that place ("3 of 120") hears of it then, though the copy chosen never changed.
+    func testWhereTheChosenCopyStandsIsToldAgainOnceItsPageComes() async {
+        let folder = Folder(count: 50)
+        let selection = Selection()
+        selection.copy = MailCopy(Folder.row(7))
+        let list = MailListModel(selection: selection, load: folder.load)
+        let told = Told()
+        withObservationTracking { _ = list.chosenPosition } onChange: { told.yes() }
+        XCTAssertNil(list.chosenPosition, "no page yet")
+        list.start()
+        await until { list.total == 50 }
+        XCTAssertTrue(told.was, "the page's coming is heard")
+        XCTAssertEqual(list.chosenPosition, 7)
     }
 
     func testAPageThatCouldntBeReadSaysSo() async {
@@ -128,6 +145,16 @@ private actor Folder {
                       sentTo: [], sentToMore: 0, snippet: "",
                       subject: "Message \(n)", summary: "", ts: 1_793_620_800 - n * 60, uid: n + 1, when: "")
     }
+}
+
+/// Whether an observed value changed, told from wherever the change was made.
+private nonisolated final class Told: @unchecked Sendable {
+    private let lock = NSLock()
+    private var said = false
+
+    var was: Bool { lock.withLock { said } }
+
+    func yes() { lock.withLock { said = true } }
 }
 
 @MainActor
