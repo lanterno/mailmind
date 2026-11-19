@@ -30,6 +30,24 @@ final class OutboxButtonTests: XCTestCase {
         return (composing, routes)
     }
 
+    /// A row says the whole of its line, wrapping as the page's does, however many lines that takes, and keeps its
+    /// title to one line beside its buttons.
+    func testARowShowsItsWholeLineAndKeepsItsTitleToOne() {
+        func height(_ title: String, _ detail: String) -> CGFloat {
+            let row = OutboxRow(state: "scheduled", failed: false, title: title, detail: detail) {
+                Button("Send Now") {}.meadowButton(small: true)
+                Button("Cancel") {}.meadowButton(small: true)
+            }
+            return NSHostingView(rootView: row.frame(width: 420).meadowLight(.day)).fittingSize.height
+        }
+        let short = height("Linen", "to lin@example.test")
+        XCTAssertEqual(height("Thread colours for Saturday, the linen and the guild dinner", "to lin@example.test"),
+                       short, accuracy: 0.5, "a long title stays on its one line")
+        let two = height("Linen", "to lin@example.test\ntoday 14:05")
+        let four = height("Linen", "to lin@example.test\ntoday 14:05\ngoes while MailMind\nis open")
+        XCTAssertGreaterThan(four - two, 20, "every line of it, not the first two")
+    }
+
     func testWhatWaitsInTheOutboxIsReadAsTheCoreIsReachedWithNothingOnScreen() async {
         for (state, scheduled) in [("queued", true), ("sending", false), ("error", false)] {
             let (composing, _) = composing(Self.holding(state, scheduled: scheduled))
