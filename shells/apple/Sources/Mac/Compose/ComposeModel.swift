@@ -410,6 +410,13 @@ enum Seeds {
         return seed
     }
 
+    /// What a reply saved to a message says of the others saved to it besides (`moreReplies`).
+    static func moreReplies(_ more: Int) -> String {
+        if more <= 0 { return "" }
+        return more == 1 ? "There’s 1 more draft reply to this message in Drafts."
+            : "There are \(more) more draft replies to this message in Drafts."
+    }
+
     /// What a reopened draft lost on the way, in words.
     static func resumeNotice(_ notes: API.DraftNotes) -> String {
         var said: [String] = []

@@ -86,6 +86,9 @@ final class Composing: ComposeHost {
     /// Replies closed in the reader's box with their words saved, by the message each answers: r on that message
     /// opens the words there again, rather than an empty box.
     @ObservationIgnored private var boxDrafts: [MailCopy: Composer] = [:]
+    /// The saves closing started, by composer, until each settles: Reply waits for them, so the message it reads says
+    /// what answers it once they have landed.
+    @ObservationIgnored private var closingSaves: [UUID: Task<Bool?, Never>] = [:]
     /// The message the reader offers its reply box for: a plain reply to it opens there. Moving to another message
     /// closes a reply left open, which saves it to Drafts as closing a window does.
     var inlineSlot: MailCopy? {
@@ -293,8 +296,11 @@ final class Composing: ComposeHost {
 
     func closing(_ composer: Composer, save: Task<Bool?, Never>, snapshot: ComposeSeed) {
         if let open = inline, open.composer === composer { boxDrafts[open.copy] = composer }
+        closingSaves[composer.id] = save
         Task {
-            switch await save.value {
+            let saved = await save.value
+            closingSaves.removeValue(forKey: composer.id)
+            switch saved {
             case true? where readOnly:
                 keptOnThisMac(composer)
             case true?:
@@ -518,8 +524,9 @@ final class Composing: ComposeHost {
     }
 
     /// A reply in a window, or a plain reply to the message the reader offers its box for, in that box: the one open
-    /// there already, the words of one closed there and saved (unless `resuming` is off), or a new one, which closes
-    /// (and saves) a reply open to another message.
+    /// there already, the words of one closed there and saved, the reply the server says is saved to the message
+    /// (`reply_draft`: kept on this Mac or in Drafts, from before MailMind last quit too), or a new one, which closes
+    /// (and saves) a reply open to another message. `resuming` off always starts a new one (a quick reply's line).
     @discardableResult
     func reply(_ copy: MailCopy, all: Bool = false, resuming: Bool = true) async -> Composer? {
         let inBox = !all && inlineSlot == copy
@@ -536,9 +543,62 @@ final class Composing: ComposeHost {
             // Its words as saved go on in the box, the same draft; ones that never saved are the failed toast's.
             if closed.isSaved, inlineSlot == copy { return openInline(closed.snapshot(), for: copy) }
         }
+        if resuming {   // a reply just closed is saved before the message says what answers it
+            for save in Array(closingSaves.values) { _ = await save.value }
+        }
         guard let opened = await original(copy) else { return nil }
+        if resuming, let saved = opened.replyDraft {
+            switch await reopenReply(saved, for: copy, inBox: inBox) {
+            case .opened(let composer): return composer
+            case .waiting: return nil
+            case .gone: break
+            }
+        }
         let seed = Seeds.reply(opened, all: all, mine: mine)
         return inBox && inlineSlot == copy ? openInline(seed, for: copy) : open(seed)
+    }
+
+    enum Reopening {
+        case opened(Composer?)
+        /// It couldn't open now, and the person was told it waits in Drafts.
+        case waiting
+        /// It has gone since: a new reply opens.
+        case gone
+    }
+
+    /// The reply saved to a message, back where the reply would open, with its words: by its id where it is
+    /// MailMind's, wherever it is now, or by its copy in Drafts where it is another app's. One that can't open says it
+    /// waits in Drafts rather than open an empty reply over it.
+    private func reopenReply(_ saved: API.ReplyDraft, for copy: MailCopy, inBox: Bool) async -> Reopening {
+        guard let core else { return .gone }
+        let body = saved.inDrafts.map { API.ResumeBody(folder: $0.folder, key: $0.key, uid: $0.uid) }
+            ?? API.ResumeBody(draftId: saved.draftId)
+        let reopened: API.DraftOpened
+        do {
+            reopened = try await core.post(API.Post.DraftResume.self, body)
+        } catch {
+            draftsChanged()
+            if (error as? Problem)?.status == 404 { return .gone }
+            say(Self.replyWaits(error), refused: true)
+            return .waiting
+        }
+        forgetBoxDrafts(of: reopened.draftId)
+        var seed = Seeds.resumed(reopened)
+        let more = Seeds.moreReplies(saved.more)
+        seed.note = [seed.note, more].filter { !$0.isEmpty }.joined(separator: " ")
+        let composer = inBox && inlineSlot == copy ? openInline(seed, for: copy) : open(seed)
+        if inline?.composer === composer, !more.isEmpty {
+            say(more)   // the box shows no note: the toast says it
+        } else if !seed.note.isEmpty {
+            announce(seed.note)
+        }
+        return .opened(composer)
+    }
+
+    /// What r says when the reply saved to the message can't open now: it waits in Drafts, and why.
+    static func replyWaits(_ error: any Error) -> String {
+        let why = (error as? Problem)?.status == 409 ? "Open it from there." : said(error)
+        return "A draft reply to this message is waiting in Drafts. " + why
     }
 
     /// A composer for the reader's reply box: one of the composers, so everything that knows them knows it, with no
@@ -718,6 +778,8 @@ final class Composing: ComposeHost {
         openingAhead = copy.key
         defer { openingAhead = nil }
         guard let composer = await reply(copy) else { return }
+        // The reply saved to the message opened, with its words: the AI's never take their place.
+        if composer.draftId != nil { return }
         var written: String?
         if let core, case .draftAheadReady(let ready)? = try? await core.get(API.Get.AiDraftAhead.self, query(copy, peek: true)),
            ready.status == "ready", !ready.body.isEmpty
