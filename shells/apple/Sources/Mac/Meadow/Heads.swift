@@ -50,12 +50,18 @@ struct MeadowListHead: View {
             MeadowTabs(tabs: InboxTab.allCases.map(tab), selection: $mailbox.tab, label: "Inbox lanes")
                 .padding(.top, 10)
         } else if let words = sentence(place) {
-            Text(words)
-                .font(.meadow(.ui, 12.5))
-                .foregroundStyle(meadow.ink3)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 8)
-                .padding(.horizontal, 2)
+            Group {
+                if let about = words.about, let count = words.count {
+                    MeadowHeadLine(sentence: about) { Text(count) }
+                } else {
+                    Text(words.about ?? words.count ?? "")
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .font(.meadow(.ui, 12.5))
+            .foregroundStyle(meadow.ink3)
+            .padding(.top, 8)
+            .padding(.horizontal, 2)
         }
     }
 
@@ -71,13 +77,12 @@ struct MeadowListHead: View {
         return .init(value: tab, title: tab.title, count: count, sun: tab == .needs)
     }
 
-    /// What the place is, in a sentence (`.lsub`), and how much it holds.
-    private func sentence(_ place: Place?) -> String? {
+    /// What the place is, in a sentence (`.lsub`), and how much it holds: either, both, or nil for neither.
+    private func sentence(_ place: Place?) -> (about: String?, count: String?)? {
         guard let place else { return nil }
-        let about = MeadowListHead.about(place, role: role(of: place))
-        let count = MeadowListHead.count(app: app, mailbox: mailbox)
-        let words = [about, count].compactMap { $0?.isEmpty == false ? $0 : nil }
-        return words.isEmpty ? nil : words.joined(separator: " · ")
+        let about = MeadowListHead.about(place, role: role(of: place)).flatMap { $0.isEmpty ? nil : $0 }
+        let count = MeadowListHead.count(app: app, mailbox: mailbox).flatMap { $0.isEmpty ? nil : $0 }
+        return about == nil && count == nil ? nil : (about, count)
     }
 
     private func role(of place: Place) -> String? {
@@ -276,17 +281,39 @@ private struct MeadowLaneHead: View {
     @Environment(\.meadow) private var meadow
 
     var body: some View {
-        HStack(spacing: 6) {
-            Text(lane == .feed ? "Newsletters and digests. Nothing here asks anything of you."
-                : "Receipts and invoices, with what each one cost.")
-                .lineLimit(2)
+        MeadowHeadLine(sentence: lane == .feed ? String(localized: "Newsletters and digests. Nothing here asks anything of you.")
+                           : String(localized: "Receipts and invoices, with what each one cost.")) {
             MeadowScopeMenu(mailbox: mailbox, account: search.account)
-            Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .font(.meadow(.ui, 12.5))
         .foregroundStyle(meadow.ink3)
         .padding(.top, 8)
         .padding(.horizontal, 2)
+    }
+}
+
+/// A head's sentence and what follows it (`.lsub`, `client-ctx`): on one line with a "·" between where they fit, as
+/// the page's line runs on; else the sentence wrapped as it needs and what follows on a line of its own, so no line
+/// starts with a "·" and nothing stands squeezed beside a sentence.
+struct MeadowHeadLine<Trailing: View>: View {
+    let sentence: String
+    @ViewBuilder let trailing: () -> Trailing
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 4) {
+                Text(sentence)
+                Text(verbatim: "·")
+                trailing()
+            }
+            .fixedSize()
+            VStack(alignment: .leading, spacing: 2) {
+                Text(sentence)
+                    .fixedSize(horizontal: false, vertical: true)
+                trailing()
+            }
+        }
     }
 }
 
