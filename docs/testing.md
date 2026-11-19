@@ -137,7 +137,9 @@ server answers yet is on the ledger, `tests/support/rust_ledger.txt`, one test i
 builds the launcher and runs the ledger's tests against it; `just verify` runs it. When `MAILMIND_TEST_LEDGER` names the ledger,
 every served test (`tests/api` and `tests/e2e/browser`) not on it is `xfail(strict=True, reason="not on the Rust server yet")`, so
 `just test-rust-all` runs them all against the Rust server and one that passes errors with `XPASS(strict)`: put it on the
-ledger. A test goes on the ledger only once it passes against both servers, and the `served` workflow runs both on one commit.
+ledger. A test goes on the ledger only once it passes against both servers, and the `served` workflow runs both on one commit,
+in a job for each server. A job that fails keeps what each of its servers printed (`server.log`) on the run's page, and a test
+whose server ended or stopped answering says the last of it.
 
 Under `-n`, each worker is a pytest session of its own: it installs the tripwire, runs its own fake Claude API and makes its own
 `world` template and new database, under a temp directory of its own. A test keeps to its temp directory and every server takes
