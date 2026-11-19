@@ -134,7 +134,9 @@ The Mac app is `io.github.lanterno.mailmind`, version `MARKETING_VERSION` in `pr
   `Library/Preferences/io.github.lanterno.mailmind.plist`, which `demo_home.py` checks after each run. Read a run's
   preferences there, never with `defaults` on the app's domain, which is the person's. A new preference goes through
   `UserDefaults.standard` (or a suite a test names), never a file of its own. `CFFIXED_USER_HOME` moves the home folder
-  on macOS 26, but not the defaults.
+  on macOS 26, but not the defaults. Nor does such a run reach the person's Mac otherwise: it never asks to notify or
+  posts a notification (`SystemNotifier.forThisProcess` hands it `Silent`, which keeps what it would have posted for
+  a test), and its Open at login is off and says why, never asking `SMAppService` (`OpenAtLogin`).
 - **The window speaks the page's routes,** in-process, through the same perimeter as the served app, and keeps no
   closed set or limit the server owns: those come with the generated types.
 - **A mail body's frame has walls of its own.** The mail's content world runs no JavaScript; the web view keeps
