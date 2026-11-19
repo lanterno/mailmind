@@ -164,6 +164,8 @@ final class Composer: Identifiable {
     private var edits = 0
     @ObservationIgnored private var saving: Task<Bool?, Never>?
     @ObservationIgnored private var lastSaveHash: Int?
+    /// When its last save kept it.
+    @ObservationIgnored private(set) var savedAt: Date?
     private(set) var savedLine = ""
     let note: String
     /// A reply-all's copied-in people.
@@ -260,6 +262,11 @@ final class Composer: Identifiable {
             }
         }
         queueKnown((to + cc + bcc).map(\.value), say: false)   // prefilled chips are marked silently
+        // Its words as saved, opened again as they were: closing says where they are, as it would have.
+        if !edited, let at = seed.saved {
+            lastSaveHash = payload().hash
+            savedAt = at
+        }
     }
 
     func recipients(_ field: ComposeField) -> [Recipient] {
@@ -322,7 +329,16 @@ final class Composer: Identifiable {
         seed.ack = ack
         seed.body = body
         seed.attachments = attachments
+        seed.saved = isSaved ? savedAt : nil
         return seed
+    }
+
+    /// Its words as they stand are a draft this composer saved, or opened as saved: nothing is left to save.
+    var isSaved: Bool { lastSaveHash != nil && !dirty }
+
+    /// Once the saves it has begun have ended: each waits for the one before, so the last one ends last.
+    func settled() async {
+        if let saving { _ = await saving.value }
     }
 
     private func stopTimers() {
@@ -338,12 +354,16 @@ final class Composer: Identifiable {
         laterOpen = false
         if !force { commitTyped() }
         let closingSave = dirty && !force
-        if closingSave {
-            let saved = save(silent: true)   // the save read the fields: the snapshot holds them
+        // Saved already, by the autosave a moment ago, and unchanged since: closing still says where the words went,
+        // so a reply closed with Esc isn't closed in silence.
+        let savedBefore = !force && !closingSave && isSaved
+        if closingSave || savedBefore {
+            // The save read the fields: the snapshot holds them.
+            let saved = closingSave ? save(silent: true) : Task<Bool?, Never> { true }
             host.closing(self, save: saved, snapshot: snapshot())
         }
         closed = true
-        if draftId != nil && !closingSave {
+        if draftId != nil && !closingSave && !savedBefore {
             host.draftsChanged()   // its saves replaced the copy that list shows
             // Read only kept its saves on this Mac, where no list shows them: closing says where it is.
             if host.readOnly { host.keptOnThisMac(self) }
@@ -823,6 +843,7 @@ final class Composer: Identifiable {
                 conflict = false
                 if edits == at { dirty = false }   // an edit since this save began stays to save
                 lastSaveHash = payload.hash
+                savedAt = Date()
                 savedLine = "Saved \(Date().formatted(date: .omitted, time: .shortened))"
                 if !silent { say("Draft saved") }
                 return true

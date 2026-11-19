@@ -106,7 +106,8 @@ extension Composing {
     }
 
     /// Esc in the reader's box, as the page's composer takes it: a check showing goes, back to the text; else the
-    /// reply closes, what was written in it saved as its draft (`close`), to take up again from Drafts.
+    /// reply closes, what was written in it saved as its draft (`close`), which says so, and r on the message opens
+    /// it in the box again.
     @discardableResult
     func escapeInBox() -> Bool {
         guard let open = inline, !open.composer.closed else { return false }

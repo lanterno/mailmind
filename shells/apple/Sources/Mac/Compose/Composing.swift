@@ -80,6 +80,9 @@ final class Composing: ComposeHost {
 
     /// The reply open in the reader, if one is.
     private(set) var inline: InlineReply?
+    /// Replies closed in the reader's box with their words saved, by the message each answers: r on that message
+    /// opens the words there again, rather than an empty box.
+    @ObservationIgnored private var boxDrafts: [MailCopy: Composer] = [:]
     /// The message the reader offers its reply box for: a plain reply to it opens there. Moving to another message
     /// closes a reply left open, which saves it to Drafts as closing a window does.
     var inlineSlot: MailCopy? {
@@ -286,6 +289,7 @@ final class Composing: ComposeHost {
     }
 
     func closing(_ composer: Composer, save: Task<Bool?, Never>, snapshot: ComposeSeed) {
+        if let open = inline, open.composer === composer { boxDrafts[open.copy] = composer }
         Task {
             switch await save.value {
             case true? where readOnly:
@@ -311,6 +315,7 @@ final class Composing: ComposeHost {
               waitingFor save: Task<Bool?, Never>?)
     {
         failedSend = nil
+        forgetBoxDrafts(of: composer.draftId)
         let scheduled = after > 0
         showFloat(scheduled ? .progress("Scheduling for \(SendTimes.words(after))…", clock: true) : .progress("↑ Sending…", clock: false))
         Task {
@@ -484,13 +489,23 @@ final class Composing: ComposeHost {
     }
 
     /// A reply in a window, or a plain reply to the message the reader offers its box for, in that box: the one open
-    /// there already, or a new one, which closes (and saves) a reply open to another message.
+    /// there already, the words of one closed there and saved (unless `resuming` is off), or a new one, which closes
+    /// (and saves) a reply open to another message.
     @discardableResult
-    func reply(_ copy: MailCopy, all: Bool = false) async -> Composer? {
+    func reply(_ copy: MailCopy, all: Bool = false, resuming: Bool = true) async -> Composer? {
         let inBox = !all && inlineSlot == copy
         if inBox, let open = inline, open.copy == copy, !open.composer.closed {
             open.composer.focusRequest = .body
             return open.composer
+        }
+        if inBox, resuming, let closed = boxDrafts.removeValue(forKey: copy) {
+            await closed.settled()
+            if let open = inline, open.copy == copy, !open.composer.closed {
+                open.composer.focusRequest = .body
+                return open.composer
+            }
+            // Its words as saved go on in the box, the same draft; ones that never saved are the failed toast's.
+            if closed.isSaved, inlineSlot == copy { return openInline(closed.snapshot(), for: copy) }
         }
         guard let opened = await original(copy) else { return nil }
         let seed = Seeds.reply(opened, all: all, mine: mine)
@@ -515,6 +530,12 @@ final class Composing: ComposeHost {
         return composer
     }
 
+    /// A draft opened or sent from elsewhere goes on there: the box no longer opens its words as they were.
+    private func forgetBoxDrafts(of draftId: Int?) {
+        guard let draftId else { return }
+        boxDrafts = boxDrafts.filter { $0.value.draftId != draftId }
+    }
+
     /// The reply in the reader's box, into a window of its own, its words and saves as they are.
     func popOut() {
         guard let open = inline, !open.composer.closed else { return }
@@ -535,6 +556,7 @@ final class Composing: ComposeHost {
         do {
             let reopened = try await core.post(API.Post.DraftResume.self, body)
             open(Seeds.resumed(reopened))
+            forgetBoxDrafts(of: reopened.draftId)
             let note = Seeds.resumeNotice(reopened.notes)
             if !note.isEmpty { announce(note) }
         } catch {
@@ -546,7 +568,8 @@ final class Composing: ComposeHost {
     /// A quick reply: the reply with its line, then, with AI on, the AI asked, quietly, for a line or two in its place.
     /// With AI off nothing is asked of it, as the page asks nothing, and the line stays.
     func quickReply(_ copy: MailCopy, _ quick: QuickReply) async {
-        guard let composer = await reply(copy) else { return }
+        // A fresh reply: its line never takes the place of words saved from the box.
+        guard let composer = await reply(copy, resuming: false) else { return }
         composer.startWith(quick.line)
         guard aiOn else { return }
         let start = composer.body
@@ -656,7 +679,8 @@ final class Composing: ComposeHost {
             open.composer.focusRequest = .body
             return
         }
-        guard !aiTurnedOff, chips[copy.key] == .ready else {
+        // Words closed in the box and saved open there again, never a reply written ahead in their place.
+        guard !aiTurnedOff, chips[copy.key] == .ready, !(inlineSlot == copy && boxDrafts[copy] != nil) else {
             await reply(copy)
             return
         }

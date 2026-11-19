@@ -102,6 +102,8 @@ struct ComposeSeed: Sendable {
     var attachments: [ComposeFile] = []
     var note = ""
     var redirect: Redirect?
+    /// When its words as they stand were saved: a reply closed in the reader's box, opened there again.
+    var saved: Date?
 }
 
 /// Addresses as the composer reads them.
