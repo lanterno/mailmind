@@ -258,9 +258,15 @@ def test_a_reply_saved_once_goes_out_after_its_originals_row_went(page, app, wor
     body(page).fill("See you there.")
     page.keyboard.press("Control+s")
     expect(page.locator("#cmpSaved")).to_contain_text("Saved")
-    # Filed from another tab: its row goes once the server holds the move, and no folder stored has a copy.
+    # Filed from another tab: its row follows the copy to the Archive once the server holds the move. Then another
+    # client deletes it there, and once a reconcile finds it gone no folder stored has a copy.
     assert app.post("/api/archive", world.copy(LUNCH[1])).status == 200
     app.work("commands")
+    [filed] = world.where(LUNCH[1])["db"]
+    assert filed["folder"] == "Archive"
+    with world.server.lock:
+        world.server.mailbox(w.ADA, "Archive").messages.pop(filed["uid"])
+    app.work("reconcile", w.ADA)
     assert world.where(LUNCH[1])["db"] == []
     send_button(page).click()
     let_undo_pass(page)
