@@ -76,6 +76,10 @@ final class MailListModel: MessageRows {
     private(set) var firstRowsAt: Date?
     /// What a person is told when a page couldn't be read.
     private(set) var problem: String?
+    /// Counted up each time a page comes with rows or a total it didn't have: what reads where the chosen copy stands
+    /// (`chosenPosition`, the pane's "3 of 120") reads it again then, as a list opened under a message already open
+    /// (⌘0 from one account's Inbox) holds no row until its first page comes. The pages themselves aren't watched.
+    private(set) var held = 0
 
     @ObservationIgnored private var pages: [Int: [API.FolderRow]] = [:]
     @ObservationIgnored private var asked: Set<Int> = []
@@ -110,6 +114,7 @@ final class MailListModel: MessageRows {
 
     /// Where the chosen copy is among the rows held, if it is there.
     var chosenPosition: Int? {
+        _ = held
         guard let chosen = selection?.copy else { return nil }
         for (number, page) in pages {
             if let index = page.firstIndex(where: { MailCopy($0) == chosen }) { return number * Self.pageSize + index }
@@ -197,6 +202,7 @@ final class MailListModel: MessageRows {
                 .map { first + $0 })
             if firstRowsAt == nil { firstRowsAt = Date() }
             if totalChanged || !changed.isEmpty {
+                held += 1
                 display?.rowsChanged(changed, totalChanged: totalChanged)
             }
         }
