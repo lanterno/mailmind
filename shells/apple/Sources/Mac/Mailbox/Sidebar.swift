@@ -58,8 +58,7 @@ struct MailboxSidebar: View {
             // The Inbox counts what the brief says needs you, so its tallies are read once the rail shows.
             if let desk, !desk.brief.tallied { await desk.brief.keepTallied()?.value }
         }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Mailboxes")
+        // VoiceOver finds it as the frame's Mailboxes, the group its panel or drawer is (`voiceOverGroup`).
     }
 
     /// Do what a place's menu offers (`RailPlaceAct`).

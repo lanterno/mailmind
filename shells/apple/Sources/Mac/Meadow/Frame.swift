@@ -92,12 +92,12 @@ struct MeadowFrame<Pane: View>: View {
             // The list's column stands in the list's room, or across the list's and the pane's for a place that spans.
             MailboxColumn(app: app, mailbox: mailbox)
                 .meadowPanel()
-                .placed(layout.list ?? layout.full)
+                .placed(layout.list ?? layout.full, named: String(localized: "Message list"))
             pane
                 .environment(\.meadowPaneWidth, layout.pane?.width ?? 0)
                 .meadowPanel()
                 .toastRoom(.pane)
-                .placed(layout.pane)
+                .placed(layout.pane, named: String(localized: "Reading pane"))
             if let splitter = layout.splitter {
                 MeadowSplitter(shell: shell)
                     .frame(width: splitter.width, height: splitter.height)
@@ -122,20 +122,21 @@ struct MeadowFrame<Pane: View>: View {
     @ViewBuilder private func rail(_ layout: ShellLayout) -> some View {
         let sidebar = MailboxSidebar(app: app, mailbox: mailbox)
             .scrollContentBackground(.hidden)
+        let name = String(localized: "Mailboxes")
         if let rect = layout.rail {
             sidebar
                 .meadowPanel(opacity: 0.86)
-                .placed(rect)
+                .placed(rect, named: name)
         } else if layout.docked {
             // Focus reading: the rail stands aside.
-            sidebar.placed(nil)
+            sidebar.placed(nil, named: name)
         } else {
             let open = shell.drawerOpen
             sidebar
                 .modifier(MeadowDrawer())
                 .frame(width: layout.drawer.width, height: layout.drawer.height)
                 .offset(x: open ? 0 : -(layout.drawer.width * 1.02 + 40))
-                .accessibilityHidden(!open)
+                .voiceOverGroup(name, hidden: !open)
                 .allowsHitTesting(open)
         }
     }
@@ -168,14 +169,23 @@ struct MeadowFrame<Pane: View>: View {
 
 extension View {
     /// Stand in `rect` of the shell, or, with none, aside off the window: hidden, out of reach and out of
-    /// VoiceOver's way, but still alive.
-    func placed(_ rect: CGRect?) -> some View {
+    /// VoiceOver's way, but still alive. VoiceOver finds it as a group, named `label` where one is given.
+    func placed(_ rect: CGRect?, named label: String? = nil) -> some View {
         let shown = rect ?? CGRect(x: -40_000, y: 0, width: 480, height: 480)
         return frame(width: shown.width, height: shown.height)
             .position(x: shown.midX, y: shown.midY)
             .opacity(rect == nil ? 0 : 1)
             .allowsHitTesting(rect != nil)
-            .accessibilityHidden(rect == nil)
+            .voiceOverGroup(label, hidden: rect == nil)
+    }
+
+    /// One group for VoiceOver, named `label` where one is given, hidden whole while `hidden`. Hidden as a group, so
+    /// shown it never says `accessibilityHidden(false)` to what it holds: that would show VoiceOver the scenery hidden
+    /// inside it, a panel's paper and grain as a nameless picture and its shadows as nameless groups.
+    func voiceOverGroup(_ label: String?, hidden: Bool) -> some View {
+        accessibilityElement(children: .contain)
+            .accessibilityLabel(Text(label ?? ""))
+            .accessibilityHidden(hidden)
     }
 }
 
