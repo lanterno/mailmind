@@ -3,6 +3,7 @@ mail on its way out: a folder's unread and total on the rail, each of the Inbox'
 reply later) beside its list, and the digest's mail that needs you, which is the Inbox's alone, beside what the brief is
 written from. A brief never calls the inbox quiet while mail in it needs you, and a draft MailMind saves is no unread
 mail."""
+import os
 from urllib.parse import quote
 
 from fixtures import world as w
@@ -63,6 +64,21 @@ def test_a_folders_unread_and_total_count_the_rows_its_list_shows(app, world):
             page["total"], sum(1 for r in page["items"] if not r["seen"])), folder
     inbox = {r["key"] for r in listed(app, "INBOX")["items"]}
     assert inbox.isdisjoint({world.key(RECEIPT), world.key(CONFIRM), world.key(LUNCH), world.key(NEWSLETTER)})
+
+
+def test_a_folder_never_synced_keeps_the_servers_count_though_mailmind_filed_mail_there(app, world):
+    world.server.add_folder(w.ADA, "Clients")
+    with open(os.path.join(w.CORPUS, ARCHIVED), "rb") as f:
+        raw = f.read()
+    for n in (1, 2):
+        world.server.deliver(w.ADA, "Clients", raw.replace(b"Message-ID: <", b"Message-ID: <client%d." % n))
+    assert app.post("/api/move", {**world.copy(RECEIPT), "to": "Clients"}).status == 200
+    clients = next(f for f in folder_counts(app)["folders"] if f["name"] == "Clients")
+    assert (clients["total"], clients["unseen"]) == (3, 3)       # the server's, not the one row MailMind keeps
+    app.work("sync", w.ADA, "Clients")
+    page = listed(app, "Clients")
+    clients = next(f for f in folder_counts(app)["folders"] if f["name"] == "Clients")
+    assert (clients["total"], clients["unseen"]) == (page["total"], sum(1 for r in page["items"] if not r["seen"])) == (3, 3)
 
 
 def test_a_draft_mailmind_saves_is_never_counted_unread(app, world):
