@@ -8,6 +8,17 @@ describe("what the digest asks of you", () => {
     const got = needsYou([item(1, { needs_you: true, importance: 3 }), item(2), item(3, { needs_you: true, importance: 5 }), item(4, { needs_you: true, importance: 3 })]);
     expect(got.map((x) => x.key)).toEqual([3, 4, 1]);
   });
+  it("lists a conversation once, by its weightiest message, and another account's of the same id apart", () => {
+    const A = "ada@example.test", B = "bea@example.test";
+    const got = needsYou([
+      item(1, { needs_you: true, importance: 3, account: A, thread_id: "t1" }),
+      item(2, { needs_you: true, importance: 5, account: A, thread_id: "t1" }),
+      item(3, { needs_you: true, importance: 3, account: B, thread_id: "t1" }),
+      item(4, { needs_you: true, importance: 3, account: A, thread_id: null }),
+      item(5, { needs_you: true, importance: 3, account: A, thread_id: null }),
+    ]);
+    expect(got.map((x) => x.key)).toEqual([2, 5, 4, 3]);
+  });
   it("takes what the server says is safe to file, and works nothing out", () => {
     expect(safeToFile([item(1, { safe_to_file: true }), item(2, { importance: 1 })]).map((x) => x.key)).toEqual([1]);
   });
