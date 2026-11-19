@@ -90,14 +90,15 @@ enum Lists {
         return Sheet(rows: page.hits.map(API.FolderRow.init), hasMore: page.hasMore, facts: ListFacts())
     }
 
-    /// A search's hits as the server sends them: a lane reads their dates.
+    /// A search's hits as the server sends them: a lane reads their dates. A lane's leave out the Trash and Junk, as
+    /// the server reads `lane`.
     static func hits(_ wire: Wire, _ search: Search, scope: API.SearchScope, offset: Int, limit: Int)
         async throws -> (hits: [API.SearchHit], hasMore: Bool)
     {
         let held: API.SearchScope = search.thread != nil ? .account : search.account.isEmpty ? .all : scope
         let read = try await wire.get(API.Get.Search.self, [
             "q": search.q, "scope": held.rawValue, "account": search.account, "thread": search.thread,
-            "limit": String(limit), "offset": String(offset),
+            "lane": search.lane?.rawValue, "limit": String(limit), "offset": String(offset),
         ])
         switch read {
         case .searchPage(let page): return (page.items, page.hasMore)
