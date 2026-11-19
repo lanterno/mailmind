@@ -22,6 +22,7 @@ use mm_assistant::refusals::{CallError, NotSent};
 use mm_assistant::status::Status;
 use mm_kernel::ai_provider::AiProvider;
 use mm_kernel::errors::Fault;
+use mm_kernel::events::{Events, Topic};
 use mm_kernel::seams::{Clock, Moment};
 use mm_kernel::zone::Utc;
 use serde_json::{Value, json};
@@ -760,6 +761,32 @@ fn the_round_sends_the_backlog_and_triages_the_newest_at_once() {
     assert_eq!(triaged, newest);
     assert!(w.waiting().is_empty());
     assert_eq!(w.model.batched().len(), 100);
+}
+
+/// The open tabs, as what each was told.
+#[derive(Debug, Default)]
+struct Tabs(Mutex<Vec<(&'static str, Value)>>);
+
+impl Events for Tabs {
+    fn publish(&self, topic: Topic, data: Value) {
+        lock(&self.0).push((topic.name(), data));
+    }
+}
+
+/// A batch's answers are summaries landing too: the round that brings them in counts them with what it triaged at once,
+/// and says so even when someone using AI holds the rest of it back.
+#[test]
+fn the_round_that_brings_a_batchs_answers_in_tells_the_open_tabs() {
+    let w = world(120, true, None);
+    let tabs = Arc::new(Tabs::default());
+    let round = w.assessments(true).telling(tabs.clone());
+    round.round().expect("a round");
+    assert_eq!(*lock(&tabs.0), [("summarized", json!({"count": 20}))], "the newest, triaged at once");
+    w.model.end_batch();
+    w.clock.shift(batches::POLL);
+    w.calls.call_claude("Asked for.", "thread").expect("someone asked just now");
+    assert_eq!(round.round().expect("a round"), Some(45));
+    assert_eq!(lock(&tabs.0)[1..], [("summarized", json!({"count": 100}))]);
 }
 
 #[test]

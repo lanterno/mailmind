@@ -402,6 +402,28 @@ fn triage_waits_while_ai_is_off_or_someone_is_using_it_and_leaves_alone_what_a_b
     assert_eq!(queue.said().into_keys().collect::<Vec<_>>(), [1]);
 }
 
+/// Summaries change what needs you with no mail changing: a round that kept some says how many to the open tabs, whose
+/// lists, tabs, rail and brief read them again, and one that kept none, or tried none, says nothing.
+#[test]
+fn a_round_that_kept_summaries_tells_the_open_tabs_how_many_and_one_that_kept_none_says_nothing() {
+    let w = world(true);
+    let tabs = Arc::new(Tabs::default());
+    let queue = Arc::new(Queue::of(vec![
+        pending(1, "Lunch", NOW - 1),
+        pending(2, "prose", NOW - 2),
+        pending(3, "Lunch", NOW - 31 * 86_400),
+    ]));
+    let round = assessments(&w, &queue).telling(tabs.clone());
+    assert_eq!(round.round(), Ok(None));
+    assert_eq!(*tabs.0.lock().expect("tabs"), [("summarized", json!({"count": 2}))], "a stand-in kept is one too");
+
+    let none = Arc::new(Queue::of(vec![pending(3, "Lunch", NOW - 31 * 86_400)]));
+    assert_eq!(assessments(&w, &none).telling(tabs.clone()).round(), Ok(None));
+    let off = world(false);
+    assert_eq!(assessments(&off, &queue).telling(tabs.clone()).round(), Ok(None));
+    assert_eq!(tabs.0.lock().expect("tabs").len(), 1, "nothing more was told");
+}
+
 // ── drafting ahead ──────────────────────────────────────────────────────────────────────────────────
 
 /// Each thread's messages, each thread one message from a person to its account.
