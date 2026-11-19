@@ -14,17 +14,22 @@ Politeness/safety:
   • Runs INSIDE sync_guarded's single-flight, AFTER the INBOX sync, so it never delays new mail.
   • A 0.5s pause between folders; each folder opens its own fresh connection (never the pool).
 
+Which folders play each part is found once for each account and kept: folder names are stable. A folder the server says is
+gone (FolderGone: another client deleted or renamed it) is forgotten, as any sync forgets one (`gone`, Folders.gone), and the
+account's parts are found again on the next tick, so the folder that plays the part now is warmed, not the one that went.
+
 Enable:  MAILMIND_WARM_FOLDERS=1            → all accounts, Proton Bridge included
          MAILMIND_WARM_FOLDERS=a@x,b@y      → only those accounts
          "warm_folders": true on an account in mailmind.config.json, for when the variable is unset: it lasts between runs
 """
 import threading
 import time
-from collections.abc import Collection
+from collections.abc import Callable, Collection
 from typing import Protocol
 
 from mailmind.mailbox.application import session as mail_session
 from mailmind.mailbox.application.ports import Account, Accounts, OpenSession, Stored
+from mailmind.mailbox.application.session import FolderGone
 from mailmind.platform import environment
 from mailmind.platform.logging import get_logger
 
@@ -51,10 +56,12 @@ def _enabled(acct: Account) -> bool:
 
 
 class Warming:
-    def __init__(self, accounts: Accounts, open_session: OpenSession, sync_folder: SyncFolder):
+    def __init__(self, accounts: Accounts, open_session: OpenSession, sync_folder: SyncFolder,
+                 gone: Callable[[str, str], object] | None = None):
         self._accounts = accounts
         self._open_session = open_session
         self._sync_folder = sync_folder
+        self._gone = gone                   # forgets a folder the server no longer has (Folders.gone), where one is given
         self._resolved: dict[str, dict[str, str | None]] = {}     # email -> {role: folder_name|None}  (folder names are stable; resolve once)
         self._lock = threading.Lock()
         self._tick = 0
@@ -85,6 +92,14 @@ class Warming:
             self._resolved[acct["email"]] = out
         return out
 
+    def _went(self, email: str, folder: str) -> None:
+        """`folder` of `email` is gone from its server: forgotten where this forgets folders, and the account's parts let
+        go, so the next tick finds which folder plays each now."""
+        with self._lock:
+            self._resolved.pop(email, None)
+        if self._gone is not None:
+            self._gone(email, folder)
+
 
     def warm_tick(self, emails: Collection[str] | None = None) -> None:
         """One warming pass over the enabled accounts' due role folders. Called from sync_guarded
@@ -114,6 +129,8 @@ class Warming:
                     r = self._sync_folder(a, folder, full=False, recent=WARM_RECENT)
                     if r and (r[0] or 0):
                         log.info("%(account)s %(folder)s: +%(count)s", {"account": a["email"], "folder": folder, "count": r[0]})
+                except FolderGone:
+                    self._went(a["email"], folder)
                 except Exception as e:
                     log.warning("%(account)s %(folder)s", {"account": a["email"], "folder": folder}, exc_info=e)
                 time.sleep(0.5)
