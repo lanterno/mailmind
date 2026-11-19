@@ -4,7 +4,7 @@ import SwiftUI
 import XCTest
 
 /// A message in a window of its own shows and does what the pane's reader does for it: the cards the desk puts in a
-/// reader, and what its verbs say with their Undo.
+/// reader, what its verbs say with their Undo, the reader's single keys.
 @MainActor
 final class OwnWindowTests: XCTestCase {
     private static let key = "5c7e9a1b3d5f7a9c2e4b6d8f0a1c3e5b7d9f2a4c6e8b0d1f3a5c7e9b2d4f6a8c"
@@ -123,5 +123,101 @@ final class OwnWindowTests: XCTestCase {
         XCTAssertTrue(verbs.left, "the message has left: the window closes")
         let said = try XCTUnwrap(mailbox.toast?.text)
         XCTAssertTrue(Self.words(view).contains(said), "the window says “\(said)” too")
+    }
+
+    // MARK: Its keys
+
+    /// d deletes the window's message and z undoes it, as they do from the pane.
+    func testDDeletesAndZUndoesAsFromThePane() async throws {
+        let server = OpenedMessageVerbsTests.server()
+        let mailbox = await mailbox(server)
+        let reader = ReaderModel()
+        reader.hold(Self.copy, OpenedMessageVerbsTests.head(Self.copy, thread: nil))
+        let verbs = MessageWindowVerbs(copy: Self.copy, mailbox: mailbox, reader: reader, routes: server.wire)
+        XCTAssertTrue(verbs.key("d"))
+        await until { !server.asked(API.Post.Trash.path).isEmpty }
+        await until { mailbox.toast?.undo != nil }
+        XCTAssertTrue(verbs.key("z"))
+        await until { !server.asked(API.Post.Undo.path).isEmpty }
+    }
+
+    /// The page reader's single keys act on the window's message alone: e, b, s and u at once, m asks where and h
+    /// asks when, and nothing else runs while the chooser is up. A key the reader doesn't have is left for the window.
+    func testTheReadersSingleKeysActOnTheWindowsMessage() async throws {
+        let server = OpenedMessageVerbsTests.server()
+        let mailbox = await mailbox(server)
+        func verbs() -> MessageWindowVerbs {
+            let reader = ReaderModel()
+            reader.hold(Self.copy, OpenedMessageVerbsTests.head(Self.copy, thread: nil))
+            return MessageWindowVerbs(copy: Self.copy, mailbox: mailbox, reader: reader, routes: server.wire)
+        }
+        for (key, path) in [("e", API.Post.Archive.path), ("b", API.Post.Junk.path), ("s", API.Post.Flag.path),
+                            ("u", API.Post.Seen.path)] as [(Character, String)] {
+            let before = server.asked(path).count
+            XCTAssertTrue(verbs().key(key), "\(key)")
+            await until { server.asked(path).count > before }
+            let sent = try XCTUnwrap(server.asked(path).last?.body)
+            XCTAssertTrue(String(decoding: sent, as: UTF8.self).contains("\"uid\":90"), "\(key) acts on the window's")
+        }
+        let moving = verbs()
+        XCTAssertTrue(moving.key("m"))
+        XCTAssertEqual(moving.moving, MoveAsk(account: Fixture.ada, from: "INBOX"), "m asks where, over the window")
+        let snoozing = verbs()
+        XCTAssertTrue(snoozing.key("h"))
+        XCTAssertTrue(snoozing.choosingSnooze, "h asks when")
+        XCTAssertFalse(snoozing.key("e"), "nothing else while the chooser asks")
+        XCTAssertFalse(verbs().key("q"), "a key the reader doesn't have")
+        XCTAssertFalse(verbs().key("j"), "nor a list's")
+    }
+
+    /// The keys come as AppKit hands them: a key nothing in the window took reaches its catcher, after the window, and
+    /// runs; one typed in a field, or with ⌘ held, or while the single keys are off, never does.
+    func testAKeyNothingTookIsTheReadersAndATypedOneNever() async throws {
+        let server = OpenedMessageVerbsTests.server()
+        let mailbox = await mailbox(server)
+        let reader = ReaderModel()
+        reader.hold(Self.copy, OpenedMessageVerbsTests.head(Self.copy, thread: nil))
+        let verbs = MessageWindowVerbs(copy: Self.copy, mailbox: mailbox, reader: reader, routes: server.wire)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled],
+                              backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let content = NSView(frame: window.contentLayoutRect)
+        window.contentView = content
+        let catcher = MessageWindowKeys.Catcher.hang(on: window)
+        XCTAssertTrue(MessageWindowKeys.Catcher.hang(on: window) === catcher, "once a window")
+        catcher.verbs = verbs
+        func type(_ key: String, _ code: UInt16, held: NSEvent.ModifierFlags = []) throws {
+            window.sendEvent(try XCTUnwrap(NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: held, timestamp: 0, windowNumber: window.windowNumber,
+                context: nil, characters: key, charactersIgnoringModifiers: key, isARepeat: false, keyCode: code)))
+        }
+        XCTAssertTrue(window.makeFirstResponder(content))
+        try type("s", 1, held: .command)
+        try type("s", 1)
+        await until { server.asked(API.Post.Flag.path).count == 1 }
+
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 100, height: 22))
+        content.addSubview(field)
+        XCTAssertTrue(window.makeFirstResponder(field))
+        try type("e", 14)
+        XCTAssertEqual(field.currentEditor()?.string, "e", "typed in the field")
+        XCTAssertNil(MessageWindowKeys.Catcher.single(try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
+            characters: "e", charactersIgnoringModifiers: "e", isARepeat: false, keyCode: 14)), in: window, verbs: verbs),
+            "never while a field has the keyboard")
+        XCTAssertTrue(window.makeFirstResponder(content))
+        verbs.typing = true
+        XCTAssertNil(MessageWindowKeys.Catcher.single(try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
+            characters: "e", charactersIgnoringModifiers: "e", isARepeat: false, keyCode: 14)), in: window, verbs: verbs),
+            "nor while the reply box is typed in")
+        verbs.typing = false
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertTrue(server.asked(API.Post.Archive.path).isEmpty, "no e reached the message")
+        let hash = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .shift, timestamp: 0,
+                                                  windowNumber: 0, context: nil, characters: "#",
+                                                  charactersIgnoringModifiers: "#", isARepeat: false, keyCode: 20))
+        XCTAssertEqual(MessageWindowKeys.Catcher.single(hash, in: window, verbs: verbs), "#", "⇧ for # and ?")
+        window.contentView = nil
     }
 }
