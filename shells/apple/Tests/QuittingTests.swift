@@ -208,6 +208,52 @@ final class QuittingTests: XCTestCase {
                        "3 messages are waiting to send later. They send when MailMind is next open.")
         XCTAssertTrue(Quitting.words(.stillGoing).text.hasSuffix("It sends when MailMind is next open."))
     }
+
+    /// A quit asked from inside a job of the main queue finishes: AppKit's wait for the answer to a quit that waits
+    /// (a run loop of its own, as `terminate` runs one here) sees the settling, which runs on the main actor, end.
+    /// Asked straight from the job, it never would.
+    func testAQuitAskedFromInsideAMainQueueJobFinishes() async {
+        let answered = Answers()
+        // AppKit's terminate, as `.terminateLater` has it: the answer is worked out on the main actor, and waited for
+        // in a run loop of its own, up to a second.
+        let terminate: @MainActor () -> Void = {
+            let settled = Answers()
+            Task { @MainActor in settled.said.append(true) }
+            let until = Date(timeIntervalSinceNow: 1)
+            while settled.said.isEmpty, Date() < until {
+                RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.02))
+            }
+            answered.said.append(!settled.said.isEmpty)
+        }
+        let quit = expectation(description: "the quit came back")
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                Quitting.quit {
+                    terminate()
+                    quit.fulfill()
+                }
+            }
+        }
+        await fulfillment(of: [quit], timeout: 5)
+        XCTAssertEqual(answered.said, [true], "the settling ran while the quit waited for it")
+
+        // Asked straight from the job, the wait never sees an answer: the hang `quit` keeps away.
+        let straight = expectation(description: "asked straight from the job")
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                terminate()
+                straight.fulfill()
+            }
+        }
+        await fulfillment(of: [straight], timeout: 5)
+        XCTAssertEqual(answered.said, [true, false])
+    }
+}
+
+/// What a quit's answers were, on the main actor.
+@MainActor
+private final class Answers {
+    var said: [Bool] = []
 }
 
 /// Routes whose draft saves answer only after `delay`, as a core's might while it is busy.
