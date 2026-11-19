@@ -673,6 +673,44 @@ final class MeadowRowsTests: XCTestCase {
         XCTAssertTrue(near(try dot(), inks.account(1)), "the second account's colour, once the order is read")
     }
 
+    /// The offline note comes over a list at its top: the list's top edge moves down by the note's height, and its
+    /// rows go down with it, the brief's row and the first day's head over them, as the page's do, however the
+    /// rows were moved as it shrank (in the app they held their place on screen and passed under the note's edge).
+    /// A list a person scrolled down is left where they scrolled it.
+    func testAListAtItsTopStaysAtItsTopAsANoteComesOverIt() async throws {
+        let (_, _, controller) = try await table(brief: BriefLine(needs: [], waiting: 0, canWait: 0))
+        let window = shown(controller)
+        defer { window.close() }
+        let scroll = controller.scrollView, clip = scroll.contentView
+        let top = -scroll.contentInsets.top
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(clip.bounds.minY, top, "at its top")
+
+        // The note, 108 tall, as the app showed it come: the rows held their place on the screen as the list's top
+        // went down, its frame and its scroll position changing in the one turn, in either order.
+        func note(_ height: CGFloat, boundsFirst: Bool) async throws {
+            let shift = scroll.frame.height - (800 - height)
+            if boundsFirst { clip.setBoundsOrigin(NSPoint(x: 0, y: clip.bounds.minY + shift)) }
+            scroll.frame = NSRect(x: 0, y: 0, width: 420, height: 800 - height)
+            if !boundsFirst { clip.setBoundsOrigin(NSPoint(x: 0, y: clip.bounds.minY + shift)) }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        for boundsFirst in [false, true] {
+            try await note(108, boundsFirst: boundsFirst)
+            XCTAssertEqual(clip.bounds.minY, top, "the rows went down under the note, the brief's first")
+            XCTAssertEqual(controller.table.row(at: NSPoint(x: 1, y: 0)), 0)
+            try await note(0, boundsFirst: boundsFirst)
+            XCTAssertEqual(clip.bounds.minY, top, "and up again as it goes")
+        }
+
+        // Scrolled down by a person: the note leaves the rows where they are.
+        clip.scroll(to: NSPoint(x: 0, y: 300))
+        scroll.reflectScrolledClipView(clip)
+        try await Task.sleep(for: .milliseconds(50))
+        try await note(108, boundsFirst: false)
+        XCTAssertEqual(clip.bounds.minY, 300 + 108, "a list scrolled down keeps the place it had on screen")
+    }
+
     // MARK: A row's buttons
 
     /// The table in a window that never shows, so its rows on screen have cells.
