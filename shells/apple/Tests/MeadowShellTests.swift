@@ -269,4 +269,57 @@ final class MeadowShellTests: XCTestCase {
         }
         return PaneBarFold(width: 1100).further.map(width)
     }
+
+    /// The pane's width, which a test changes under the bar.
+    @MainActor
+    @Observable
+    final class PaneWidth {
+        var value: CGFloat = 1100
+    }
+
+    /// The pane's bar as wide as `width` says, as the frame hands the pane its width.
+    private struct BarAt: View {
+        let width: PaneWidth
+        let app: MailApp
+
+        var body: some View {
+            MeadowPaneBar(app: app, mailbox: app.mailbox, writing: PaneWriting(replyTo: app.selection.copy))
+                .frame(width: width.value)
+                .environment(\.meadowPaneWidth, width.value)
+        }
+    }
+
+    /// The pane's Snooze says where it stands however the bar folds, wider or narrower, so h hangs its chooser under
+    /// it and not in the middle of the window: a fold that goes never takes the place of the one that came.
+    func testThePanesSnoozeSaysWhereItStandsHoweverTheBarFolds() async throws {
+        _ = MeadowFonts.register()
+        let app = MailApp()
+        app.mailbox.wire = Fixture.server().wire
+        await app.mailbox.refresh()
+        app.mailbox.tab = .all
+        app.openList()
+        await until { app.list?.copy(at: 0) != nil }
+        app.mailbox.chose([try XCTUnwrap(app.list?.copy(at: 0))])
+        let anchors = MeadowAnchors()
+        let width = PaneWidth()
+        let host = NSHostingView(rootView: BarAt(width: width, app: app)
+            .environment(\.meadowAnchors, anchors)
+            .meadowLight(.day))
+        host.frame = NSRect(x: 0, y: 0, width: 1100, height: 70)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        await until { anchors.frames["snooze"] != nil }
+        for wide in [CGFloat(760), 520, 400, 1100, 600, 420, 1000] {
+            width.value = wide
+            host.frame.size.width = wide
+            host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(40))
+            host.layoutSubtreeIfNeeded()
+            let snooze = try XCTUnwrap(anchors.frames["snooze"], "at \(wide), the pane's Snooze says where it is")
+            XCTAssertGreaterThan(snooze.width, 0, "at \(wide)")
+            XCTAssertLessThanOrEqual(snooze.maxX, wide + 1, "at \(wide), inside the bar")
+        }
+        window.contentView = nil
+    }
 }

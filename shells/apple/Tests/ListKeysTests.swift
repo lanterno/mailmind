@@ -355,6 +355,40 @@ final class ListKeysTests: XCTestCase {
         XCTAssertEqual(hung.size, clock.size)
         window.contentView = nil
     }
+
+    /// h hangs its chooser where a click on what it snoozes would: under the pane's Snooze for the message in the
+    /// pane, under the first marked row's clock for the marks, and under the pane's Snooze where no row is on screen.
+    func testHHangsItsChooserUnderThePanesSnoozeOrTheMarkedRowsClock() async throws {
+        let (app, controller) = try await table()
+        let window = window()
+        window.contentView?.addSubview(controller.scrollView)
+        let anchors = MeadowAnchors()
+        controller.anchors = anchors
+        let pane = CGRect(x: 600, y: 20, width: 80, height: 30)
+        anchors.remember("snooze", at: pane)
+        let list = try XCTUnwrap(app.list)
+        let open = MailCopy(try XCTUnwrap(list.copy(at: 1)))
+        XCTAssertEqual(anchors.snooze(for: [open], open: open), pane, "the message in the pane: the pane's Snooze")
+        let marks = [MailCopy(try XCTUnwrap(list.copy(at: 2))), MailCopy(try XCTUnwrap(list.copy(at: 4)))]
+        _ = controller.table.view(atColumn: 0, row: 2, makeIfNecessary: true)
+        let clock = try XCTUnwrap(controller.clockFrame(row: 2))
+        XCTAssertEqual(anchors.snooze(for: marks, open: open), clock, "the marks: the first one's clock")
+        XCTAssertEqual(anchors.snooze(for: marks, open: nil), clock)
+        let away = MailCopy(key: 90, folder: "INBOX", uid: 90, account: Fixture.ada)
+        XCTAssertEqual(anchors.snooze(for: [away], open: nil), pane, "no row on screen: the pane's Snooze")
+        anchors.forget("snooze")
+        XCTAssertNil(anchors.snooze(for: [away], open: nil), "nothing on screen: the middle of the window")
+
+        // A view that goes forgets only where it said a name stands, not where the view that came after it said.
+        let (gone, came) = (UUID(), UUID())
+        anchors.remember("snooze", at: pane, by: gone)
+        anchors.remember("snooze", at: pane.offsetBy(dx: -40, dy: 0), by: came)
+        anchors.forget("snooze", by: gone)
+        XCTAssertEqual(anchors.frames["snooze"], pane.offsetBy(dx: -40, dy: 0))
+        anchors.forget("snooze", by: came)
+        XCTAssertNil(anchors.frames["snooze"])
+        window.contentView = nil
+    }
 }
 
 /// A message's own window: it has the keyboard as it opens, and Space, the arrows, Page Up and Down, Home and End
