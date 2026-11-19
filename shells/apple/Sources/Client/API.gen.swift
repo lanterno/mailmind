@@ -2817,6 +2817,16 @@ extension API {
         }
     }
 
+    public struct ListedCopy: Codable, Hashable, Sendable {
+        public var ok: Bool
+        public var row: FolderRow
+
+        public init(ok: Bool, row: FolderRow) {
+            self.ok = ok
+            self.row = row
+        }
+    }
+
     public struct ListedView: Codable, Hashable, Sendable {
         public var builtin: Bool
         public var dynamic: String?
@@ -7125,6 +7135,8 @@ extension API {
         public enum MessageBody {}
         /// GET /api/message/body.html
         public enum MessageBodyHtml {}
+        /// GET /api/message/row
+        public enum MessageRow {}
         /// GET /api/messages
         public enum Messages {}
         /// GET /api/outbox
@@ -7501,6 +7513,11 @@ extension API.Get.MessageBody: GetRoute {
 extension API.Get.MessageBodyHtml: GetRoute {
     public static let path = "/api/message/body.html"
     public typealias Answer = NotJSON
+}
+
+extension API.Get.MessageRow: GetRoute {
+    public static let path = "/api/message/row"
+    public typealias Answer = API.ListedCopy
 }
 
 extension API.Get.Messages: GetRoute {
