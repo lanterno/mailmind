@@ -21,7 +21,7 @@ def row(**over):
     return {"pk": 1, "message_key": 7, "folder": "INBOX", "uid": 3, "from_name": "Ada", "from_addr": "ada@example.test", "subject": "Lunch",
             "date_iso": "2026-11-02", "snippet": "See you", "seen": 1, "flagged": 0, "has_attach": 0, "is_junk": 0, "bucket": "personal",
             "importance": 4, "category": "personal", "action": "reply", "thread_id": "rf:1", "summary": "Lunch plans", "ts": 100,
-            "account": "ada@example.test", "message_id": "<a@example.test>", "answered": 0, **over}
+            "account": "ada@example.test", "message_id": "<a@example.test>", "answered": 0, "recipients": None, **over}
 
 
 def test_a_row_names_its_copy():
@@ -31,6 +31,17 @@ def test_a_row_names_its_copy():
 
 def test_a_sender_with_no_name_shows_the_address():
     assert listing.listed_item(row(from_name=""), False, when)["from_name"] == "ada@example.test"
+
+
+def test_a_row_names_the_first_two_it_went_to_and_counts_the_rest():
+    it = listing.listed_item(row(recipients='Bo Lund <bo@example.test>, cy@example.test "Dee" <dee@example.test>'), False, when)
+    assert it["sent_to"] == [{"name": "Bo Lund", "addr": "bo@example.test"}, {"name": None, "addr": "cy@example.test"}]
+    assert it["sent_to_more"] == 1
+
+
+def test_a_row_that_went_to_no_one_names_no_one():
+    it = listing.listed_item(row(), False, when)
+    assert (it["sent_to"], it["sent_to_more"]) == ([], 0)
 
 
 def test_a_message_with_no_subject_says_so():
