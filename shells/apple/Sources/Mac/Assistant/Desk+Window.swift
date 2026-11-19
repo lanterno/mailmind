@@ -566,7 +566,8 @@ extension Desk {
     /// What the desk adds to the rail (Mac/Mailbox's `RailPlaces`): today's brief, what it says needs you, and each
     /// account's Screener with the senders waiting in it, which the open rail shows while some wait.
     var rail: DeskRail {
-        let needing = brief.needs.map { item in
+        // Each message, as the Inbox's list counts them one by one where it doesn't show conversations.
+        let needing = BriefWords.everyNeed(brief.items).map { item in
             DeskRail.Need(account: item.account, conversation: item.threadId ?? "message \(item.key)")
         }
         return DeskRail(brief: true, needing: needing, gates: accounts.map { account in

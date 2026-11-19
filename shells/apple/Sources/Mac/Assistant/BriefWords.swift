@@ -212,12 +212,24 @@ enum BriefWords {
         }
     }
 
-    /// What needs you, the most important first, then the newest.
+    /// What needs you, the most important first, then the newest: a conversation once, by its weightiest message, so
+    /// the brief lists and counts a conversation as the Inbox shows it, as the page's `needsYou` does.
     static func needsYou(_ items: [API.DigestItem]) -> [API.DigestItem] {
+        var listed = Set<[String]>()
+        return everyNeed(items).filter { listed.insert(conversation(of: $0)).inserted }
+    }
+
+    /// Each message that needs you, the most important first, then the newest, a conversation's each on its own.
+    static func everyNeed(_ items: [API.DigestItem]) -> [API.DigestItem] {
         items.filter(\.needsYou).sorted {
             let (a, b) = ($0.importance ?? 0, $1.importance ?? 0)
             return a != b ? a > b : $0.key > $1.key
         }
+    }
+
+    /// The conversation a message is in, in its account: the message alone where it is in none.
+    static func conversation(of item: API.DigestItem) -> [String] {
+        [item.account, item.threadId ?? "message \(item.key)"]
     }
 
     /// What the AI rates as safe to file: no next step, nothing asked of you.
