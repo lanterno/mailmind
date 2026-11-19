@@ -92,6 +92,8 @@ pub fn listed(r: &Row) -> Value {
         "next_attempt_at": or(col(r, "next_attempt_at"), json!(0)),
         "scheduled": waiting == Some(SCHEDULED),
         "retrying": waiting == Some(BACKOFF),
+        // The draft it goes from, which it supersedes once it has gone: a shell knows the draft by this.
+        "draft_id": col(r, "draft_id"),
     })
 }
 

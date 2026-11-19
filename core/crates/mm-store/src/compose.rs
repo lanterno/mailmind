@@ -20,7 +20,7 @@ use crate::db::Database;
 use crate::mailbox::lists::rows_of;
 
 const RECENT: &str = "SELECT id,account,subject,recipients,state,attempts,last_error,created_at,sent_at,\
-                      next_attempt_at,delivered,wire_begun,sent_appended,wait_kind \
+                      next_attempt_at,delivered,wire_begun,sent_appended,wait_kind,draft_id \
                       FROM outbox ORDER BY id DESC LIMIT ?";
 
 /// What should have reached its server by then, and what a read-only process kept on this Mac (`KEPT_HERE`).
