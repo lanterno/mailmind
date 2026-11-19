@@ -4,7 +4,8 @@ import SwiftUI
 import XCTest
 
 /// A message in a window of its own shows and does what the pane's reader does for it: the cards the desk puts in a
-/// reader, what its verbs say with their Undo, the reader's single keys; and it opens clear of the others.
+/// reader, what its verbs say with their Undo, the reader's single keys; it opens clear of the others, and its reply
+/// box stands the pane's margin over its foot.
 @MainActor
 final class OwnWindowTests: XCTestCase {
     private static let key = "5c7e9a1b3d5f7a9c2e4b6d8f0a1c3e5b7d9f2a4c6e8b0d1f3a5c7e9b2d4f6a8c"
@@ -247,5 +248,47 @@ final class OwnWindowTests: XCTestCase {
         XCTAssertNotEqual(second.frame.origin, first.frame.origin, "the second doesn't hide the first")
         XCTAssertEqual(second.frame.minX - first.frame.minX, OwnWindowPlace.step)
         XCTAssertEqual(first.frame.maxY - second.frame.maxY, OwnWindowPlace.step)
+    }
+
+    // MARK: Its foot
+
+    /// Scrolled to its foot, the window's reply box stands the pane's margin over the window's bottom edge, as it
+    /// stands over the pane's at the window's width: a phone's margin in a narrow window, the wide one in a wide window.
+    func testTheReplyBoxStandsThePanesMarginOverTheWindowsFoot() async throws {
+        let core = try await openCore()
+        let server = OpenedMessageVerbsTests.server()
+        let mailbox = await mailbox(server)
+        let height: CGFloat = 520
+        for width in [640, 820] as [CGFloat] {
+            let room = ToastRoom()
+            let view = window(core, mailbox, opened: OpenedMessageVerbsTests.head(Self.copy, thread: nil),
+                              server: server, room: room).0
+                .meadowLight(.day)
+            let host = NSHostingView(rootView: view.frame(width: width, height: height))
+            host.frame = CGRect(x: 0, y: 0, width: width, height: height)
+            let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.contentView = host
+            func settle() async throws {
+                for _ in 0..<30 {
+                    host.layoutSubtreeIfNeeded()
+                    try await Task.sleep(for: .milliseconds(15))
+                }
+            }
+            try await settle()
+            let scroll = try XCTUnwrap(Self.scrolls(host).max { $0.frame.height < $1.frame.height })
+            let document = try XCTUnwrap(scroll.documentView)
+            XCTAssertGreaterThan(document.bounds.height, scroll.contentView.bounds.height, "the message runs past the foot")
+            document.scroll(NSPoint(x: 0, y: document.bounds.height - scroll.contentView.bounds.height))
+            try await settle()
+            let reply = try XCTUnwrap(room.reply, "\(width)")
+            XCTAssertEqual(height - reply.maxY, PaneLayout(width: width, measure: ReadingPrefs(nil).measure).padding.bottom,
+                           accuracy: 1, "the pane's margin under it at \(width) points")
+            window.contentView = nil
+        }
+    }
+
+    private static func scrolls(_ view: NSView) -> [NSScrollView] {
+        view.subviews.flatMap { sub in (sub as? NSScrollView).map { [$0] + scrolls($0) } ?? scrolls(sub) }
     }
 }
