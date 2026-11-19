@@ -14,9 +14,9 @@ struct ReplyBoxWords {
     /// In Sent: the box follows up rather than answers.
     let following: Bool
 
+    /// A person by their first name, an organisation whole (`Words.calling`), else the address.
     var firstName: String {
-        let first = name.split(separator: " ").first.map(String.init) ?? ""
-        return first.isEmpty || first.contains("@") ? (address ?? name) : first
+        Words.calling(name, address: address) ?? address ?? name
     }
 
     var placeholder: String {

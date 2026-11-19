@@ -63,6 +63,8 @@ struct SummaryCard: View {
     let cards: SummaryCards
     /// Who wrote the message, for the foot: "Not Ren's words".
     var author: String?
+    /// Their address, which tells a person's name from an organisation's.
+    var authorAddress: String?
 
     var body: some View {
         switch cards.card(for: copy) {
@@ -89,7 +91,8 @@ struct SummaryCard: View {
             SummaryNote(source: Self.source(1)) {
                 if !summary.isEmpty { SummaryLead(text: summary) }
                 if !action.isEmpty { SummaryNext(text: action, copy: copy) }
-                SummaryFoot(author: author, help: String(localized: "Ask the AI for a deeper summary of the thread")) {
+                SummaryFoot(author: author, address: authorAddress,
+                            help: String(localized: "Ask the AI for a deeper summary of the thread")) {
                     rerun(force: false)
                 }
             }
@@ -101,7 +104,8 @@ struct SummaryCard: View {
             SummaryLead(text: summary.tldr)
             if !summary.points.isEmpty { SummaryPoints(points: summary.points) }
             if !summary.action.isEmpty { SummaryNext(text: summary.action, copy: copy) }
-            SummaryFoot(author: author, help: String(localized: "Write the summary again (runs the AI)")) { rerun() }
+            SummaryFoot(author: author, address: authorAddress,
+                        help: String(localized: "Write the summary again (runs the AI)")) { rerun() }
         }
     }
 
@@ -266,6 +270,7 @@ private struct SummaryNext: View {
 /// The note's foot (`.ft`): whose words these are not, and Not quite right? to have them written again.
 private struct SummaryFoot: View {
     let author: String?
+    let address: String?
     let help: String
     let rerun: () -> Void
     @Environment(\.meadow) private var meadow
@@ -287,7 +292,7 @@ private struct SummaryFoot: View {
     }
 
     private var words: some View {
-        Text(SummaryCard.foot(author))
+        Text(SummaryCard.foot(author, address: address))
             .font(.meadow(.ui, 12))
             .foregroundStyle(meadow.ink3)
     }
@@ -301,13 +306,13 @@ private struct SummaryFoot: View {
 }
 
 extension SummaryCard {
-    /// "Not Ren's words — the message is the source.": the sender's first name, as the mockup says it.
-    static func foot(_ author: String?) -> String {
-        let first = author?.split(separator: " ").first.map(String.init)?.trimmingCharacters(in: .punctuationCharacters)
-        guard let first, !first.isEmpty, !first.contains("@") else {
+    /// "Not Ren's words — the message is the source.": the sender's first name, as the mockup says it, or an
+    /// organisation's whole name (`Words.calling`).
+    static func foot(_ author: String?, address: String? = nil) -> String {
+        guard let said = Words.calling(author, address: address) else {
             return String(localized: "Not the sender’s words — the message is the source.")
         }
-        return String(localized: "Not \(first)’s words — the message is the source.")
+        return String(localized: "Not \(said)’s words — the message is the source.")
     }
 }
 

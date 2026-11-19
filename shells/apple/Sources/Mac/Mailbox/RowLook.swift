@@ -266,7 +266,8 @@ struct BriefLine: Equatable {
     static func who(_ needs: [API.DigestItem]) -> String {
         var names: [String] = []
         for item in needs {
-            let name = (item.fromName ?? "").split(separator: " ").first.map(String.init)
+            // A person by their first name, an organisation whole (`Words.calling`), else the address's first part.
+            let name = Words.calling(item.fromName, address: item.fromAddr)
                 ?? (item.fromAddr ?? "").split(separator: "@").first.map(String.init) ?? ""
             if !name.isEmpty, !names.contains(name) { names.append(name) }
         }

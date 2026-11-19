@@ -466,7 +466,8 @@ struct DeskTopCards: View {
             let stored = context.row.flatMap { MailCopy($0) == copy ? (summary: $0.summary, action: $0.action) : nil }
             VStack(spacing: 14) {
                 SummaryCard(copy: copy, stored: stored, cards: desk.summaries,
-                            author: context.opened?.fromName ?? context.row?.fromName)
+                            author: context.opened?.fromName ?? context.row?.fromName,
+                            authorAddress: context.opened?.fromAddr ?? context.row?.fromAddr)
                 SuggestionCard(copy: copy, cards: desk.suggestions, notices: desk.notices)
             }
         }

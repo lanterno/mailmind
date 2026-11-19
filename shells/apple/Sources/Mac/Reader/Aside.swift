@@ -119,9 +119,9 @@ private struct AboutSender: View {
     let allMail: ((String) -> Void)?
     @Environment(\.meadow) private var meadow
 
+    /// A person by their first name, an organisation whole (`Words.calling`).
     private var first: String {
-        let first = name.split(separator: " ").first.map(String.init) ?? name
-        return first.contains("@") ? String(localized: "the sender") : first
+        Words.calling(name, address: address) ?? String(localized: "the sender")
     }
 
     var body: some View {

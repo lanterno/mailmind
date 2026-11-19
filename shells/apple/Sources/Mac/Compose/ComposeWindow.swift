@@ -80,10 +80,11 @@ struct ComposerForm: View {
         case .new: return String(localized: "New message")
         case .forward: return String(localized: "Forward")
         case .reply, .replyall:
-            guard let first = to.first.map({ ChipField.shown($0.value) }), !first.isEmpty else {
+            guard let value = to.first?.value, case let first = ChipField.shown(value), !first.isEmpty else {
                 return mode == .reply ? String(localized: "Reply") : String(localized: "Reply all")
             }
-            let name = first.contains("@") ? first : String(first.split(separator: " ").first ?? "")
+            // A person by their first name, an organisation whole (`Words.calling`), else the address.
+            let name = Words.calling(first, address: Addresses.recipient(value)) ?? first
             return String(localized: "Reply to \(name)")
         }
     }

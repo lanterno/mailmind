@@ -66,9 +66,11 @@ struct ContactCard: View {
 
     /// The card's name: "About" and the sender's first name, as the reader's card says it.
     static func heading(_ card: API.ContactCard?) -> String {
-        let first = card.map { $0.name.split(separator: " ").first.map(String.init) ?? "" } ?? ""
-        let said = first.contains("@") ? "" : first
-        return said.isEmpty ? String(localized: "About this sender") : String(localized: "About \(said)")
+        // A person by their first name, an organisation whole (`Words.calling`).
+        guard let card, let said = Words.calling(card.name, address: card.addr) else {
+            return String(localized: "About this sender")
+        }
+        return String(localized: "About \(said)")
     }
 
     /// The avatar and who it is (`.who-r`).

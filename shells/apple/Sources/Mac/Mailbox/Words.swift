@@ -22,6 +22,58 @@ enum Words {
         return String(last)
     }
 
+    /// What a short line calls a sender ("Reply to Ren…", "Not Ren’s words"): a person by their first name, and an
+    /// organisation, or a name it can't tell, whole, as "Reply to Parcel…" would cut "Parcel Service" short. Nil with
+    /// no name to go by, only an address.
+    static func calling(_ name: String?, address: String? = nil) -> String? {
+        let name = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "\"'")))
+        guard !name.isEmpty, !name.contains("@") else { return nil }
+        let words = name.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard words.count > 1, isPerson(words, address: address) else { return name }
+        return words[0]
+    }
+
+    /// Whether a name of several words is a person's. Never what an organisation's name has: a figure, an ampersand,
+    /// a comma ("Mori, Ren" is said whole), a word such as Service, Desk, Bank or The. Then, with an address, a
+    /// person's mostly carries their name (ren@, ren.mori@, rmori@) and a role's doesn't (news@, orders@, noreply@);
+    /// with none, the name's shape: two to four capitalised words.
+    private static func isPerson(_ words: [String], address: String?) -> Bool {
+        let folded = words.map {
+            $0.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+                .trimmingCharacters(in: .punctuationCharacters)
+        }
+        if words.joined().contains(where: { $0.isNumber || "&+,/|:;()[]!?".contains($0) }) { return false }
+        if folded.contains(where: organisationWords.contains) { return false }
+        guard let address, let at = address.firstIndex(of: "@") else {
+            return words.count <= 4 && words.allSatisfy { word in
+                word.first?.isUppercase == true && word.allSatisfy { $0.isLetter || "-'’.".contains($0) }
+            }
+        }
+        let local = address[..<at].folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+        if roleAddresses.contains(local.filter(\.isLetter)) || noReply.contains(where: local.hasPrefix) { return false }
+        let ends = [folded[0], folded[folded.count - 1]].map { $0.filter(\.isLetter) }
+        return ends.contains { $0.count >= 2 && local.contains($0) }
+    }
+
+    /// Words a person's name doesn't have and an organisation's often does, folded.
+    private static let organisationWords: Set<String> = [
+        "the", "co", "inc", "ltd", "llc", "gmbh", "corp", "plc", "company", "service", "services", "desk", "team",
+        "support", "bank", "deals", "shop", "store", "club", "library", "school", "university", "college", "news",
+        "newsletter", "weekly", "daily", "bot", "mailer", "notifications", "alerts", "updates", "billing", "help",
+        "info", "group", "foundation", "agency", "studio", "cafe", "restaurant", "bakery", "hotel", "airlines",
+        "labs", "press", "media", "council", "office", "clinic", "insurance", "payments", "delivery", "online",
+    ]
+
+    /// An address's part before the @, letters only, that a role writes from rather than a person.
+    private static let roleAddresses: Set<String> = [
+        "hello", "hi", "info", "news", "newsletter", "deals", "offers", "orders", "order", "support", "help", "team",
+        "contact", "billing", "notifications", "notification", "alerts", "updates", "tracking", "mailer", "admin",
+        "service", "sales", "marketing", "receipts", "accounts", "mail", "postmaster", "feedback", "store", "shop",
+    ]
+
+    /// How an address that takes no answer starts.
+    private static let noReply = ["noreply", "no-reply", "donotreply", "do-not-reply"]
+
     /// The part of an address before the @ (`shortAddress`).
     static func short(_ address: String) -> String {
         String(address.split(separator: "@", maxSplits: 1, omittingEmptySubsequences: false).first ?? "")
