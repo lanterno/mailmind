@@ -431,9 +431,11 @@ final class AppStatus {
     }
 
     /// What an event touches, read again. The stream's own listener calls it; so does a test, with events of its own.
+    /// An account's server that didn't answer (`sync-trouble`: a sync that failed, or a connection outside one) changes
+    /// how its sync stands, which nothing else says: the pill reads it, trying again or can't connect, within moments.
     func heard(_ event: CoreEvent) async {
         switch event.name {
-        case "sync-done", "folder-synced":
+        case "sync-done", "folder-synced", "sync-trouble":
             digestAgain()
             await readHealth()
         case "new-mail":
