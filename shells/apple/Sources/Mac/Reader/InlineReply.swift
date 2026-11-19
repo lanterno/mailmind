@@ -57,6 +57,8 @@ struct ReplyBox: View {
                             ready: composing.chips[copy.key] == .ready)
             }
         }
+        // The toasts stand over it, never on its quick replies.
+        .toastRoom(.reply)
         .padding(.top, 26)
         .onAppear { composing.offerInline(copy) }
         .onDisappear { composing.withdrawInline(copy) }

@@ -50,12 +50,14 @@ enum WindowDialog: Equatable {
 
 /// What floats over the mail window (`Overlays`' blocks): a dialog on the scrim, the window blurred under it as
 /// the mockup's scrim blurs the page; the snooze chooser beside the pane's Snooze, or near the middle when it isn't
-/// there; and the toasts at the window's foot. The window applies it inside `DeskSurfaces`, so the desk is here.
+/// there; and the toasts at the window's foot, over the reading pane and clear of its reply box (`ToastPlace`). The
+/// window applies it inside `DeskSurfaces`, so the desk is here.
 struct WindowOverlays: ViewModifier {
     let mailbox: Mailbox
     var status = AppStatus.shared
     @Environment(Desk.self) private var desk: Desk?
     @State private var anchors = MeadowAnchors()
+    @State private var toastRoom = ToastRoom()
     @State private var snoozeMenu = MeadowMenuModel()
     @State private var focus = DialogFocus()
 
@@ -68,13 +70,13 @@ struct WindowOverlays: ViewModifier {
         content
             .blur(radius: dialog == nil ? 0 : 2)
             .environment(\.meadowAnchors, anchors)
+            .environment(\.toastRoom, toastRoom)
             .background { DialogFocusWindow(focus: focus) }
             .background { TypingWatch { mailbox.editingText = $0 } }
             .onAppear { focus.waits = { [status] in status.firstRun } }
             .overlay(alignment: .topLeading) { snoozeAnchor }
-            .overlay(alignment: .bottom) {
-                WindowToasts(mailbox: mailbox, status: status, desk: desk)
-                    .padding(.bottom, 20)
+            .overlay {
+                PlacedToasts(room: toastRoom) { WindowToasts(mailbox: mailbox, status: status, desk: desk) }
             }
             .overlay {
                 if let dialog {
@@ -307,6 +309,85 @@ struct DialogFocusWindow: NSViewRepresentable {
             watching = window.observe(\.firstResponder, options: [.new]) { [weak focus] _, _ in
                 DispatchQueue.main.async { MainActor.assumeIsolated { focus?.settle() } }
             }
+        }
+    }
+}
+
+/// Where the toasts may stand clear of: the reading pane, and the reply box at its foot, where each last stood in the
+/// window. Only the toasts read it, so a frame that moves as the message scrolls draws them again and nothing else.
+@MainActor
+@Observable
+final class ToastRoom {
+    enum Part { case pane, reply }
+
+    private(set) var pane: CGRect?
+    private(set) var reply: CGRect?
+
+    func set(_ part: Part, _ frame: CGRect?) {
+        switch part {
+        case .pane: if pane != frame { pane = frame }
+        case .reply: if reply != frame { reply = frame }
+        }
+    }
+}
+
+extension EnvironmentValues {
+    /// The window's room for its toasts; none where a view is drawn away from a window's.
+    @Entry var toastRoom: ToastRoom?
+}
+
+extension View {
+    /// Tell the window's toasts where this stands (`ToastRoom`), so they stand clear of it.
+    func toastRoom(_ part: ToastRoom.Part) -> some View {
+        modifier(ToastRoomPart(part: part))
+    }
+}
+
+private struct ToastRoomPart: ViewModifier {
+    let part: ToastRoom.Part
+    @Environment(\.toastRoom) private var room
+
+    func body(content: Content) -> some View {
+        content
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { room?.set(part, $0) }
+            .onDisappear { room?.set(part, nil) }
+    }
+}
+
+/// Where the toasts stand: at the window's foot, centred over the reading pane where it shows, else over the window,
+/// and lifted over the reply box where it stands at the pane's foot, so a toast covers no quick reply or button.
+enum ToastPlace {
+    /// How high over the window's foot they stand, with nothing in the way.
+    static let foot: CGFloat = 20
+    /// The most a toast stands high: a word, a reason under it, and a button.
+    static let tallest: CGFloat = 64
+    /// The room between a toast and the reply box it stands over.
+    static let gap: CGFloat = 12
+
+    /// How far right of the window's middle the toasts stand (`dx`), and how high over its foot (`bottom`).
+    static func of(window: CGRect, pane: CGRect?, reply: CGRect?) -> (dx: CGFloat, bottom: CGFloat) {
+        let pane = pane.flatMap { $0.intersects(window) ? $0 : nil }
+        let dx = pane.map { $0.midX - window.midX } ?? 0
+        let band = (top: window.maxY - foot - tallest, bottom: window.maxY - foot)
+        guard let reply, pane.map({ $0.intersects(reply) }) ?? true,
+              reply.minY < band.bottom, reply.maxY > band.top else { return (dx, foot) }
+        return (dx, max(foot, window.maxY - reply.minY + gap))
+    }
+}
+
+/// The toasts in their place (`ToastPlace`).
+private struct PlacedToasts<Toasts: View>: View {
+    let room: ToastRoom
+    @ViewBuilder let toasts: () -> Toasts
+
+    var body: some View {
+        GeometryReader { proxy in
+            let place = ToastPlace.of(window: proxy.frame(in: .global), pane: room.pane, reply: room.reply)
+            toasts()
+                .padding(.bottom, place.bottom)
+                .offset(x: place.dx)
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .bottom)
+                .animation(.snappy(duration: 0.2), value: place.bottom)
         }
     }
 }

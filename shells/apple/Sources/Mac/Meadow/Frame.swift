@@ -96,6 +96,7 @@ struct MeadowFrame<Pane: View>: View {
             pane
                 .environment(\.meadowPaneWidth, layout.pane?.width ?? 0)
                 .meadowPanel()
+                .toastRoom(.pane)
                 .placed(layout.pane)
             if let splitter = layout.splitter {
                 MeadowSplitter(shell: shell)
