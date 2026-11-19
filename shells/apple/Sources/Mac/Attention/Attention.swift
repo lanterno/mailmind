@@ -7,13 +7,14 @@ enum Snoozing: Hashable, Sendable {
     case preset(API.SnoozePreset)
     case until(Date)
 
-    /// The page's words for each preset, in the menu's order, with the digit that picks it there.
+    /// The page's words for each preset, in the menu's order, with the digit that picks it there: all in the page's
+    /// sentence case (`SnoozeMenu.tsx`), so no preset reads as a title beside another that doesn't.
     static func words(_ preset: API.SnoozePreset) -> String {
         switch preset {
-        case .laterToday: String(localized: "Later Today")
+        case .laterToday: String(localized: "Later today")
         case .tomorrow: String(localized: "Tomorrow 8am")
-        case .weekend: String(localized: "This Weekend")
-        case .nextWeek: String(localized: "Next Week")
+        case .weekend: String(localized: "This weekend")
+        case .nextWeek: String(localized: "Next week")
         }
     }
 }
