@@ -155,10 +155,11 @@ def row(kind="archive", *, uid=7, epoch=5, dest=None, src="INBOX", mid=MID, seen
 
 def test_a_try_after_one_whose_copy_landed_removes_the_original_alone_and_copies_nothing():
     server = _Server({"INBOX": {7: (MID, ())}, "Archive": {50: (MID, ())}})
-    assert ops(server).apply(row()) == command.ServerAnswer(dest="Archive")
+    assert ops(server).apply(row()) == command.ServerAnswer(dest="Archive", copy=("Archive", 50))
     assert server.where() == [("Archive", 50)]
     assert server.calls("move", "copy") == [] and server.calls("expunge") == [("expunge", [7])]
-    assert server.selected == "INBOX"
+    said = [c[:2] for c in server.calls("select", "expunge")]
+    assert said[said.index(("expunge", [7])) - 1] == ("select", "INBOX")      # expunged in the inbox
 
 
 def test_a_copy_flagged_deleted_doesnt_count_as_landed():
@@ -170,7 +171,7 @@ def test_a_copy_flagged_deleted_doesnt_count_as_landed():
 @pytest.mark.parametrize("fault", [("select", "Archive"), ("search", "Archive")], ids=["select", "search"])
 def test_a_destination_that_wont_say_what_it_holds_is_taken_to_hold_nothing(fault):
     server = _Server({"INBOX": {7: (MID, ())}, "Archive": {50: (MID, ())}}, refuse={fault})
-    assert ops(server).apply(row()) == command.ServerAnswer(dest="Archive")
+    assert ops(server).apply(row()).dest == "Archive"
     assert server.calls("move") == [("move", [7], "Archive")]
 
 
@@ -207,7 +208,8 @@ def test_junk_with_nowhere_to_go_wont_happen():
 
 def test_junk_goes_to_the_fallback_where_no_folder_plays_junk():
     server = _Server({"INBOX": {7: (MID, ())}})
-    assert ops(server, junk_fallback="Spam").apply(row("junk"), first_try=True) == command.ServerAnswer(dest="Spam")
+    assert ops(server, junk_fallback="Spam").apply(row("junk"), first_try=True) == \
+        command.ServerAnswer(dest="Spam", copy=("Spam", 100))
 
 
 @pytest.mark.parametrize("flags, seen, unseen", [
@@ -217,7 +219,7 @@ def test_junk_goes_to_the_fallback_where_no_folder_plays_junk():
 def test_trash_on_a_server_that_marks_it_read_says_whether_it_was_unread_as_the_server_says(flags, seen, unseen):
     server = _Server({"INBOX": {7: (MID, flags)}, "Trash": {}})
     assert ops(server, marks_trash_read=True).apply(row("trash", seen=seen), first_try=True) == \
-        command.ServerAnswer(dest="Trash", unseen=unseen)
+        command.ServerAnswer(dest="Trash", unseen=unseen, copy=("Trash", 100))
 
 
 @pytest.mark.parametrize("server, seen, unseen", [
@@ -234,9 +236,24 @@ def test_a_lost_connection_while_reading_the_mark_raises():
         ops(server, marks_trash_read=True).apply(row("trash"), first_try=True)
 
 
+def test_a_move_says_the_uid_its_copy_has_where_it_landed_found_by_its_message_id():
+    server = _Server({"INBOX": {7: (MID, ())}, "Archive": {}})
+    answer = ops(server).apply(row(), first_try=True)
+    assert answer.copy == ("Archive", 100) and server.where() == [("Archive", 100)]
+
+
+@pytest.mark.parametrize("server, mid", [
+    (_Server({"INBOX": {7: (MID, ())}, "Archive": {}}, refuse={("by_message_id", "Archive")}), MID),
+    (_Server({"INBOX": {7: (None, ())}, "Archive": {}}), None),
+], ids=["a-search-refused", "no-message-id"])
+def test_a_move_whose_copy_cant_be_found_lands_with_none_said(server, mid):
+    answer = ops(server).apply(row(mid=mid), first_try=True)
+    assert (answer.dest, answer.copy) == ("Archive", None) and server.where(mid) == [("Archive", 100)]
+
+
 def test_a_try_whose_logout_fails_still_answers():
     server = _Server({"INBOX": {7: (MID, ())}, "Archive": {}}, logs_out=False)
-    assert ops(server).apply(row(), first_try=True) == command.ServerAnswer(dest="Archive")
+    assert ops(server).apply(row(), first_try=True) == command.ServerAnswer(dest="Archive", copy=("Archive", 100))
 
 
 def test_a_lost_connection_hangs_up_without_a_logout():

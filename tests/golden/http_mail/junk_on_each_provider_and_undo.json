@@ -27,7 +27,18 @@
  {
   "note": "junk ada-inbox-12-scam.eml: where ada-inbox-12-scam.eml is",
   "value": {
-   "db": [],
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "Junk",
+     "is_junk": 1,
+     "seen": 0,
+     "uid": 1
+    }
+   ],
    "server": [
     [
      "ada@example.test",
@@ -66,7 +77,18 @@
  {
   "note": "junk bea-inbox-02-security.eml: where bea-inbox-02-security.eml is",
   "value": {
-   "db": [],
+   "db": [
+    {
+     "account": "bea@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "Spam",
+     "is_junk": 0,
+     "seen": 1,
+     "uid": 1
+    }
+   ],
    "server": [
     [
      "bea@example.test",
@@ -107,7 +129,18 @@
  {
   "note": "junk cy-inbox-02-thread-end.eml: where cy-inbox-02-thread-end.eml is",
   "value": {
-   "db": [],
+   "db": [
+    {
+     "account": "cy@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "[Gmail]/Spam",
+     "is_junk": 0,
+     "seen": 0,
+     "uid": 1
+    }
+   ],
    "server": [
     [
      "cy@example.test",

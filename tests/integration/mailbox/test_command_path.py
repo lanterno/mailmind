@@ -98,10 +98,13 @@ def test_a_gmail_archive_only_drops_the_label(app, world):
     assert change.startswith("UID STORE") and "-X-GM-LABELS" in change and "Inbox" in change
 
 
-def test_a_first_try_sends_no_search_of_its_own(app, world):
+def test_a_first_try_asks_nothing_before_it_moves_and_then_only_where_its_copy_landed(app, world):
     since = world.mark()
     assert app.post("/api/archive", world.copy(RECEIPT)).json["ok"]
-    assert not [c for c in world.server.commands[since:] if "SEARCH" in c["line"]]
+    said = world.server.commands[since:]
+    moved = next(i for i, c in enumerate(said) if c["command"] in ("UID MOVE", "UID COPY"))
+    assert not [c for c in said[:moved] if "SEARCH" in c["line"]]
+    assert [c["mailbox"] for c in said[moved:] if "SEARCH" in c["line"]] == ["Archive"]
 
 
 def test_a_crash_in_a_click_before_the_server_is_asked_is_taken_up_at_the_next_start(app, world, monkeypatch):

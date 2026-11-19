@@ -48,7 +48,18 @@
  {
   "note": "after: where the newsletter is",
   "value": {
-   "db": [],
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "Trash",
+     "is_junk": 1,
+     "seen": 0,
+     "uid": 2
+    }
+   ],
    "server": [
     [
      "ada@example.test",

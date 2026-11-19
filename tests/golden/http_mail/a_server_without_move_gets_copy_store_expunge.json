@@ -30,7 +30,18 @@
  {
   "note": "archive by COPY: where ada-inbox-05-receipt.eml is",
   "value": {
-   "db": [],
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "Archive",
+     "is_junk": 0,
+     "seen": 0,
+     "uid": 2
+    }
+   ],
    "server": [
     [
      "ada@example.test",

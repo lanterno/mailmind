@@ -27,7 +27,18 @@
  {
   "note": "archive ada-inbox-05-receipt.eml in group g1: where ada-inbox-05-receipt.eml is",
   "value": {
-   "db": [],
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "Archive",
+     "is_junk": 0,
+     "seen": 0,
+     "uid": 2
+    }
+   ],
    "server": [
     [
      "ada@example.test",
@@ -66,7 +77,18 @@
  {
   "note": "archive ada-inbox-09-rfc2047-folded.eml in group g1: where ada-inbox-09-rfc2047-folded.eml is",
   "value": {
-   "db": [],
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "Archive",
+     "is_junk": 0,
+     "seen": 0,
+     "uid": 3
+    }
+   ],
    "server": [
     [
      "ada@example.test",

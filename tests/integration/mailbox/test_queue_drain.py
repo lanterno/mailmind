@@ -123,11 +123,11 @@ def test_a_crash_after_the_move_never_moves_it_twice(app, world, monkeypatch):
 
     mirror, crashed = commands._local_mirror, []
 
-    def crash_once(c, row):
+    def crash_once(c, row, copy=None):
         if not crashed:
             crashed.append(row["id"])
             raise Crash
-        return mirror(c, row)
+        return mirror(c, row, copy)
 
     monkeypatch.setattr(commands, "_local_mirror", crash_once)
     with pytest.raises(Crash):
@@ -151,7 +151,7 @@ def test_an_applied_move_is_published_once_even_across_a_crash(app, world, monke
     from mailmind.platform import bus
     heard = []
 
-    def crash(c, row):
+    def crash(c, row, copy=None):
         raise Crash
     stop = bus.subscribe(Applied, heard.append)
     try:
@@ -209,8 +209,9 @@ def test_a_queued_move_leaves_its_message_out_of_the_lists_until_it_lands(app, w
     c.close()
     drain()
     c = store.conn()
-    assert store.pending_removal_pks(c, r["id"]) == [] and store.get_message(c, pk) is None
+    assert store.pending_removal_pks(c, r["id"]) == [] and store.get_message(c, pk)["folder"] == "Archive"
     c.close()
+    assert [m["folder"] for m in app.get("/api/search?scope=all&q=receipt+1042").json["items"]] == ["Archive"]
 
 
 def test_a_landed_move_drops_its_own_row_not_the_copy_a_sync_stored(app, world, monkeypatch):

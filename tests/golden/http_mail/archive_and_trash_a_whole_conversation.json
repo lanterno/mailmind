@@ -43,7 +43,18 @@
  {
   "note": "archive the lunch conversation: where ada-inbox-01-lunch.eml is",
   "value": {
-   "db": [],
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 1,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "Archive",
+     "is_junk": 0,
+     "seen": 1,
+     "uid": 3
+    }
+   ],
    "server": [
     [
      "ada@example.test",
@@ -60,7 +71,18 @@
  {
   "note": "archive the lunch conversation: where ada-inbox-02-lunch-confirm.eml is",
   "value": {
-   "db": [],
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "Archive",
+     "is_junk": 0,
+     "seen": 0,
+     "uid": 2
+    }
+   ],
    "server": [
     [
      "ada@example.test",
@@ -252,7 +274,18 @@
  {
   "note": "trash the venue conversation: where cy-inbox-01-thread-start.eml is",
   "value": {
-   "db": [],
+   "db": [
+    {
+     "account": "cy@example.test",
+     "answered": 1,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "[Gmail]/Trash",
+     "is_junk": 0,
+     "seen": 1,
+     "uid": 2
+    }
+   ],
    "server": [
     [
      "cy@example.test",
@@ -269,7 +302,18 @@
  {
   "note": "trash the venue conversation: where cy-inbox-02-thread-end.eml is",
   "value": {
-   "db": [],
+   "db": [
+    {
+     "account": "cy@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "[Gmail]/Trash",
+     "is_junk": 0,
+     "seen": 0,
+     "uid": 1
+    }
+   ],
    "server": [
     [
      "cy@example.test",

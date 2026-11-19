@@ -192,7 +192,7 @@ def test_a_refusal_gives_back_only_its_own_message(app, world):
     refuse_moves(world, LUNCH)
     r = app.post("/api/thread/archive", world.copy(CONFIRM)).json
     assert (r["count"], r["failed"]) == (1, 1)
-    assert hidden() == [] and world.where(LUNCH)["db"] and world.where(CONFIRM)["db"] == []
+    assert hidden() == [] and world.where(LUNCH)["db"] and [r["folder"] for r in world.where(CONFIRM)["db"]] == ["Archive"]
     assert [x["message_id"] for x in commands()] == [w.message_id(CONFIRM)]
     [entry] = stack()
     assert [d["message_id"] for d in entry["children"]] == [w.message_id(CONFIRM)]
