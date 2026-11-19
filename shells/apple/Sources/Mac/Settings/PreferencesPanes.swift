@@ -175,10 +175,11 @@ enum ReadOnlyRun {
         return how + " " + String(localized: "Read only is a switch here when you open MailMind yourself.")
     }
 
-    /// Quit, and open MailMind again once this run has ended, so two runs never hold its data at once.
+    /// Quit, and open MailMind again once this run has ended, so two runs never hold its data at once. The quit is
+    /// asked as `Quitting.quit` asks it, so it finishes from wherever Relaunch Now is chosen.
     @MainActor static func relaunch() {
         let run = ProcessInfo.processInfo.processIdentifier, app = Bundle.main.bundlePath
-        quitThenOpen(quit: { NSApp.terminate(nil) }, openAgain: { openOnceEnded(run, app) })
+        Quitting.quit { quitThenOpen(quit: { NSApp.terminate(nil) }, openAgain: { openOnceEnded(run, app) }) }
     }
 
     /// `quit`, with `openAgain` only as the app really ends (`willTerminate`), never before: a quit called off (a

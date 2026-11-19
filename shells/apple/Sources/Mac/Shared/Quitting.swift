@@ -81,8 +81,21 @@ enum Quitting {
         return (String(localized: "Quit anyway?"), text, String(localized: "Quit Anyway"), String(localized: "Don’t Quit"))
     }
 
+    /// Ask MailMind to quit (`terminate`), from wherever the asking is: a button, a menu or a job on the main queue.
+    /// A quit that waits (`shouldTerminate`'s `.terminateLater`) settles on the main actor while AppKit waits for its
+    /// answer in a run loop of its own. Inside a job of the main queue it never could: the queue runs one job at a
+    /// time, so the settling never starts and the app hangs. So the quit is asked from the run loop itself, once the
+    /// job asking has ended.
+    static func quit(_ terminate: @escaping @MainActor () -> Void = { NSApp.terminate(nil) }) {
+        let main = CFRunLoopGetMain()
+        CFRunLoopPerformBlock(main, CFRunLoopMode.commonModes.rawValue) {
+            MainActor.assumeIsolated { terminate() }
+        }
+        CFRunLoopWakeUp(main)
+    }
+
     /// The app's answer to being asked to quit: now when nothing is being written and nothing waits to send, else
-    /// once it has settled.
+    /// once it has settled. MailMind asks through `quit`, so its own asking never comes from a job of the main queue.
     static func shouldTerminate(_ app: NSApplication) -> NSApplication.TerminateReply {
         let composing = Composing.shared
         let writing = Array(composing.composers.values)
