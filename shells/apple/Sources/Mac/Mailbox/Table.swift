@@ -998,7 +998,7 @@ enum RowMenu {
                     Task { await mailbox.moveNow(to: folder.name, label: Words.role(folder), rows: rows) }
                 })
             }
-            folders.addItem(.separator())
+            // No separator before it: in this short menu it read as an empty item that can’t be chosen.
             folders.addItem(Item(String(localized: "Other Folder…"), nil) { mailbox.moving = ask })
             move.submenu = folders
             items.append(move)
