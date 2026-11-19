@@ -70,6 +70,19 @@ def test_summarize_a_thread_and_a_message(app, golden, world, ai):
     golden.record("when the API fails", app.post("/api/ai/summarize", world.copy("bea-inbox-01-client.eml")))
 
 
+def test_a_message_read_for_a_summary_from_a_folder_another_client_deleted_forgets_the_folder(app, world, ai):
+    # The assistant reads a body that isn't stored as opening the message would, and finds its folder gone as that does:
+    # the folder is forgotten, so its mail leaves the lists and the rail.
+    archived = "ada-archive-01-old-thread.eml"
+    assert not world.row(archived)["body_fetched"]
+    copy = world.copy(archived)
+    with world.server.lock:
+        world.server.accounts[w.ADA].mailboxes.pop("Archive")
+    app.post("/api/ai/summarize", copy)
+    assert world.where(archived)["db"] == []
+    assert "Archive" not in [f["name"] for f in app.get(f"/api/folders?account={w.ADA}").json["folders"]]
+
+
 def test_draft_a_reply_and_rewrite(app, golden, world, ai):
     client = world.copy("bea-inbox-01-client.eml")
     golden.record("draft a reply", app.post("/api/ai/draft-reply", client))

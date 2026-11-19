@@ -130,6 +130,20 @@ def test_a_lost_connection_rests_its_account_a_minute_and_the_others_go_on(app, 
     assert has_body(world, ARCHIVED)
 
 
+def test_a_folder_another_client_deleted_is_forgotten_and_asked_for_no_more(app, world):
+    # The backfill finds the folder gone as opening one of its messages would, and forgets it as that does: its mail
+    # leaves the lists, the rail leaves it out, and no round asks for it again.
+    only_these_without_a_body(app, world, ARCHIVED)
+    with world.server.lock:
+        world.server.accounts[w.ADA].mailboxes.pop("Archive")
+    app.work("backfill")
+    assert world.where(ARCHIVED)["db"] == []
+    assert "Archive" not in [f["name"] for f in app.get(f"/api/folders?account={w.ADA}").json["folders"]]
+    since = world.mark()
+    app.work("backfill")
+    assert world.server.commands[since:] == []
+
+
 def test_mail_on_its_way_out_is_left_alone(app, world):
     only_these_without_a_body(app, world, RECEIPT)
     world.server.drop("UID MOVE", user=w.ADA)              # the archive can't reach the server: it waits in the queue

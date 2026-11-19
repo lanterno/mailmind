@@ -81,6 +81,18 @@ def test_ingest_message_into_a_folder_never_synced_marks_nothing_synced(world):
     assert not ingest.folder_synced(w.ADA, "Junk")         # so its first full sync still runs
 
 
+def test_ingest_message_into_a_folder_another_client_deleted_forgets_it(world):
+    # Undo's read back finds the folder gone as a sync would, and forgets it as a sync does: its mail leaves the lists.
+    from mailmind.bootstrap.mailbox import ingest
+    from mailmind.mailbox.application.session import FolderGone
+    assert q("SELECT count(*) AS n FROM messages WHERE account=? AND folder='Archive'", w.ADA) == [{"n": 1}]
+    with world.server.lock:
+        world.server.accounts[w.ADA].mailboxes.pop("Archive")
+    with pytest.raises(FolderGone):
+        ingest.ingest_message(acct(), "Archive", NEW)
+    assert q("SELECT count(*) AS n FROM messages WHERE account=? AND folder='Archive'", w.ADA) == [{"n": 0}]
+
+
 def test_ingest_message_for_a_message_the_server_lacks_stores_nothing(world):
     from mailmind.bootstrap.mailbox import ingest
     before = inbox()
