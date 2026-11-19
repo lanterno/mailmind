@@ -40,6 +40,15 @@ def stored(account, folder, uid):
         c.close()
 
 
+def store_holds(account, folder):
+    """How many of `account`'s messages are stored in `folder`."""
+    c = store.conn()
+    try:
+        return c.execute("SELECT count(*) FROM messages WHERE account=? AND folder=?", (account, folder)).fetchone()[0]
+    finally:
+        c.close()
+
+
 def examined(world, since, account):
     """The folders `account`'s sessions opened since `since`, in order."""
     return [str(c["args"][0]) for c in world.server.commands[since:]
@@ -121,3 +130,20 @@ def test_a_sync_round_warms_as_it_ends_after_the_inbox(app, world):
     app.settle()
     assert stored(w.ADA, "INBOX", inbox) and stored(w.ADA, "Drafts", draft)
     assert examined(world, since, w.ADA) == ["INBOX", "Drafts"]
+
+
+def test_a_drafts_folder_another_client_renamed_is_forgotten_and_the_one_that_plays_it_now_warmed(app, world):
+    asking(app, world, w.ADA)
+    before = land(world, w.ADA, "Drafts", "draft-before")
+    app.work("warm")                                       # the parts found: Drafts plays the drafts'
+    assert stored(w.ADA, "Drafts", before)
+    with world.server.lock:
+        world.server.accounts[w.ADA].mailboxes.pop("Drafts")
+    world.server.add_folder(w.ADA, "Drafts 2026", "\\Drafts")
+    uid = land(world, w.ADA, "Drafts 2026", "draft-renamed")
+    app.work("warm")                                       # Drafts found gone: forgotten, and the parts let go
+    assert store_holds(w.ADA, "Drafts") == 0
+    since = world.mark()
+    app.work("warm")
+    assert stored(w.ADA, "Drafts 2026", uid)
+    assert "Drafts" not in examined(world, since, w.ADA), "a folder gone isn't asked for round after round"
