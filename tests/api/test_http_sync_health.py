@@ -3,6 +3,10 @@ account's `live` and record in /api/account-health). Trouble that may pass, a co
 a login for now, as a sleep or a change of network leaves for a moment, shows only once the next sync of the account has
 failed too, or three minutes on, and its record keeps no error until then; meanwhile its status says it is trying again,
 so nothing says it synced. A refusal shows at once (test_http_login_hold.py). A sync that works ends the run.
+
+The open tabs hear of each sync that fails (`sync-trouble`), so they read the status again. A connection outside a sync
+that can't be made (a person's change, IDLE's, a job's) by trouble that may pass shows at once as trying again, rather
+than at the next sync, minutes on; the next sync that works ends it.
 """
 import json
 from datetime import timedelta
@@ -10,6 +14,7 @@ from datetime import timedelta
 import pytest
 import trustme
 
+from event_stream import Stream
 from fixtures import world as w
 
 THREE_MINUTES = 180     # seconds: domain.sync_health.SHOWS_AFTER_SECONDS; the suite imports nothing of the server's
@@ -139,3 +144,73 @@ def test_an_account_whose_password_the_keychain_lost_is_told_so_at_once(app, wor
     tested = app.post("/api/accounts/test", {"email": w.ADA}).json
     assert (tested["connect"], tested["error"]) == (False, "no password")
     assert "this Mac's Keychain doesn't hold one" in tested["says"]
+
+
+ADAS = "ada-inbox-05-receipt.eml"
+
+
+def troubled(stream, who=w.ADA):
+    """The frames the stream sends until it says `who`'s server didn't answer, that one last: other accounts' syncs may
+    say they ended first."""
+    said = f'event: sync-trouble\ndata: {json.dumps({"account": who})}'
+    frames = []
+    while not frames or frames[-1] != said:
+        assert len(frames) < 20, frames
+        frames.append("\n".join(stream.event().split("\n")[1:]))
+    return frames
+
+
+@TROUBLE
+def test_a_sync_that_fails_tells_the_open_tabs_whether_it_shows_yet_or_not(app, world, trouble):
+    s = Stream(app)
+    s.frame()
+    trouble(world.server, 2)
+    sync(app)
+    assert status(app)["trying_again"]
+    troubled(s)
+    sync(app)
+    assert status(app)["health"] == "error"
+    troubled(s)
+    s.close()
+
+
+def test_a_connection_that_fails_outside_a_sync_shows_at_once_and_a_sync_that_works_ends_it(app, world):
+    sync(app)
+    synced = status(app)
+    s = Stream(app)
+    s.frame()
+    # A person files a message while Ada's server is away: the click's own connection can't be made.
+    world.server.drop("LOGIN", user=w.ADA)
+    assert app.post("/api/archive", {**world.copy(ADAS), "mutation_id": "m-away"}).json["status"] == "queued"
+    assert status(app) == {**synced, "trying_again": True}
+    assert status(app, w.BEA)["health"] == "ok" and "trying_again" not in status(app, w.BEA)
+    troubled(s)                                     # the tabs read the status again
+    # No sync has failed: none is kept as one.
+    assert (health(app)["live"], health(app)["last_error"]) == ("ok", None)
+    # The server answers the sync that comes next: it says so, and the change made while it was away goes now.
+    sync(app)
+    assert status(app)["health"] == "ok" and "trying_again" not in status(app)
+    app.work("commands")
+    [(_, box, _, _)] = world.where(ADAS)["server"]
+    assert box == "Archive"
+    s.close()
+
+
+def test_a_connection_that_fails_outside_a_sync_shows_three_minutes_on_as_a_sync_would(app, world):
+    sync(app)
+    world.server.drop("LOGIN", user=w.ADA)
+    assert app.post("/api/archive", {**world.copy(ADAS), "mutation_id": "m-away"}).json["status"] == "queued"
+    app.clock.shift(timedelta(seconds=THREE_MINUTES - 1))
+    assert status(app)["trying_again"]
+    app.clock.shift(timedelta(seconds=1))
+    assert status(app)["health"] == "error" and "trying_again" not in status(app)
+
+
+def test_a_refused_login_outside_a_sync_is_left_to_the_sync_to_say(app, world):
+    """A password refused shows as one at once, with its own words, by the hold every login keeps
+    (test_http_login_hold.py): it is no trouble that may pass, and nothing says it is trying again."""
+    sync(app)
+    synced = status(app)
+    world.server.fail("LOGIN", "NO [AUTHENTICATIONFAILED] invalid credentials", user=w.ADA)
+    assert app.post("/api/archive", {**world.copy(ADAS), "mutation_id": "m-refused"}).json["status"] == "queued"
+    assert status(app) == synced

@@ -1,6 +1,6 @@
 """When an account's failed sync shows (mailmind.mailbox.domain.sync_health). Values only; test_http_sync_health.py holds
 what the status pill and Settings read of it, on both servers."""
-from mailmind.mailbox.domain.sync_health import Failing, and_one_more, shows
+from mailmind.mailbox.domain.sync_health import Failing, and_one_more, heard, shows
 
 
 def test_trouble_that_may_pass_shows_on_the_second_failure_in_a_row_or_three_minutes_on():
@@ -21,3 +21,12 @@ def test_a_run_counts_its_failures_from_the_first():
     second = and_one_more(first, "TimeoutError", True, 1_060)
     assert second == Failing(2, 1_000, "TimeoutError", True)
     assert second.shows(1_060)
+
+
+def test_a_run_heard_outside_a_sync_counts_no_failed_sync_but_its_age():
+    run = heard("ConnectionRefusedError", 1_000)
+    assert not run.shows(1_179) and run.shows(1_180)
+    first = and_one_more(run, "ConnectionRefusedError", True, 1_060)
+    assert first == Failing(1, 1_000, "ConnectionRefusedError", True)
+    assert not first.shows(1_060)
+    assert and_one_more(first, "TimeoutError", True, 1_120).shows(1_120)
