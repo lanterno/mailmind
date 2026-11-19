@@ -205,4 +205,20 @@ final class MeadowRailTests: XCTestCase {
         XCTAssertEqual(chosen, [.account(Fixture.ada)])
         XCTAssertFalse(menu.key(try key(0)), "a letter isn't the menu's")
     }
+
+    /// The accounts' button names whose mail the list shows: beside the brief, the Inbox the list still holds, one
+    /// account's or every account's, so it never says every account over one account's rows.
+    func testTheAccountsButtonNamesTheAccountTheListShows() async {
+        let app = MailApp()
+        app.mailbox.wire = Fixture.server().wire
+        await app.mailbox.refresh()
+        app.place = .folder(account: Fixture.work, folder: "INBOX")
+        XCTAssertEqual(RailAccountButton.place(of: app)?.account, Fixture.work)
+        app.place = .desk(.brief)
+        XCTAssertEqual(app.listed, .folder(account: Fixture.work, folder: "INBOX"), "the list keeps the Inbox's rows")
+        XCTAssertEqual(RailAccountButton.place(of: app)?.account, Fixture.work, "and the button names its account")
+        app.place = .allInboxes
+        app.place = .desk(.brief)
+        XCTAssertNil(RailAccountButton.place(of: app)?.account, "beside every account's Inbox, every account")
+    }
 }
