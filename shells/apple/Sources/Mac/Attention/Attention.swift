@@ -47,9 +47,9 @@ final class AttentionModel {
     @ObservationIgnored let link: CoreLink
     @ObservationIgnored let notices: DeskNotices
     @ObservationIgnored var changed: () -> Void = {}
-    /// What the window does once a verb takes mail off the place it shows (a snooze, Reply Later's Done), worked out
-    /// before the verb is sent, while the list still holds it, and run once the server has taken it: the desk's moves
-    /// on as File does (`Mailbox.leaving`).
+    /// What the window does once a verb takes mail off the place it shows (a snooze, a mute, Reply Later's Done),
+    /// worked out before the verb is sent, while the list still holds it, and run once the server has taken it: the
+    /// desk's moves on as File does (`Mailbox.leaving`).
     @ObservationIgnored var leaving: @MainActor ([MailCopy]) -> @MainActor () -> Void = { _ in {} }
     /// The subject of the one message a verb acts on when it isn't the one on screen, for words that say which
     /// (`Mailbox.subjectAway`); nil when it is, or for several.
@@ -94,10 +94,12 @@ final class AttentionModel {
     }
 
     /// Mute the thread of each copy. Several go one request each under one undo group, as the page's bulk mute does.
-    /// Read only turns every one down, so its no ends the rest unasked and is said as itself.
+    /// Read only turns every one down, so its no ends the rest unasked and is said as itself. Muted, a thread leaves
+    /// the list shown, so the reader moves on as the page's mute does.
     func mute(_ copies: [MailCopy]) async {
         if copies.count == 1 {
-            await act(copies, fail: { Self.couldnt(String(localized: "Couldn’t mute"), $0) }) { routes in
+            await act(copies, left: leaving(copies),
+                      fail: { Self.couldnt(String(localized: "Couldn’t mute"), $0) }) { routes in
                 _ = try await routes.post(API.Post.Mute.self, API.MuteBody(folder: copies[0].folder, key: copies[0].key,
                                                                            uid: copies[0].uid))
                 return (String(localized: "Muted"), true)
@@ -105,7 +107,7 @@ final class AttentionModel {
             return
         }
         let group = newUndoGroup()
-        await act(copies, fail: { _ in String(localized: "Couldn’t mute") }) { routes in
+        await act(copies, left: leaving(copies), fail: { _ in String(localized: "Couldn’t mute") }) { routes in
             var done = 0
             for copy in copies {
                 do {
