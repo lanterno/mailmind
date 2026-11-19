@@ -215,6 +215,39 @@ final class MeadowOverlayBlocksTests: XCTestCase {
         XCTAssertFalse(popover.isShown, "a popover closed stays closed as its anchor comes back")
     }
 
+    /// A popover from a button by the window's right edge, as the snooze chooser beside a brief card: its paper stands
+    /// 12 in from the edge, and nothing of it, its shadow's room included, falls past the window, as nothing of a toast
+    /// does. One in the middle of the window is whole.
+    func testAPopoverByTheWindowsEdgeStaysInsideTheWindow() throws {
+        let parent = window()
+        let paper = CGSize(width: 260, height: 120)
+        let edge = MeadowPopoverAnchorView(frame: NSRect(x: 370, y: 200, width: 24, height: 24))
+        parent.contentView?.addSubview(edge)
+        let popover = MeadowPopoverAnchor<AnyView>.Coordinator()
+        popover.show(AnyView(Color.white.frame(width: paper.width, height: paper.height)), under: edge)
+        let panel = try XCTUnwrap(parent.childWindows?.first)
+        XCTAssertTrue(parent.frame.contains(panel.frame), "\(panel.frame) inside \(parent.frame)")
+        let holder = try XCTUnwrap(panel.contentView)
+        let host = try XCTUnwrap(holder.subviews.first)
+        let room = MeadowPopoverAnchor<AnyView>.Coordinator.room
+        let drawn = NSRect(x: panel.frame.minX + host.frame.minX + room, y: panel.frame.minY + host.frame.minY + room,
+                           width: host.frame.width - 2 * room, height: host.frame.height - 2 * room)
+        XCTAssertEqual(drawn.width, paper.width, "the paper whole")
+        XCTAssertEqual(drawn.maxX, parent.frame.maxX - 12, "12 in from the window's edge")
+        let button = edge.convert(edge.bounds, to: nil)
+        XCTAssertEqual(drawn.maxY, parent.frame.minY + button.minY - 6, "6 under its button")
+        popover.hide()
+
+        let middle = MeadowPopoverAnchorView(frame: NSRect(x: 60, y: 200, width: 24, height: 24))
+        parent.contentView?.addSubview(middle)
+        let whole = MeadowPopoverAnchor<AnyView>.Coordinator()
+        whole.show(AnyView(Color.white.frame(width: 200, height: 100)), under: middle)
+        let uncut = try XCTUnwrap(parent.childWindows?.last)
+        XCTAssertEqual(uncut.frame.width, 200 + 2 * room, "nothing cut in the middle")
+        XCTAssertEqual(uncut.contentView?.subviews.first?.frame.origin, .zero)
+        whole.hide()
+    }
+
     func testAnOpenPopoverKeepsTheListsKeysFromTheListBehindIt() {
         let parent = window()
         let list = Keyed(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
