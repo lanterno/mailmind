@@ -359,8 +359,8 @@ struct AccountDetail: View {
     @State private var tested: Tested?
     /// The kind of sync trouble the test came to (`Tested.kind(of:)`).
     @State private var testedKind: String?
-    /// What the server says of the address, for an Other IMAP account whose password was turned down: its provider's
-    /// page for an app password, where it has one.
+    /// What the server says of the address, for an Other IMAP account whose password was turned down or isn't kept: its
+    /// provider's page for an app password, where it has one.
     @State private var found: API.PresetFound?
     @Environment(\.meadow) private var meadow
 
@@ -469,13 +469,18 @@ struct AccountDetail: View {
                 testedKind = nil
             }
         }
-        .task(id: row.type == "imap" && standing == "AUTH" ? row.email : nil) {
-            // Only for a password turned down: the server may ask the address's domain which provider takes its mail.
-            // Asked again for each account the card shows, which never shows another's provider.
+        .task(id: row.type == "imap" && Self.wantsPassword(standing) ? row.email : nil) {
+            // Only for a password turned down or none kept: the server may ask the address's domain which provider
+            // takes its mail. Asked again for each account the card shows, which never shows another's provider.
             found = nil
-            guard row.type == "imap", standing == "AUTH", let core = status.core else { return }
+            guard row.type == "imap", Self.wantsPassword(standing), let core = status.core else { return }
             found = try? await core.get(API.Get.AccountsPreset.self, ["email": email])
         }
+    }
+
+    /// Whether a sync's trouble of `kind` is one a password typed again fixes: turned down, or none kept.
+    static func wantsPassword(_ kind: String?) -> Bool {
+        kind == "AUTH" || kind == "NO_PASSWORD"
     }
 
     private func test(_ email: String) async {

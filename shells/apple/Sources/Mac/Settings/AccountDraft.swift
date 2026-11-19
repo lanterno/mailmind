@@ -445,6 +445,7 @@ enum Tested: Equatable, Sendable {
         guard case .couldntLogIn(let out) = answer else { return nil }
         switch out.error {
         case "AUTHENTICATIONFAILED": return "AUTH"
+        case "no password": return "NO_PASSWORD"
         case "connection refused", "host not found": return "NETWORK"
         case "timeout": return "TIMEOUT"
         case "certificate changed": return "TLS_PIN"

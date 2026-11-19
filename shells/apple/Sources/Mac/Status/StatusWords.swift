@@ -227,7 +227,8 @@ enum StatusWords {
     /// name or port to check but wants an App Password, each of whose refusals `error`, the trouble's class, tells
     /// apart. A login held back after a refusal fails as `LoginRefused` whatever Google first said, so Gmail's words
     /// for that class hold for each of Google's refusals. With no `fix` for a password, the account reads it from
-    /// 1Password or the environment, which is where it is changed.
+    /// 1Password or the environment, which is where it is changed. NO_PASSWORD is MailMind having no password to send
+    /// at all (this Mac's Keychain lost it): no server refused anything, and only a password typed again fixes it.
     static func syncProblem(_ kind: String, type: String? = nil, error: String? = nil, fix: AccountFix? = nil)
         -> String
     {
@@ -241,6 +242,11 @@ enum StatusWords {
             return bridgeSlowWords
         }
         switch (type, kind) {
+        case ("proton", "NO_PASSWORD"):
+            return String(localized: """
+                MailMind has no Proton Bridge password: this Mac’s Keychain doesn’t hold one. Keep the password Bridge \
+                shows for this address under Proton Bridge password.
+                """)
         case ("proton", "AUTH"):
             return String(localized: """
                 Proton Bridge didn’t accept the password. Keep the password Bridge shows for this address under Proton \
@@ -283,6 +289,29 @@ enum StatusWords {
             break
         }
         return switch kind {
+        case "NO_PASSWORD":
+            switch fix {
+            case .appPassword:
+                type == "gmail"
+                    ? String(localized: """
+                        MailMind has no password for this account: this Mac’s Keychain doesn’t hold one. Make a Gmail \
+                        App Password, then choose Enter App Password and paste it.
+                        """)
+                    : String(localized: """
+                        MailMind has no password for this account: this Mac’s Keychain doesn’t hold one. Make a new \
+                        app password, then choose Enter App Password and paste it.
+                        """)
+            case .password:
+                String(localized: """
+                    MailMind has no password for this account: this Mac’s Keychain doesn’t hold one. Choose Change \
+                    Password and type it again.
+                    """)
+            default:
+                String(localized: """
+                    MailMind has no password for this account: nothing is kept where it reads this account’s \
+                    password. Put it there, then choose Retry.
+                    """)
+            }
         case "AUTH":
             switch fix {
             case .appPassword:
@@ -344,12 +373,20 @@ enum StatusWords {
         """)
 
     /// The page that helps with a sync's trouble at an account of `type`, where there is one: Proton Bridge's, where
-    /// Google makes the App Password Gmail wants, or, for a password another provider turned down, where it makes the
-    /// app password it takes (`provider`, which `AccountFix.providerPage` finds).
+    /// Google makes the App Password Gmail wants, or, for a password another provider turned down or MailMind has
+    /// none of, where it makes the app password it takes (`provider`, which `AccountFix.providerPage` finds).
     static func syncHelp(_ kind: String, type: String? = nil, error: String? = nil, provider: API.Link? = nil)
         -> API.Link?
     {
         if bridgeDown(kind, type: type) || bridgeSlow(kind, type: type) { return protonBridge }
+        if kind == "NO_PASSWORD" {
+            return switch type {
+            case "proton": protonBridge
+            case "gmail": appPasswords
+            case "imap": provider
+            default: nil
+            }
+        }
         let signIn = ["LoginNeedsWebSignIn", "LoginImapOff"].contains(error ?? "")
         if type == "gmail" { return kind == "AUTH" && !signIn ? appPasswords : nil }
         return type == "imap" && kind == "AUTH" ? provider : nil
@@ -429,11 +466,15 @@ enum AccountFix: Equatable, Hashable, Sendable {
     /// `credential` (its `style`), where the provider makes app passwords when `appPasswords`. None where the sheet
     /// can't fix it: a Proton account's (its Bridge's password is kept in a card of its own), a password read from
     /// 1Password or the environment (changed there), a Gmail login Google wants signed in on the web or IMAP turned
-    /// on for, and every other trouble.
+    /// on for, and every other trouble. MailMind having no password at all (NO_PASSWORD) is fixed as a password turned
+    /// down is.
     static func of(kind: String?, type: String?, error: String?, credential: String?, appPasswords: Bool)
         -> AccountFix?
     {
         switch (kind, type) {
+        case ("NO_PASSWORD", "gmail"), ("NO_PASSWORD", "imap"):
+            guard credential != "op", credential != "env" else { return nil }
+            return type == "gmail" || appPasswords ? .appPassword : .password
         case ("AUTH", "gmail"), ("AUTH", "imap"):
             guard credential != "op", credential != "env" else { return nil }
             if type == "gmail" {
