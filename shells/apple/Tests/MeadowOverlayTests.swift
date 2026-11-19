@@ -619,6 +619,12 @@ final class MeadowOverlayTests: XCTestCase {
         XCTAssertEqual(MailboxToast.icon("Couldn’t archive"), .alert)
         XCTAssertEqual(MailboxToast.icon("Updated 3, 1 failed"), .alert)
         XCTAssertEqual(MailboxToast.icon("Archive undone"), .undo)
+        // An Undo's words name the verb undone, as the page's do (`${label} undone`): the undo's icon whatever the
+        // verb, never the verb's own.
+        for verb in ["Trashed", "Archived", "Moved to Work", "Marked junk", "Starred", "Marked read", "Snoozed",
+                     "Muted", "Saved to Reply later"] {
+            XCTAssertEqual(MailboxToast.icon("\(verb) undone"), .undo, verb)
+        }
         XCTAssertEqual(MailboxToast.icon("Snoozed"), .clock)
         XCTAssertEqual(MailboxToast.icon("Snoozed until tomorrow 8:00"), .clock)
         XCTAssertEqual(MailboxToast.icon("Notifications on"), .check)
