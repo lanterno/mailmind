@@ -559,6 +559,27 @@ final class RecipientCompletionTests: XCTestCase {
         XCTAssertFalse(chips[0].bad)
     }
 
+    /// A name comes from other people's headers, and both servers refuse a header that runs over lines: each control
+    /// character and line separator in it is a space, a run of them one, before it is quoted.
+    func testASuggestionsNameIsOneLine() {
+        XCTAssertEqual(Addresses.named("Lin\r\nMori", "lin@example.test"), "Lin Mori <lin@example.test>")
+        XCTAssertEqual(Addresses.named("Lin\nMori\r", "lin@example.test"), "Lin Mori <lin@example.test>")
+        XCTAssertEqual(Addresses.named("Lin\t\tMori", "lin@example.test"), "Lin Mori <lin@example.test>")
+        XCTAssertEqual(Addresses.named("Lin\u{0}Mori", "lin@example.test"), "Lin Mori <lin@example.test>")
+        XCTAssertEqual(Addresses.named("Lin\u{2028}Mori\u{2029}", "lin@example.test"), "Lin Mori <lin@example.test>")
+        XCTAssertEqual(Addresses.named("Lin \u{85} \u{1B}Mori", "lin@example.test"), "Lin Mori <lin@example.test>")
+        XCTAssertEqual(Addresses.named("Mori,\r\n Ren", "ren@example.test"), #""Mori, Ren" <ren@example.test>"#,
+                       "folded before it is quoted")
+        XCTAssertEqual(Addresses.named("\r\n\t\u{0}", "ren@example.test"), "ren@example.test", "nothing but breaks")
+        XCTAssertEqual(Addresses.named("Zoë 👩‍👩‍👧 Mori", "zoe@example.test"), "Zoë 👩‍👩‍👧 Mori <zoe@example.test>",
+                       "a joiner is no control character")
+        // The chip a suggestion with such a name makes is one line, going to the suggestion's address.
+        let broken = API.Suggestion(addr: "lin@example.test", n: 1, name: "Lin\r\nMori")
+        XCTAssertEqual(RecipientCompletion.chip(broken), "Lin Mori <lin@example.test>")
+        XCTAssertEqual(Addresses.split(RecipientCompletion.chip(broken)).map { Recipient($0).address },
+                       ["lin@example.test"])
+    }
+
     func testAWholeAddressTypedIsKeptAsTyped() {
         var list = RecipientCompletion()
         list.show([linus], for: "lin@example.test", holding: [])
