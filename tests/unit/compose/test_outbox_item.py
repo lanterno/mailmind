@@ -175,3 +175,8 @@ def test_only_a_queued_row_waits():
 def test_a_delivered_row_lists_as_sent_unless_its_sent_copy_gave_up(kw, state, error):
     r = listed(last_error="no", **kw)
     assert (r["state"], r["error"]) == (state, error)
+
+
+def test_the_list_names_the_draft_a_send_goes_from():
+    assert listed(draft_id=7)["draft_id"] == 7
+    assert listed()["draft_id"] is None

@@ -173,6 +173,16 @@ def test_send_later_waits_for_its_time(send):
         send.post(f"send at {label}", "/api/send", new(send_after=when))
 
 
+def test_the_outbox_names_the_draft_a_send_goes_from(app):
+    """So a shell knows which draft waits to go later by the draft itself, not by a subject two drafts may share."""
+    did = app.post("/api/draft", new(subject="Fabric order")).json["draft_id"]
+    at = int(datetime(2026, 11, 2, 18, 0, tzinfo=timezone.utc).timestamp())
+    assert app.post("/api/send", new(draft_id=did, send_after=at, idempotency_key="k-from-draft")).json["ok"]
+    assert app.post("/api/send", new(send_after=at, idempotency_key="k-no-draft")).json["ok"]
+    assert sorted((it["draft_id"] is None, it["draft_id"], it["scheduled"]) for it in app.get("/api/outbox").json["items"]) == [
+        (False, did, True), (True, None, True)]
+
+
 def test_send_now_skips_the_window_and_a_resubmit_dedupes(send):
     oid = send.post("send", "/api/send", new(idempotency_key="k-now")).json["outbox_id"]
     send.post("the same request again", "/api/send", new(idempotency_key="k-now"))
