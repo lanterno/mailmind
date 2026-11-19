@@ -34,6 +34,10 @@ pub trait StoredMail: Send + Sync + fmt::Debug {
     /// rows its list shows, so none on its way out, snoozed or muted.
     fn stored_folder_counts(&self, account: &str) -> Result<Vec<(String, Option<i64>, i64)>, Fault>;
 
+    /// Those of the folders a sync has read alone: what the rail counts in place of the server's STATUS, as their
+    /// lists count. A folder that holds only what MailMind filed there, never opened, isn't one.
+    fn synced_folder_counts(&self, account: &str) -> Result<Vec<(String, Option<i64>, i64)>, Fault>;
+
     /// The name of each folder the account has mail stored in, or a sync has read: what a LIST that leaves one out
     /// says another client deleted or renamed.
     fn stored_folders(&self, account: &str) -> Result<Vec<String>, Fault> {

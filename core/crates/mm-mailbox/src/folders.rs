@@ -133,7 +133,7 @@ impl Folders {
         if !self.accounts.known(account)? {
             return Err(Problem::refused("unknown account").into());
         }
-        let rail = roles::counted(self.kept_or_live(account)?, &self.stored.stored_folder_counts(account)?);
+        let rail = roles::counted(self.kept_or_live(account)?, &self.stored.synced_folder_counts(account)?);
         let folders = rail.into_iter().map(|f| (roles::takes_filing(f.role), f)).map(|(t, f)| (f, t));
         Ok(AccountFolders {
             account: account.to_owned(),

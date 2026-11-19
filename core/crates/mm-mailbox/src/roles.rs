@@ -298,8 +298,9 @@ pub fn stored_rail(counts: &[(String, Option<i64>, i64)]) -> Vec<RailFolder> {
 }
 
 /// The rail counted as each list counts: a folder a sync has read gives the unread and total of what is stored of it
-/// (`counts`, as `stored_rail` takes them), the rows its list shows, in place of what the server's STATUS said, which
-/// counts mail snoozed, muted or on its way out too. A folder never read keeps the server's.
+/// (`counts`, as `stored_rail` takes them, of those folders alone), the rows its list shows, in place of what the
+/// server's STATUS said, which counts mail snoozed, muted or on its way out too. A folder never read keeps the
+/// server's, though MailMind filed mail there.
 pub fn counted(rail: Vec<RailFolder>, counts: &[(String, Option<i64>, i64)]) -> Vec<RailFolder> {
     rail.into_iter()
         .map(|folder| match counts.iter().find(|(name, _, _)| *name == folder.name) {

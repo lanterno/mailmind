@@ -15,8 +15,10 @@ pub(crate) mod lists;
 // A body kept as opening its message keeps one, which a sync keeps of an invite too.
 pub(crate) use bodies::keep_body;
 
-impl StoredMail for Database {
-    fn stored_folder_counts(&self, account: &str) -> Result<Vec<(String, Option<i64>, i64)>, Fault> {
+impl Database {
+    /// (folder, unseen, total) of the account's stored mail, of each folder a sync has read and, unless
+    /// `synced_only`, of every other folder holding a row too.
+    fn folder_counts(&self, account: &str, synced_only: bool) -> Result<Vec<(String, Option<i64>, i64)>, Fault> {
         self.read(|c| {
             let mut counts: Vec<(String, Option<i64>, i64)> = c
                 // Of the rows its list shows, so none on its way out, snoozed or muted, which the rail's count would
@@ -34,6 +36,9 @@ impl StoredMail for Database {
                 .prepare_cached("SELECT folder FROM sync_state WHERE account=?")?
                 .query_map([account], |r| r.get(0))?
                 .collect::<Result<_, _>>()?;
+            if synced_only {
+                counts.retain(|(f, _, _)| synced.contains(f));
+            }
             for folder in synced {
                 if !counts.iter().any(|(f, _, _)| *f == folder) {
                     counts.push((folder, Some(0), 0));
@@ -41,6 +46,16 @@ impl StoredMail for Database {
             }
             Ok(counts)
         })
+    }
+}
+
+impl StoredMail for Database {
+    fn stored_folder_counts(&self, account: &str) -> Result<Vec<(String, Option<i64>, i64)>, Fault> {
+        self.folder_counts(account, false)
+    }
+
+    fn synced_folder_counts(&self, account: &str) -> Result<Vec<(String, Option<i64>, i64)>, Fault> {
+        self.folder_counts(account, true)
     }
 
     fn stored_folders(&self, account: &str) -> Result<Vec<String>, Fault> {
