@@ -107,7 +107,7 @@ CREATE TABLE draft_ahead ( -- durable AI pre-draft cache; key (account,ref_key) 
 CREATE TABLE draft_journal( draft_id INTEGER PRIMARY KEY REFERENCES drafts(id) ON DELETE CASCADE, version INTEGER NOT NULL, account TEXT NOT NULL, -- where the copy goes: From may have changed since the last discard INTEGER NOT NULL DEFAULT 0, -- 1: all that's left is to remove the copy message_id TEXT, raw BLOB, raw_sha TEXT, own_text TEXT, tail_text TEXT, tail_html TEXT, bcc TEXT, tried TEXT, -- the Message-ID of a copy a try may have left saved_at INTEGER NOT NULL, due_at INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0 );
 
 -- table drafts
-CREATE TABLE drafts ( id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, folder TEXT, uid INTEGER, message_id TEXT, uidvalidity INTEGER, mode TEXT, subject TEXT, created_at TEXT, updated_at TEXT , own_text TEXT, tail_text TEXT, tail_html TEXT, bcc TEXT, raw_sha TEXT, idempotency_key TEXT, version INTEGER NOT NULL DEFAULT 0, saved_by TEXT, pushed_at INTEGER);
+CREATE TABLE drafts ( id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, folder TEXT, uid INTEGER, message_id TEXT, uidvalidity INTEGER, mode TEXT, subject TEXT, created_at TEXT, updated_at TEXT , own_text TEXT, tail_text TEXT, tail_html TEXT, bcc TEXT, raw_sha TEXT, idempotency_key TEXT, version INTEGER NOT NULL DEFAULT 0, saved_by TEXT, pushed_at INTEGER, in_reply_to TEXT);
 
 -- table followups
 CREATE TABLE followups ( -- commitment tracking; keyed on (account,thread_id), NEVER pk account TEXT NOT NULL, thread_id TEXT NOT NULL, kind TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending', first_sent_ts INTEGER, last_msg_ts INTEGER, due_ts INTEGER, created_at TEXT, resolved_at TEXT, PRIMARY KEY(account, thread_id) );
@@ -178,4 +178,4 @@ CREATE TABLE undo_entries ( id INTEGER PRIMARY KEY AUTOINCREMENT, grp TEXT, -- t
 -- table unsub_log
 CREATE TABLE unsub_log( id INTEGER PRIMARY KEY, from_addr TEXT, method TEXT, status TEXT, http_status INTEGER, ts TEXT, idempotency_key TEXT UNIQUE, accounts TEXT);
 
-PRAGMA user_version=51;
+PRAGMA user_version=52;
