@@ -75,6 +75,9 @@ pub trait Tx {
     fn names_of(&self, pks: &[i64]) -> Result<BTreeMap<i64, (i64, String, i64)>, Fault>;
     /// A message's row goes, and its identity once no copy is left, as of `now` (seconds).
     fn delete_message(&self, pk: i64, now: i64) -> Result<(), Fault>;
+    /// A message's row follows it to the copy at `uid` in `folder`, listed again there, its body and what was said of
+    /// it kept: false, and nothing changed, when `folder` holds that UID or that message already.
+    fn relocate(&self, pk: i64, folder: &str, uid: i64) -> Result<bool, Fault>;
     fn set_local_flags(&self, pk: i64, flags: &[(String, bool)]) -> Result<(), Fault>;
     fn mark_pending_removal(&self, pk: i64, command: i64) -> Result<(), Fault>;
     /// The command `command` won't happen: its message is listed again. How many rows came back.

@@ -141,6 +141,9 @@ pub struct ServerAnswer {
     pub dest: Option<String>,
     /// The server marked it read on the way to Trash: a reversal takes that off.
     pub unseen: bool,
+    /// Where the message is on the server now, as the folder and UID its copy has there: asked as it landed, so its
+    /// row follows it and it stays searchable before that folder's next sync. None where the server didn't say.
+    pub copy: Option<(String, u32)>,
 }
 
 impl ServerAnswer {

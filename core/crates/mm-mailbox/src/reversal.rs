@@ -55,6 +55,21 @@ impl Reversals {
         }
     }
 
+    /// The copy the move left in `folder` went back with the Undo: its row goes, as that folder's next reconcile would
+    /// take it, so the folder no longer lists what its server no longer holds. Only logged when it fails: the message
+    /// is back where it was.
+    fn forget_left(&self, account: &str, folder: &str, message_id: &str) {
+        let now = self.commands.now();
+        let forgot =
+            command_ports::write(self.commands.store(), |tx| match tx.newest_copy_in(account, folder, message_id)? {
+                Some(pk) => tx.delete_message(pk, now),
+                None => Ok(()),
+            });
+        if let Err(fault) = forgot {
+            log::warning(TAG, "a copy moved back couldn't be forgotten", &[], Some(fault.class));
+        }
+    }
+
     /// Re-read the exact message put back: a watermark sync would miss a reused UID.
     fn read_back(&self, account: &str, folder: &str, message_id: &str) -> usize {
         self.ingest.ingest_message(account, folder, message_id).unwrap_or(0)
@@ -131,6 +146,7 @@ impl Reversals {
         }
         self.note_undone(&entry);
         self.read_back(account, src, mid);
+        self.forget_left(account, text(&entry, "dest_folder"), mid);
         Ok(done(account, src, true))
     }
 

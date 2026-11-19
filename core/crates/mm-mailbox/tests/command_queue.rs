@@ -143,6 +143,10 @@ impl Tx for World {
         Ok(())
     }
 
+    fn relocate(&self, _pk: i64, _folder: &str, _uid: i64) -> Result<bool, Fault> {
+        Ok(false)
+    }
+
     fn mark_applied(&self, id: i64) -> Result<(), Fault> {
         self.change(id, |r| r.applied = true);
         Ok(())

@@ -129,7 +129,7 @@ impl MailCommands {
         &self.server
     }
 
-    fn now(&self) -> i64 {
+    pub(crate) fn now(&self) -> i64 {
         self.clock.now().whole_seconds()
     }
 
@@ -298,10 +298,12 @@ impl MailCommands {
         }
     }
 
-    /// What the server now holds, on the local rows. A move drops the rows it marked pending_removal or, when there
-    /// are none, the source folder's row by Message-ID; a flag change sets the flags on its row. Running it again
-    /// changes nothing.
-    fn local_mirror(&self, tx: &dyn Tx, row: &Command) -> Result<(), Fault> {
+    /// What the server now holds, on the local rows. A move takes the rows it marked pending_removal or, when there
+    /// are none, the source folder's row by Message-ID: the first follows the message to the copy the server named
+    /// (`copy`), so it is listed and searchable there at once, and the rest go, as all go when the server named none
+    /// or the folder holds that copy already. A flag change sets the flags on its row. Running it again changes
+    /// nothing.
+    fn local_mirror(&self, tx: &dyn Tx, row: &Command, copy: Option<&(String, u32)>) -> Result<(), Fault> {
         if row.kind == "flag" {
             if let Some(pk) = Self::flagged_row(tx, row)? {
                 tx.set_local_flags(pk, &command::flags_of(row.param("flags")))?;
@@ -313,6 +315,13 @@ impl MailCommands {
             pks.extend(tx.newest_copy_in(&row.account, &row.src_folder, &row.message_id)?);
         }
         let now = self.now();
+        let mut pks = pks.into_iter();
+        if let Some((folder, uid)) = copy
+            && let Some(pk) = pks.next()
+            && !tx.relocate(pk, folder, i64::from(*uid))?
+        {
+            tx.delete_message(pk, now)?;
+        }
         for pk in pks {
             tx.delete_message(pk, now)?;
         }
@@ -327,7 +336,7 @@ impl MailCommands {
             tx.mark_applied(row.id)?;
             let outcome = answer.unseen.then(|| json!({"unseen": true}));
             tx.record(row.id, answer.dest.as_deref(), outcome.as_ref())?;
-            self.local_mirror(tx, row)?;
+            self.local_mirror(tx, row, answer.copy.as_ref())?;
             tx.finish(row.id, &at)
         })
     }

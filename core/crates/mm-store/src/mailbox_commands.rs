@@ -173,6 +173,21 @@ impl Tx for Block<'_> {
         delete_message(self.0, pk, now).map_err(storage)
     }
 
+    fn relocate(&self, pk: i64, folder: &str, uid: i64) -> Result<bool, Fault> {
+        // Its search row stays as it was: what the index holds of a message never names its folder.
+        let moved = self.run(
+            "UPDATE messages SET folder=?1, uid=?2, pending_removal=NULL WHERE pk=?3 AND NOT EXISTS \
+             (SELECT 1 FROM messages t, messages here WHERE here.pk=?3 AND t.account=here.account AND t.folder=?1 \
+             AND (t.uid=?2 OR t.message_key=here.message_key))",
+            params![folder, uid, pk],
+        )?;
+        if moved > 0 {
+            // The Inbox's label went with it, where a server keeps labels.
+            self.run("DELETE FROM message_labels WHERE message_pk=? AND label='\\Inbox'", [pk])?;
+        }
+        Ok(moved > 0)
+    }
+
     fn set_local_flags(&self, pk: i64, flags: &[(String, bool)]) -> Result<(), Fault> {
         let mut columns = Vec::new();
         let mut values = Vec::new();

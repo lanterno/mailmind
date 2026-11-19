@@ -60,6 +60,20 @@ fn already_in(s: &mut dyn MailServer, folder: &str, mid: &str, back_to: &str) ->
     found
 }
 
+/// The UID the message with Message-ID `mid` has in `folder`, where a move just put it: the newest copy there, as the
+/// folder's next sync would store it. None when it has no Message-ID, or the server won't select the folder or search
+/// it; a lost connection still fails, as any step of a try does.
+fn landed_in(s: &mut dyn MailServer, folder: &str, mid: &str) -> Result<Option<u32>, ServerError> {
+    if mid.is_empty() {
+        return Ok(None);
+    }
+    match s.select(folder, true) {
+        Ok(_) => found_by_message_id(s, mid),
+        Err(ServerError::Refused(_)) => Ok(None),
+        Err(other) => Err(other),
+    }
+}
+
 /// Select `src` and name the UID a try acts on, or None when the message has left it.
 fn target(
     s: &mut dyn MailServer,
@@ -144,7 +158,13 @@ impl ServerOps {
             let way = destination::choose(kind, &place, &s.capabilities(), account.provider.marks_trash_read, trash);
             if way.way == Way::Labels {
                 s.store_labels(&[uid], false, &["\\Inbox"])?;
-                return Ok(ServerAnswer::default());
+                // It stays in All Mail, where it is found as it is anywhere else.
+                let copy = match find_role(&mut *s, &["all"]) {
+                    Ok(Some(all)) => landed_in(s, &all, mid)?.map(|uid| (all, uid)),
+                    Ok(None) | Err(ServerError::Refused(_)) => None,
+                    Err(other) => return Err(other),
+                };
+                return Ok(ServerAnswer { copy, ..ServerAnswer::default() });
             }
             let Some(folder) = place.folder else {
                 return Ok(ServerAnswer::wont(Outcome::NoFolder));
@@ -158,7 +178,8 @@ impl ServerOps {
             } else {
                 move_to(s, &[uid], &folder)?;
             }
-            Ok(ServerAnswer { wont: None, dest: Some(folder), unseen })
+            let copy = landed_in(s, &folder, mid)?.map(|uid| (folder.clone(), uid));
+            Ok(ServerAnswer { wont: None, dest: Some(folder), unseen, copy })
         };
         match self.on_server(&account.email, timeout, run) {
             // NO or BAD: it didn't happen, and won't.
