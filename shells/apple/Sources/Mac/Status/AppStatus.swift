@@ -433,6 +433,7 @@ final class AppStatus {
     /// What an event touches, read again. The stream's own listener calls it; so does a test, with events of its own.
     /// An account's server that didn't answer (`sync-trouble`: a sync that failed, or a connection outside one) changes
     /// how its sync stands, which nothing else says: the pill reads it, trying again or can't connect, within moments.
+    /// Summaries landing (`summarized`) change how many wait for one and what today cost, which Settings' AI says.
     func heard(_ event: CoreEvent) async {
         switch event.name {
         case "sync-done", "folder-synced", "sync-trouble":
@@ -441,7 +442,8 @@ final class AppStatus {
         case "new-mail":
             digestAgain()
             if let said = event.decoded(NewMailAlerts.Arrived.self) { newMail.arrived(said) }
-        case "snooze-wake", "mute", "reconcile", "flags-changed", "followup", "undo-done", "commands-changed", "resync":
+        case "snooze-wake", "mute", "reconcile", "flags-changed", "followup", "undo-done", "commands-changed", "resync",
+             "summarized":
             digestAgain()
         default:
             break

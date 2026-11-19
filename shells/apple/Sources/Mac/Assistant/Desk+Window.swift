@@ -190,6 +190,9 @@ final class Desk {
             brief.reread()
             await readScreeners()
         }
+        // Summaries landed: what the brief, its line over the Inbox and the rail count as needing you changed, though
+        // no sender came to any gate.
+        if event.name == MailApp.summarized { brief.reread() }
         if event.name == "tasks-changed" { await tasks.load() }
     }
 

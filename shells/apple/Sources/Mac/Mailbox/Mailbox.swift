@@ -288,8 +288,14 @@ final class Mailbox {
     /// What the event stream said changed, as the page's realtime.ts reads it again: the counts after mail changed,
     /// the accounts' names a moment later, and the labels and views after a sync. An event of an account the rail
     /// doesn't list yet (one just added) reads the accounts first, so its folders are read with the rest; and when the
-    /// accounts the digest names have changed, their folders and counts are read again.
+    /// accounts the digest names have changed, their folders and counts are read again. Summaries landing change what
+    /// rows say and which need you, and no folder's count: a lane on screen and the message open from outside are read
+    /// again, the list by the window (`MailApp.heard`) and the rail's count with the brief's (the desk's `heard`).
     func heard(_ event: CoreEvent) {
+        if event.name == MailApp.summarized {
+            lane?.refresh()
+            rereadOutside()
+        }
         if MailApp.mailChanged.contains(event.name) || event.name == "folder-synced" {
             lane?.refresh()
             rereadOutside()

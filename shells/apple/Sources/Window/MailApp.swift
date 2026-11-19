@@ -20,6 +20,10 @@ final class MailApp {
         "new-mail", "snooze-wake", "mute", "reconcile", "flags-changed", "followup", "undo-done", "commands-changed",
         "resync", "sync-done",
     ]
+    /// A round of the AI's summaries landed (`summarized`), with no mail changing: what needs you and what can wait
+    /// changed, which the list, the Inbox's tabs, the rail and the brief count. Those are read again, as the page's
+    /// realtime.ts reads them; the folders' counts are of unread mail, and stay.
+    static let summarized = "summarized"
 
     /// The one this process runs. Every window the mail scene opens shows it, so the window closed and opened again
     /// from the Dock finds the core already open: one core over the data folder, never a second with its own sync.
@@ -253,21 +257,28 @@ final class MailApp {
 
     /// Whether the list on screen is read again after `event`. An Inbox's first scan says no new-mail, since none of
     /// what it stores is new, so the list doesn't wait for one: the end of the sync that stored its newest mail
-    /// (`sync-done`) reads it again, and so does each step of its older mail as it is stored (`folder-synced`).
+    /// (`sync-done`) reads it again, and so does each step of its older mail as it is stored (`folder-synced`). Summaries
+    /// landing change which rows need you and what each says, though no mail changed.
     static func refreshesTheList(_ event: CoreEvent) -> Bool {
-        mailChanged.contains(event.name) || readAFolder(event)
+        mailChanged.contains(event.name) || event.name == summarized || readAFolder(event)
+    }
+
+    /// What an event touches, read again: the mailbox's rail and lists, and the list on screen. The stream's listener
+    /// calls it; so does a test, with events of its own.
+    func heard(_ event: CoreEvent) {
+        #if os(macOS)
+        mailbox.heard(event)
+        #endif
+        if Self.refreshesTheList(event) {
+            list?.refresh()
+        }
     }
 
     private func listen(to events: AsyncStream<CoreEvent>) {
         listening = Task { [weak self] in
             for await event in events {
                 guard let self else { return }
-                #if os(macOS)
-                self.mailbox.heard(event)
-                #endif
-                if Self.refreshesTheList(event) {
-                    self.list?.refresh()
-                }
+                self.heard(event)
             }
         }
     }
