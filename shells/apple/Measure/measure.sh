@@ -2,7 +2,8 @@
 # The Apple shell's measurements on this Mac: cold start to first rows, memory idle and after scrolling and jumping
 # through 100,000 fictional messages, the main thread's time per pass while scrolling, the cost of crossing into the
 # core, the core's size, and a system web view's memory showing one fictional email. `just apple measure` runs it
-# after a release build. Results go to stdout and build/measure/results.txt.
+# after a release build. Results go to stdout and build/measure/results.txt. A measure run isn't a person's, so the app
+# keeps its preferences apart from theirs by itself, in memory only, as it names no home (Mac/Shared/RunPreferences).
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 out="$here/build/measure"

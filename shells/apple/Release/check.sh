@@ -167,7 +167,8 @@ check "a program signed as the app is loads the app's Sparkle.framework" loads
 
 echo "## the app opens on fictional mail"
 # The demo's world: fake servers on loopback, a home of its own and a keychain stand-in, so the app reads nothing of
-# the person's and, on a home of its own, starts no update check (Sources/Updates.swift).
+# the person's and, on a home of its own, starts no update check (Sources/Updates.swift) and keeps its preferences in
+# that home, apart from the person's MailMind's, which demo_home.py checks.
 opens() {
     (cd "$here/../.." && uv run --quiet python "$here/Measure/demo_home.py" "$app/Contents/MacOS/MailMind" \
         --smoke --arch "$1")

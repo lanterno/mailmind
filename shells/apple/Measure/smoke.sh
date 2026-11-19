@@ -14,6 +14,8 @@ limit() {
 
 if [[ "$which" == all || "$which" == mac ]]; then
     echo "## the Mac app"
+    # A measure run isn't a person's, so the app keeps its preferences apart from theirs by itself, in memory only,
+    # as it names no home (Sources/Mac/Shared/RunPreferences.swift).
     MAILMIND_MEASURE=scroll limit "$here/build/DerivedData/Build/Products/Release/MailMind.app/Contents/MacOS/MailMind"
 fi
 
