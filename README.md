@@ -91,7 +91,9 @@ and the AI provider you chose (Claude by default).
   the subject, and a gold chip when it names a next step ("Pay 240.00 by 29 Nov");
   opening the message shows the same summary at the top, with no extra AI call, and
   `i` asks for the full one. A message keeps its summary when it moves, and an Undo
-  brings it back, so neither pays for a second call. Rows are grouped by day.
+  brings it back, so neither pays for a second call. Rows are grouped by day. A row
+  of your own mail, in Sent, Drafts, a conversation or a search, names whom it went
+  to ("To Ada, Lin +2") where another's names who sent it.
 - **Today's brief opens the Inbox.** With no message open, the reading pane
   shows the day's AI brief on a painted landscape (sun by day, moon and stars by
   night), tallies for what needs you, what's waiting and your
