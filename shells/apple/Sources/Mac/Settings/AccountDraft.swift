@@ -350,10 +350,11 @@ struct AccountDraft: Equatable {
 
     /// What the sheet says of `tested`, under the password's row, which already says some of it (#51): the page the
     /// row shows isn't offered twice, and under Gmail's steps, a password Gmail turned down is said in one line that
-    /// leans on them, where the core's sentence would say the steps' first and last lines again. Its kind stays, in
-    /// plain words in small type (`Tested.plainWords(of:)`).
+    /// leans on them, where the core's sentence would say the steps' first and last lines again. Its kind shows in
+    /// plain words in small type (`Tested.plainWords(of:)`) only where the core's sentence doesn't say it already.
     func inSheet(_ tested: Tested) -> Tested {
-        guard case .failed(let why, let link, let detail) = tested else { return tested }
+        guard case .failed(let why, let link, var detail) = tested else { return tested }
+        if Tested.saidInFull(detail) { detail = nil }
         let shown = link != nil && link?.url == passwordPage
         if type == .gmail, shown { return .failed(Self.gmailTurnedDown, link: nil, detail: detail) }
         return .failed(why, link: shown ? nil : link, detail: detail)
@@ -454,6 +455,21 @@ enum Tested: Equatable, Sendable {
             return !out.error.isEmpty && out.error == out.says ? "AUTH" : nil
         }
     }
+
+    /// The kinds of trouble the core's sentence for a test says in full (`login_words`): a password turned down or
+    /// missing, a server that didn't answer, a certificate, a secure connection, a port. Their plain words would say
+    /// the sentence again; a connection lost, or no outgoing server, has only the core's general sentence, so its
+    /// plain words say what it was.
+    static func saidInFull(_ detail: String?) -> Bool {
+        guard let detail else { return false }
+        let kind = detail.hasPrefix("SMTP ") ? String(detail.dropFirst("SMTP ".count)) : detail
+        return Self.inFull.contains(kind)
+    }
+
+    private static let inFull: Set<String> = [
+        "AUTHENTICATIONFAILED", "no password", "connection refused", "host not found", "timeout", "certificate changed",
+        "SSLCertVerificationError", "SSLError", "port must be 1–65535",
+    ]
 
     /// The classes of a connection lost part way.
     private static let lost: Set<String> = [
