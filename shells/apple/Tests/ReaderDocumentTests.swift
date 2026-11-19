@@ -550,6 +550,84 @@ final class ReaderDocumentTests: XCTestCase {
         XCTAssertEqual(asked, 1, "the text's Esc asks the box")
     }
 
+    /// Esc a moment after the autosave kept the words: nothing is left to save, and the close still says where they
+    /// went, in the page's words.
+    func testEscAfterTheAutosaveSaysWhereTheWordsWent() async throws {
+        let (composing, routes) = try composing()
+        routes.answer(API.Post.Draft.path,
+                      #"{"ok": true, "draft_id": 41, "version": 1, "message_id": "<d@example.test>", "pushed": true}"#)
+        composing.openWindow = { _ in XCTFail("no window") }
+        let copy = MailCopy(Fixture.row(7))
+        composing.inlineSlot = copy
+        let boxed = try await replied(composing, copy)
+        boxed.setBody("Thursday works.", selection: NSRange(location: 15, length: 0))
+        _ = await boxed.save(silent: true, takeTyped: false, autosave: true).value
+        XCTAssertFalse(boxed.dirty, "the autosave kept it")
+
+        XCTAssertTrue(composing.escapeInBox())
+        await eventually("where the words went said") { composing.notice?.text == "Saved to Drafts" }
+        XCTAssertEqual(routes.calls(to: API.Post.Draft.path).count, 1, "nothing new to save")
+    }
+
+    /// r on the message whose reply was closed with Esc opens the box with the words saved, the same draft, rather than
+    /// an empty box; its saves go on to that draft. A quick reply starts afresh.
+    func testRAfterEscOpensTheBoxWithTheWordsSaved() async throws {
+        let (composing, routes) = try composing()
+        routes.answer(API.Post.Draft.path,
+                      #"{"ok": true, "draft_id": 41, "version": 1, "message_id": "<d@example.test>", "pushed": true}"#)
+        composing.openWindow = { _ in XCTFail("no window") }
+        let copy = MailCopy(Fixture.row(7))
+        composing.inlineSlot = copy
+        let boxed = try await replied(composing, copy)
+        boxed.setBody("Thursday works.", selection: NSRange(location: 15, length: 0))
+        XCTAssertTrue(composing.escapeInBox())
+        await eventually("closed, saved") { composing.notice?.text == "Saved to Drafts" }
+        let reads = routes.calls(to: API.Get.MessageBody.path).count
+
+        let again = try await replied(composing, copy)
+        XCTAssertFalse(again === boxed, "a composer of its own")
+        XCTAssertTrue(composing.inline?.composer === again, "in the box")
+        XCTAssertTrue(again.body.hasPrefix("Thursday works."), "the words as saved")
+        XCTAssertEqual(again.draftId, 41, "the same draft")
+        XCTAssertEqual(again.to.map(\.value), ["bo@example.test"])
+        XCTAssertEqual(routes.calls(to: API.Get.MessageBody.path).count, reads, "nothing asked of the original")
+
+        composing.say("between")
+        again.close()
+        await eventually("closed untouched, it still says where its words are") {
+            composing.notice?.text == "Saved to Drafts"
+        }
+        let third = try await replied(composing, copy)
+        XCTAssertTrue(third.body.hasPrefix("Thursday works."), "and opens with them again")
+        third.setBody("Thursday works. Noon?", selection: NSRange(location: 21, length: 0))
+        _ = await third.save(silent: true).value
+        XCTAssertEqual(routes.calls(to: API.Post.Draft.path).last?.body["draft_id"]?.number, 41, "saved to that draft")
+        third.close()
+        XCTAssertNil(composing.inline)
+
+        await composing.quickReply(copy, QuickReply.all[0])
+        let quick = try XCTUnwrap(composing.inline?.composer)
+        XCTAssertTrue(quick.body.hasPrefix("Yes, that works for me."), "a quick reply starts afresh")
+        XCTAssertNil(quick.draftId)
+        quick.close(force: true)
+    }
+
+    /// A reply closed in the box with nothing written in it saves nothing and says nothing; r opens it empty again.
+    func testAnUntouchedReplyClosedInTheBoxOpensEmptyAgain() async throws {
+        let (composing, routes) = try composing()
+        composing.openWindow = { _ in XCTFail("no window") }
+        let copy = MailCopy(Fixture.row(7))
+        composing.inlineSlot = copy
+        _ = try await replied(composing, copy)
+        XCTAssertTrue(composing.escapeInBox())
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertNil(composing.notice, "nothing to say")
+        XCTAssertTrue(routes.calls(to: API.Post.Draft.path).isEmpty, "nothing saved")
+        let again = try await replied(composing, copy)
+        XCTAssertNil(again.draftId)
+        again.close(force: true)
+    }
+
     func testTheSendGuardsFixesInTheBoxAreDoneWhereTheyCanBe() async throws {
         let (composing, _) = try composing()
         var windows: [UUID] = []
