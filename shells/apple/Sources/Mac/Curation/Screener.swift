@@ -231,6 +231,9 @@ struct ScreenerScreen: View {
         .focused($focus, equals: .screen)
         .focusEffectDisabled()
         .onAppear { holdKeys() }
+        // Another account's gate shows in the same place, gone to from the rail, which the click left the keyboard
+        // with: the gate takes it as it does as it first shows.
+        .onChange(of: model.account) { holdKeys() }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .task(id: model.account) { await model.load() }
         .task(id: model.visitor?.fromAddr) {
