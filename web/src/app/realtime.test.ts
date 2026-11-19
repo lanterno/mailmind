@@ -126,6 +126,11 @@ describe("what the stream says changed", () => {
     await send("sync-done", { account: "a@example.test", kept: 0, junk: 3 });
     expect(readKeys()).toContain("messages");                      // junk it filed is mail a list shows too
   });
+  it("a server that didn't answer reads the status again, and nothing else", async () => {
+    await open();
+    await send("sync-trouble", { account: "a@example.test" });
+    expect(readKeys()).toEqual(["digest"]);
+  });
   it("the outbox and to-dos each read their own again", async () => {
     await open();
     await send("outbox");
