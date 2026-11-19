@@ -161,7 +161,7 @@ final class MeadowDeskTests: XCTestCase {
         XCTAssertEqual(BriefWords.tallies(needs: 3, waiting: 1, replyLater: 0, worthARead: 2, canWait: 5,
                                           commitments: 1),
                        [Tally(count: 3, words: "need you", goes: .needs, sun: true),
-                        Tally(count: 1, words: "waiting on others", goes: .waiting),
+                        Tally(count: 1, words: "waiting", goes: .waiting),
                         Tally(count: 2, words: "worth a read", goes: .worthARead),
                         Tally(count: 5, words: "can wait", goes: .canWait),
                         Tally(count: 1, words: "commitment", goes: .commitments),
