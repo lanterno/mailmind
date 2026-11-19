@@ -41,6 +41,16 @@ describe("what the pill says", () => {
     expect(pillLabel(digest({ sync: { last: new Date(2026, 9, 30).toISOString() } }), false, false, now).text).toMatch(/^Synced Oct 30/);
     expect(pillLabel(digest(), false, false, now).text).toBe("Not synced yet");
   });
+  it("says it couldn't reach the server and is trying again after a sync that failed, never Synced", () => {
+    const last = new Date(2026, 10, 2, 11, 59).toISOString();
+    const failed = digest({ sync: { last }, status: { "a@example.test": { health: "ok", trying_again: true } } });
+    expect(pillLabel(failed, false, false, now)).toEqual({ cls: "busy", text: "Couldn’t reach the server · trying again" });
+    const removed = digest({ sync: { last }, status: { "gone@example.test": { health: "ok", trying_again: true } } });
+    expect(pillLabel(removed, false, false, now).text).toMatch(/^Synced /);   // only the accounts listed count
+    expect(pillLabel(failed, true, false, now).text).toBe("Syncing…");       // a sync running says so first
+    const shows = digest({ sync: { last }, status: { "a@example.test": { health: "error" } } });
+    expect(pillLabel(shows, false, false, now).text).toBe("a can’t connect");
+  });
 });
 
 describe("each account", () => {
