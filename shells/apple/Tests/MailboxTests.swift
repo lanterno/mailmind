@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import XCTest
 
 /// The mailbox's words, places and rows say what the page says of them.
@@ -337,6 +338,17 @@ final class MailboxVerbsTests: XCTestCase {
         XCTAssertEqual(Set(bodies.map(\.undoGroup)).count, 1, "one Undo reverses all of it")
         XCTAssertTrue(bodies.allSatisfy { $0.verb == .archive })
         XCTAssertEqual(app.mailbox.toast?.text, "Archived 1198, 2 failed")
+    }
+
+    /// A link in the run of a sentence (the empty Inbox tab's "in Everything.") takes no more room than its words, so
+    /// no space stands before the full stop after it; one on a line of its own keeps room at its sides.
+    func testALinkInASentenceKeepsNoRoomAtItsSides() {
+        func width(_ view: some View) -> CGFloat { NSHostingView(rootView: view.meadowLight(.day)).fittingSize.width }
+        let words = width(Text("Everything").font(.meadow(.ui, 12.5, .bold)).underline())
+        let inline = width(Button("Everything") {}.buttonStyle(MeadowLinkStyle(inline: true)))
+        let alone = width(Button("Everything") {}.buttonStyle(MeadowLinkStyle()))
+        XCTAssertEqual(inline, words, accuracy: 0.5)
+        XCTAssertEqual(alone, words + 8, accuracy: 0.5)
     }
 
     func testTheBulkBarsRestoreAndSnoozeTakeEveryRowChosenHeldOrNot() async throws {
