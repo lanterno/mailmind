@@ -86,7 +86,9 @@ impl Background {
         let batching =
             Arc::new(Batching::new(assistant.calls.clone(), database.clone(), database.clone(), clock.clone()));
         let assessments = Arc::new(
-            Assessments::new(assistant.calls.clone(), database.clone(), clock.clone()).with_batches(batching, batches),
+            Assessments::new(assistant.calls.clone(), database.clone(), clock.clone())
+                .with_batches(batching, batches)
+                .telling(events.clone()),
         );
         let ahead = Ahead::new(
             assistant.asking.clone(),

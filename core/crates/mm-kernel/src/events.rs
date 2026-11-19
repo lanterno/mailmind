@@ -42,6 +42,9 @@ pub enum Topic {
     UndoDone,
     /// A queued move or flag change was applied or refused, retried or discarded.
     CommandsChanged,
+    /// A round of the AI's summaries landed (`count`: how many messages it summarized): what needs you and what can
+    /// wait changed, which the lists, the Inbox's tabs, the rail and the brief count, with no mail changing.
+    Summarized,
 }
 
 impl Topic {
@@ -62,6 +65,7 @@ impl Topic {
             Topic::Outbox => "outbox",
             Topic::UndoDone => "undo-done",
             Topic::CommandsChanged => "commands-changed",
+            Topic::Summarized => "summarized",
         }
     }
 }

@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use mm_kernel::errors::Fault;
+use mm_kernel::events::{Events, Topic};
 use mm_kernel::log::{self, Field};
 use mm_kernel::seams::Clock;
 use serde_json::{Map, Value, json};
@@ -145,16 +146,24 @@ pub struct Assessments {
     clock: Arc<dyn Clock>,
     /// The backlog's batches, and whether the round sends one (MAILMIND_NO_BATCHES off).
     batches: Option<(Arc<Batching>, bool)>,
+    /// The open tabs, told when a round's summaries land.
+    events: Option<Arc<dyn Events>>,
 }
 
 impl Assessments {
     pub fn new(calls: Arc<Calls>, triage: Arc<dyn Triage>, clock: Arc<dyn Clock>) -> Assessments {
-        Assessments { calls, triage, clock, batches: None }
+        Assessments { calls, triage, clock, batches: None, events: None }
     }
 
     /// The same, with a round that brings in a batch's answers and, when `send`, sends a backlog as a batch.
     pub fn with_batches(mut self, batching: Arc<Batching>, send: bool) -> Assessments {
         self.batches = Some((batching, send));
+        self
+    }
+
+    /// The same, with a round that tells the open tabs how many messages it summarized, whenever it summarized any.
+    pub fn telling(mut self, events: Arc<dyn Events>) -> Assessments {
+        self.events = Some(events);
         self
     }
 
@@ -232,9 +241,23 @@ impl Assessments {
     /// long enough; held back otherwise (the limit, the breaker), it waits its interval (None). A batch's answers are
     /// brought in first, whatever holds the rest back, and a backlog goes out in the next batch rather than through
     /// this round's calls.
+    ///
+    /// Summaries change what needs you and what can wait with no mail changing, so a round that kept any tells the
+    /// open tabs how many (`summarized`), a batch's answers among them, even when what follows them holds the round
+    /// back or fails: the lists, the Inbox's tabs, the rail and the brief read them again.
     pub fn round(&self) -> Result<Option<i64>, Fault> {
+        let mut landed = 0;
+        let next = self.round_counting(&mut landed);
+        if let (Some(events), true) = (&self.events, landed > 0) {
+            events.publish(Topic::Summarized, json!({"count": landed}));
+        }
+        next
+    }
+
+    /// The round, adding to `landed` each summary it keeps as it keeps it.
+    fn round_counting(&self, landed: &mut usize) -> Result<Option<i64>, Fault> {
         if let Some((batching, _)) = &self.batches {
-            batching.collect()?;
+            *landed += batching.collect()?;
         }
         if let Some(why) = self.held_back() {
             return Ok((why == "yielding").then_some(ASSESS_YIELD));
@@ -243,6 +266,7 @@ impl Assessments {
             batching.submit(batches::MIN, batches::KEEP_NEWEST)?;
         }
         let done = self.summarize_pending(ASSESS_BATCH, WORKERS)?;
+        *landed += done;
         if done > 0 {
             log::info(TAG, "%(count)s summarized", &[(Field::Count, &done.to_string())]);
         }
