@@ -131,6 +131,26 @@ def test_shift_enter_blocks_and_a_chip_removes_its_rule(page, app, world):
     clean(page)
 
 
+def test_a_rule_that_names_no_sender_is_refused_in_words_and_stays_to_be_put_right(page, app, world):
+    """A number pasted before the address: the server's words say why, and what was typed stays."""
+    drawer(page)
+    field = page.locator("#ruleInput")
+    field.fill("50506 spam@lottery.example.test")
+    field.press("Enter")
+    expect(page.locator("#toast")).to_contain_text(
+        "A rule names one address, such as name@example.com, or one domain, such as example.com.")
+    expect(field).to_have_value("50506 spam@lottery.example.test")
+    expect(page.locator('#keepList [data-token="50506 spam@lottery.example.test"]')).to_have_count(0)
+    assert "50506 spam@lottery.example.test" not in blocked(app, "keep_senders")
+    assert all("400" in p for p in page.problems), page.problems    # the refusal is on the console
+    page.problems.clear()
+    field.fill("spam@lottery.example.test")
+    field.press("Shift+Enter")
+    expect(page.locator('#blockList [data-token="spam@lottery.example.test"]')).to_be_visible()
+    expect(field).to_have_value("")
+    clean(page)
+
+
 def test_each_inbox_says_what_it_holds_and_a_sweep_asks_first(page, world):
     d = drawer(page)
     mod = d.locator(f'.acctmod[data-acct="{w.ADA}"]')

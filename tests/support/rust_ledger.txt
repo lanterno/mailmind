@@ -959,3 +959,4 @@ tests/api/test_http_settings.py::test_a_keep_or_block_names_one_address_or_one_d
 tests/api/test_http_settings.py::test_a_keep_or_block_names_one_address_or_one_domain_and_nothing_beside_it[Lin Mori <lin@example.test>]
 tests/api/test_http_settings.py::test_a_keep_or_block_names_one_address_or_one_domain_and_nothing_beside_it[example..test]
 tests/api/test_http_settings.py::test_a_keep_or_block_names_one_address_or_one_domain_and_nothing_beside_it[lin@]
+tests/e2e/browser/test_curate.py::test_a_rule_that_names_no_sender_is_refused_in_words_and_stays_to_be_put_right
