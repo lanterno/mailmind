@@ -34,7 +34,8 @@ struct MailboxSidebar: View {
             ScrollViewReader { scroller in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        RailAccountButton(mailbox: mailbox, place: app.place, open: open, menuOpen: $menuOpen,
+                        RailAccountButton(mailbox: mailbox, place: RailAccountButton.place(of: app), open: open,
+                                          menuOpen: $menuOpen,
                                           unfold: unfold)
                         Color.clear.frame(height: 8)
                         ForEach(shown) { entry in

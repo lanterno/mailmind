@@ -84,6 +84,12 @@ struct RailAccountButton: View {
         .accessibilityHint("Shows mail from every account or from one")
     }
 
+    /// The place whose mail the button says the window shows: the list's, so beside the brief it names the Inbox the
+    /// list still holds, one account's or every account's, as the page's switcher reads the list's source.
+    static func place(of app: MailApp) -> Place? {
+        app.listed
+    }
+
     /// The colours stacked: every account's while the window shows them all, else the one's.
     private func colours(of account: String?) -> [Color] {
         let accounts = account.map { [$0] } ?? mailbox.accounts
