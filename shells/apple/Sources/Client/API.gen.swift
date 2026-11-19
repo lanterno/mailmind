@@ -332,6 +332,17 @@ extension API {
         }
     }
 
+    /// One of the people a message went to, as its To or Cc names them (`kernel.addressees`).
+    public struct Addressee: Codable, Hashable, Sendable {
+        public var addr: String
+        public var name: String?
+
+        public init(addr: String, name: String? = nil) {
+            self.addr = addr
+            self.name = name
+        }
+    }
+
     public struct AiCosts: Codable, Hashable, Sendable {
         public var batch: Batch
         public var days: [DayCost]
@@ -1366,6 +1377,8 @@ extension API {
         public var replyWorthy: Bool
         public var safeToFile: Bool
         public var seen: Bool
+        public var sentTo: [Addressee]
+        public var sentToMore: Int
         public var subject: String
         public var summary: String?
         public var threadId: String?
@@ -1373,7 +1386,7 @@ extension API {
         public var uid: Int
         public var when: String
 
-        public init(account: String, action: String, alias: String? = nil, bucket: String? = nil, category: String? = nil, commitmentWorthy: Bool, flagged: Bool, folder: String, fromAddr: String? = nil, fromName: String? = nil, hasAttach: Bool, importance: Int? = nil, key: Int, kind: String, link: String, needsYou: Bool, replyWorthy: Bool, safeToFile: Bool, seen: Bool, subject: String, summary: String? = nil, threadId: String? = nil, ts: Int? = nil, uid: Int, when: String) {
+        public init(account: String, action: String, alias: String? = nil, bucket: String? = nil, category: String? = nil, commitmentWorthy: Bool, flagged: Bool, folder: String, fromAddr: String? = nil, fromName: String? = nil, hasAttach: Bool, importance: Int? = nil, key: Int, kind: String, link: String, needsYou: Bool, replyWorthy: Bool, safeToFile: Bool, seen: Bool, sentTo: [Addressee], sentToMore: Int, subject: String, summary: String? = nil, threadId: String? = nil, ts: Int? = nil, uid: Int, when: String) {
             self.account = account
             self.action = action
             self.alias = alias
@@ -1393,6 +1406,8 @@ extension API {
             self.replyWorthy = replyWorthy
             self.safeToFile = safeToFile
             self.seen = seen
+            self.sentTo = sentTo
+            self.sentToMore = sentToMore
             self.subject = subject
             self.summary = summary
             self.threadId = threadId
@@ -1421,6 +1436,8 @@ extension API {
             case replyWorthy = "reply_worthy"
             case safeToFile = "safe_to_file"
             case seen
+            case sentTo = "sent_to"
+            case sentToMore = "sent_to_more"
             case subject
             case summary
             case threadId = "thread_id"
@@ -2328,6 +2345,8 @@ extension API {
         public var replyWorthy: Bool
         public var safeToFile: Bool
         public var seen: Bool
+        public var sentTo: [Addressee]
+        public var sentToMore: Int
         public var snippet: String
         public var subject: String
         public var summary: String
@@ -2337,7 +2356,7 @@ extension API {
         public var uid: Int
         public var when: String
 
-        public init(account: String, action: String, bucket: String? = nil, category: String? = nil, commitmentWorthy: Bool, count: Int? = nil, flagged: Bool, folder: String, fromAddr: String? = nil, fromName: String? = nil, hasAttach: Bool, importance: Int? = nil, isJunk: Bool, key: Int, needsYou: Bool, replyWorthy: Bool, safeToFile: Bool, seen: Bool, snippet: String, subject: String, summary: String, threadCount: Int? = nil, threadId: String? = nil, ts: Int? = nil, uid: Int, when: String) {
+        public init(account: String, action: String, bucket: String? = nil, category: String? = nil, commitmentWorthy: Bool, count: Int? = nil, flagged: Bool, folder: String, fromAddr: String? = nil, fromName: String? = nil, hasAttach: Bool, importance: Int? = nil, isJunk: Bool, key: Int, needsYou: Bool, replyWorthy: Bool, safeToFile: Bool, seen: Bool, sentTo: [Addressee], sentToMore: Int, snippet: String, subject: String, summary: String, threadCount: Int? = nil, threadId: String? = nil, ts: Int? = nil, uid: Int, when: String) {
             self.account = account
             self.action = action
             self.bucket = bucket
@@ -2356,6 +2375,8 @@ extension API {
             self.replyWorthy = replyWorthy
             self.safeToFile = safeToFile
             self.seen = seen
+            self.sentTo = sentTo
+            self.sentToMore = sentToMore
             self.snippet = snippet
             self.subject = subject
             self.summary = summary
@@ -2385,6 +2406,8 @@ extension API {
             case replyWorthy = "reply_worthy"
             case safeToFile = "safe_to_file"
             case seen
+            case sentTo = "sent_to"
+            case sentToMore = "sent_to_more"
             case snippet
             case subject
             case summary
@@ -3168,6 +3191,8 @@ extension API {
         public var key: Int
         public var muted: Bool
         public var seen: Bool
+        public var sentTo: [Addressee]
+        public var sentToMore: Int
         public var snippet: String
         public var subject: String
         public var threadId: String?
@@ -3175,7 +3200,7 @@ extension API {
         public var uid: Int
         public var when: String
 
-        public init(account: String, bucket: String? = nil, count: Int, flagged: Bool, folder: String, fromAddr: String? = nil, fromName: String? = nil, hasAttach: Bool, isJunk: Bool, key: Int, muted: Bool, seen: Bool, snippet: String, subject: String, threadId: String? = nil, ts: Int? = nil, uid: Int, when: String) {
+        public init(account: String, bucket: String? = nil, count: Int, flagged: Bool, folder: String, fromAddr: String? = nil, fromName: String? = nil, hasAttach: Bool, isJunk: Bool, key: Int, muted: Bool, seen: Bool, sentTo: [Addressee], sentToMore: Int, snippet: String, subject: String, threadId: String? = nil, ts: Int? = nil, uid: Int, when: String) {
             self.account = account
             self.bucket = bucket
             self.count = count
@@ -3188,6 +3213,8 @@ extension API {
             self.key = key
             self.muted = muted
             self.seen = seen
+            self.sentTo = sentTo
+            self.sentToMore = sentToMore
             self.snippet = snippet
             self.subject = subject
             self.threadId = threadId
@@ -3209,6 +3236,8 @@ extension API {
             case key
             case muted
             case seen
+            case sentTo = "sent_to"
+            case sentToMore = "sent_to_more"
             case snippet
             case subject
             case threadId = "thread_id"
@@ -4412,6 +4441,8 @@ extension API {
         public var key: Int
         public var replylater: Bool
         public var seen: Bool
+        public var sentTo: [Addressee]
+        public var sentToMore: Int
         public var snippet: String
         public var subject: String
         public var threadId: String?
@@ -4420,7 +4451,7 @@ extension API {
         public var waitingLabel: String
         public var when: String
 
-        public init(account: String, bucket: String? = nil, count: Int, flagged: Bool, folder: String, fromAddr: String? = nil, fromName: String? = nil, hasAttach: Bool, isJunk: Bool, key: Int, replylater: Bool, seen: Bool, snippet: String, subject: String, threadId: String? = nil, ts: Int? = nil, uid: Int, waitingLabel: String, when: String) {
+        public init(account: String, bucket: String? = nil, count: Int, flagged: Bool, folder: String, fromAddr: String? = nil, fromName: String? = nil, hasAttach: Bool, isJunk: Bool, key: Int, replylater: Bool, seen: Bool, sentTo: [Addressee], sentToMore: Int, snippet: String, subject: String, threadId: String? = nil, ts: Int? = nil, uid: Int, waitingLabel: String, when: String) {
             self.account = account
             self.bucket = bucket
             self.count = count
@@ -4433,6 +4464,8 @@ extension API {
             self.key = key
             self.replylater = replylater
             self.seen = seen
+            self.sentTo = sentTo
+            self.sentToMore = sentToMore
             self.snippet = snippet
             self.subject = subject
             self.threadId = threadId
@@ -4455,6 +4488,8 @@ extension API {
             case key
             case replylater
             case seen
+            case sentTo = "sent_to"
+            case sentToMore = "sent_to_more"
             case snippet
             case subject
             case threadId = "thread_id"
@@ -5030,13 +5065,15 @@ extension API {
         public var replyWorthy: Bool
         public var safeToFile: Bool
         public var seen: Bool
+        public var sentTo: [Addressee]
+        public var sentToMore: Int
         public var snippet: String
         public var subject: String
         public var threadId: String?
         public var uid: Int
         public var when: String
 
-        public init(account: String, action: String? = nil, alias: String? = nil, bucket: String? = nil, commitmentWorthy: Bool, date: String, flagged: Bool, folder: String, fromAddr: String? = nil, fromName: String? = nil, hasAttach: Bool, importance: Int? = nil, isJunk: Bool, key: Int, needsYou: Bool, replyWorthy: Bool, safeToFile: Bool, seen: Bool, snippet: String, subject: String, threadId: String? = nil, uid: Int, when: String) {
+        public init(account: String, action: String? = nil, alias: String? = nil, bucket: String? = nil, commitmentWorthy: Bool, date: String, flagged: Bool, folder: String, fromAddr: String? = nil, fromName: String? = nil, hasAttach: Bool, importance: Int? = nil, isJunk: Bool, key: Int, needsYou: Bool, replyWorthy: Bool, safeToFile: Bool, seen: Bool, sentTo: [Addressee], sentToMore: Int, snippet: String, subject: String, threadId: String? = nil, uid: Int, when: String) {
             self.account = account
             self.action = action
             self.alias = alias
@@ -5055,6 +5092,8 @@ extension API {
             self.replyWorthy = replyWorthy
             self.safeToFile = safeToFile
             self.seen = seen
+            self.sentTo = sentTo
+            self.sentToMore = sentToMore
             self.snippet = snippet
             self.subject = subject
             self.threadId = threadId
@@ -5081,6 +5120,8 @@ extension API {
             case replyWorthy = "reply_worthy"
             case safeToFile = "safe_to_file"
             case seen
+            case sentTo = "sent_to"
+            case sentToMore = "sent_to_more"
             case snippet
             case subject
             case threadId = "thread_id"
@@ -5481,6 +5522,8 @@ extension API {
         public var replyWorthy: Bool
         public var safeToFile: Bool
         public var seen: Bool
+        public var sentTo: [Addressee]
+        public var sentToMore: Int
         public var snippet: String
         public var snoozedUntil: Int
         public var subject: String
@@ -5488,7 +5531,7 @@ extension API {
         public var uid: Int
         public var when: String
 
-        public init(account: String, bucket: String? = nil, commitmentWorthy: Bool, flagged: Bool, folder: String, fromAddr: String? = nil, fromName: String? = nil, hasAttach: Bool, importance: Int? = nil, isJunk: Bool, key: Int, needsYou: Bool, replyWorthy: Bool, safeToFile: Bool, seen: Bool, snippet: String, snoozedUntil: Int, subject: String, threadId: String? = nil, uid: Int, when: String) {
+        public init(account: String, bucket: String? = nil, commitmentWorthy: Bool, flagged: Bool, folder: String, fromAddr: String? = nil, fromName: String? = nil, hasAttach: Bool, importance: Int? = nil, isJunk: Bool, key: Int, needsYou: Bool, replyWorthy: Bool, safeToFile: Bool, seen: Bool, sentTo: [Addressee], sentToMore: Int, snippet: String, snoozedUntil: Int, subject: String, threadId: String? = nil, uid: Int, when: String) {
             self.account = account
             self.bucket = bucket
             self.commitmentWorthy = commitmentWorthy
@@ -5504,6 +5547,8 @@ extension API {
             self.replyWorthy = replyWorthy
             self.safeToFile = safeToFile
             self.seen = seen
+            self.sentTo = sentTo
+            self.sentToMore = sentToMore
             self.snippet = snippet
             self.snoozedUntil = snoozedUntil
             self.subject = subject
@@ -5528,6 +5573,8 @@ extension API {
             case replyWorthy = "reply_worthy"
             case safeToFile = "safe_to_file"
             case seen
+            case sentTo = "sent_to"
+            case sentToMore = "sent_to_more"
             case snippet
             case snoozedUntil = "snoozed_until"
             case subject
@@ -5975,12 +6022,14 @@ extension API {
         public var isJunk: Bool
         public var key: Int
         public var seen: Bool
+        public var sentTo: [Addressee]
+        public var sentToMore: Int
         public var snippet: String
         public var subject: String
         public var uid: Int
         public var when: String
 
-        public init(answered: Bool, flagged: Bool, folder: String, fromAddr: String? = nil, fromName: String? = nil, hasAttach: Bool, isJunk: Bool, key: Int, seen: Bool, snippet: String, subject: String, uid: Int, when: String) {
+        public init(answered: Bool, flagged: Bool, folder: String, fromAddr: String? = nil, fromName: String? = nil, hasAttach: Bool, isJunk: Bool, key: Int, seen: Bool, sentTo: [Addressee], sentToMore: Int, snippet: String, subject: String, uid: Int, when: String) {
             self.answered = answered
             self.flagged = flagged
             self.folder = folder
@@ -5990,6 +6039,8 @@ extension API {
             self.isJunk = isJunk
             self.key = key
             self.seen = seen
+            self.sentTo = sentTo
+            self.sentToMore = sentToMore
             self.snippet = snippet
             self.subject = subject
             self.uid = uid
@@ -6006,6 +6057,8 @@ extension API {
             case isJunk = "is_junk"
             case key
             case seen
+            case sentTo = "sent_to"
+            case sentToMore = "sent_to_more"
             case snippet
             case subject
             case uid
@@ -6358,6 +6411,8 @@ extension API {
         public var key: Int
         public var kind: String
         public var seen: Bool
+        public var sentTo: [Addressee]
+        public var sentToMore: Int
         public var snippet: String
         public var subject: String
         public var threadId: String?
@@ -6368,7 +6423,7 @@ extension API {
         public var waitingLabel: String
         public var when: String
 
-        public init(account: String, bucket: String? = nil, count: Int, flagged: Bool, folder: String, fromAddr: String? = nil, fromName: String? = nil, hasAttach: Bool, isJunk: Bool, key: Int, kind: String, seen: Bool, snippet: String, subject: String, threadId: String? = nil, to: String, ts: Int? = nil, uid: Int, waiting: Bool, waitingLabel: String, when: String) {
+        public init(account: String, bucket: String? = nil, count: Int, flagged: Bool, folder: String, fromAddr: String? = nil, fromName: String? = nil, hasAttach: Bool, isJunk: Bool, key: Int, kind: String, seen: Bool, sentTo: [Addressee], sentToMore: Int, snippet: String, subject: String, threadId: String? = nil, to: String, ts: Int? = nil, uid: Int, waiting: Bool, waitingLabel: String, when: String) {
             self.account = account
             self.bucket = bucket
             self.count = count
@@ -6381,6 +6436,8 @@ extension API {
             self.key = key
             self.kind = kind
             self.seen = seen
+            self.sentTo = sentTo
+            self.sentToMore = sentToMore
             self.snippet = snippet
             self.subject = subject
             self.threadId = threadId
@@ -6405,6 +6462,8 @@ extension API {
             case key
             case kind
             case seen
+            case sentTo = "sent_to"
+            case sentToMore = "sent_to_more"
             case snippet
             case subject
             case threadId = "thread_id"
