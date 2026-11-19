@@ -55,6 +55,29 @@ final class MeadowRailTests: XCTestCase {
         XCTAssertFalse(RailPlaces.places(entries, open: false).contains(trash), "the arrows skip what's folded")
     }
 
+    func testANestedFolderIsCalledByItsOwnNameAndGoneToByItsWholeOne() async {
+        let server = Fixture.server()
+        // As the server's live list names them, and as the rail kept for when it doesn't answer, whole.
+        let nested = [Fixture.folder("Folders/Clients", role: "custom"), Fixture.folder("[Gmail]/Starred", role: "custom"),
+                      Fixture.folder("Labels/Important", role: "custom")]
+        var kept = Fixture.folder("Folders/Kept", role: "custom")
+        kept.ownName = kept.name
+        server.on("GET", API.Get.Folders.path, API.Folders(account: Fixture.ada, folders: Fixture.adaFolders + nested + [kept],
+                                                            muted: 0, ok: true, replylater: 0, snoozed: 0, waiting: 0))
+        let mailbox = Mailbox()
+        mailbox.wire = server.wire
+        await mailbox.refresh()
+        let items = RailPlaces.entries(mailbox, desk: DeskRail(brief: true)).compactMap(\.item)
+        for (name, title) in [("Folders/Clients", "Clients"), ("[Gmail]/Starred", "Starred"),
+                              ("Labels/Important", "Important"), ("Folders/Kept", "Kept")] {
+            let item = items.first { $0.place == .folder(account: Fixture.ada, folder: name) }
+            XCTAssertEqual(item?.title, title, "the rail calls \(name) by its own name")
+        }
+        XCTAssertFalse(items.contains { $0.title.contains("/") }, "no path shows on the rail")
+        XCTAssertEqual(Place.folder(account: Fixture.ada, folder: "Folders/Clients").title(folders: mailbox.folders(of: Fixture.ada)),
+                       "Clients", "nor over the list")
+    }
+
     func testFoldedEveryAccountsGateIsOneThatCountsEveryoneWaiting() async {
         let mailbox = await mailbox()
         func gates(_ ada: Int, _ work: Int) -> [RailEntry] {
