@@ -350,8 +350,8 @@ struct AccountDraft: Equatable {
 
     /// What the sheet says of `tested`, under the password's row, which already says some of it (#51): the page the
     /// row shows isn't offered twice, and under Gmail's steps, a password Gmail turned down is said in one line that
-    /// leans on them, where the core's sentence would say the steps' first and last lines again. The class stays, in
-    /// small type.
+    /// leans on them, where the core's sentence would say the steps' first and last lines again. Its kind stays, in
+    /// plain words in small type (`Tested.plainWords(of:)`).
     func inSheet(_ tested: Tested) -> Tested {
         guard case .failed(let why, let link, let detail) = tested else { return tested }
         let shown = link != nil && link?.url == passwordPage
@@ -400,7 +400,7 @@ extension AccountDraft: CustomStringConvertible, CustomDebugStringConvertible, C
 }
 
 /// What a test of an account came to (`testConnection`): connected, or what went wrong in plain words with what to do
-/// next, the page that helps, and the class of the trouble in small type, for the owner.
+/// next, the page that helps, and the class of the trouble (`detail`), which shows only as `plainWords(of:)` says it.
 enum Tested: Equatable, Sendable {
     case running
     case connected
@@ -452,6 +452,53 @@ enum Tested: Equatable, Sendable {
         default:
             // Gmail's refusals are said in sentences of their own, which stand for their class too.
             return !out.error.isEmpty && out.error == out.says ? "AUTH" : nil
+        }
+    }
+
+    /// The classes of a connection lost part way.
+    private static let lost: Set<String> = [
+        "abort", "ConnectionResetError", "ConnectionAbortedError", "BrokenPipeError", "SMTPServerDisconnected",
+        "SSLEOFError",
+    ]
+
+    /// A test's trouble of class `detail` (`connections::quiet`'s, the outgoing server's after "SMTP ") in plain
+    /// words, as the Sync card says a trouble of its kind: a password turned down is "The server turned down the
+    /// password", never the server's AUTHENTICATIONFAILED. Nil for a class with no words of its own, an error's name,
+    /// which only Help › Copy Diagnostics carries.
+    static func plainWords(of detail: String?) -> String? {
+        guard let detail else { return nil }
+        switch detail {
+        case "port must be 1–65535":
+            return String(localized: "The port isn’t a number from 1 to 65535.")
+        case "SMTP port must be 1–65535":
+            return String(localized: "The outgoing server’s port isn’t a number from 1 to 65535.")
+        default:
+            break
+        }
+        let outgoing = detail.hasPrefix("SMTP ")
+        return switch (outgoing ? String(detail.dropFirst("SMTP ".count)) : detail, outgoing) {
+        case ("AUTHENTICATIONFAILED", false): String(localized: "The server turned down the password.")
+        case ("AUTHENTICATIONFAILED", true): String(localized: "The outgoing server turned down the password.")
+        case ("no password", false): String(localized: "MailMind has no password for this account.")
+        case ("no password", true): String(localized: "MailMind has no password for the outgoing server.")
+        case ("connection refused", false), ("host not found", false):
+            String(localized: "MailMind couldn’t reach the server.")
+        case ("connection refused", true), ("host not found", true):
+            String(localized: "MailMind couldn’t reach the outgoing server.")
+        case ("timeout", false): String(localized: "The server didn’t answer in time.")
+        case ("timeout", true): String(localized: "The outgoing server didn’t answer in time.")
+        case ("certificate changed", false): String(localized: "The server showed a different certificate.")
+        case ("certificate changed", true): String(localized: "The outgoing server showed a different certificate.")
+        case ("SSLCertVerificationError", false): String(localized: "The server’s certificate isn’t trusted.")
+        case ("SSLCertVerificationError", true): String(localized: "The outgoing server’s certificate isn’t trusted.")
+        case ("SSLError", false): String(localized: "A secure connection couldn’t be made.")
+        case ("SSLError", true): String(localized: "A secure connection to the outgoing server couldn’t be made.")
+        // The Python server names a connection that went by its error's name.
+        case (let lost, false) where Self.lost.contains(lost): String(localized: "The connection to the server was lost.")
+        case (let lost, true) where Self.lost.contains(lost):
+            String(localized: "The connection to the outgoing server was lost.")
+        case ("NoSmtpServer", _): String(localized: "The account names no outgoing server.")
+        default: nil
         }
     }
 }

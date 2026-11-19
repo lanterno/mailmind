@@ -554,7 +554,8 @@ struct CredentialWords: View {
     }
 }
 
-/// What a test came to: connected, or what to do next, with the page that helps and the trouble's class in small type.
+/// What a test came to: connected, or what to do next, with the page that helps and the kind of trouble in plain words
+/// in small type.
 struct TestedWords: View {
     let tested: Tested
     @Environment(\.meadow) private var meadow
@@ -586,9 +587,9 @@ struct TestedWords: View {
                     }
                     .foregroundStyle(meadow.rust)
                     if let link { LinkButton(link: link) }
-                    // The class of what went wrong, for whoever looks after MailMind.
-                    if let detail {
-                        Text(verbatim: detail)
+                    // What kind of trouble it was, in the Sync card's plain words: never a server's code.
+                    if let kind = Tested.plainWords(of: detail) {
+                        Text(kind)
                             .font(.meadow(.ui, 11))
                             .foregroundStyle(meadow.ink3)
                             .textSelection(.enabled)
