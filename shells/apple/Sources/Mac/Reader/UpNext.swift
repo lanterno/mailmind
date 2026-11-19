@@ -72,12 +72,12 @@ struct UpNext: View {
                     }
                     if !inTrash {
                         FlowLayout(spacing: 8) {
-                            Button { mailbox.file(.archive) } label: {
+                            Button { mailbox.fileOpen(.archive) } label: {
                                 MeadowIconView(.archive, size: 16)
                                 Text("File & next")
                             }
                             .meadowButton()
-                            Button { mailbox.file(.trash) } label: {
+                            Button { mailbox.fileOpen(.trash) } label: {
                                 MeadowIconView(.trash, size: 16)
                                 Text("Delete & next")
                             }

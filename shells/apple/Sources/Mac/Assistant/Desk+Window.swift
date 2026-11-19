@@ -291,10 +291,10 @@ final class Desk {
 
     // MARK: Commands
 
-    /// The commands the pane's bar offers on what the reader shows (its Snooze and Later), as the keys find them: on
-    /// the rows marked, else the message open, however it was opened.
+    /// The commands the pane's bar offers on what the reader shows (its Snooze and Later): on the message in the pane
+    /// alone, however it was opened, whatever rows are marked beside it, which the keys and the bulk bar act on.
     var paneCommands: [DeskCommand] {
-        commands(for: chosenCopies, stack: stack)
+        commands(for: chosen.map { [$0] } ?? [], stack: stack)
     }
 
     /// The commands only AI can serve, by id: none is offered while AI is turned off.

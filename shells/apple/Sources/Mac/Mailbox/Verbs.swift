@@ -23,6 +23,17 @@ extension Mailbox {
         Task { await fileNow(verb, rows: given) }
     }
 
+    /// The pane's bar and the reader's own buttons: archive, delete or mark junk the message in the pane, never the
+    /// rows marked beside it (`fileOpen`).
+    func fileOpen(_ verb: API.FilingVerb) {
+        Task { await fileNow(verb, rows: await paneTargets(standing: false)) }
+    }
+
+    /// The pane's bar's Restore and Move to Inbox: the message in the pane back in its account's Inbox.
+    func restoreOpen() {
+        Task { restore(await paneTargets()) }
+    }
+
     /// Whether the server took them: what a message's own window closes on.
     @discardableResult
     func fileNow(_ verb: API.FilingVerb, rows given: [API.FolderRow]? = nil) async -> Bool {
@@ -320,7 +331,12 @@ extension Mailbox {
         let go: @MainActor () -> Void = { [weak self] in
             guard let self, let app = self.app, still() else { return }
             if let row = self.returned(copy) {
-                if app.place == app.listed { self.chose([row]) } else { self.open(MailCopy(row)) }
+                // Rows still marked keep their marks: it opens beside them, as the pane's verb moved on beside them.
+                if app.place == app.listed {
+                    if self.marking { self.openBeside(row) } else { self.chose([row]) }
+                } else {
+                    self.open(MailCopy(row))
+                }
                 return
             }
             Task { [weak self] in
@@ -480,6 +496,16 @@ extension Mailbox {
     private func moveOn(_ after: MailCopy??, leaving: [MailCopy]) {
         guard let after else { return unmark(Set(leaving)) }
         if reopenable, let left = app?.selection.copy { reopens = left }
+        // The message in the pane left on its own (the pane's bar) while other rows stay marked: they keep their
+        // marks, and what comes next opens beside them.
+        let gone = Set(leaving)
+        let staying = marking ? chosenRows.filter { !gone.contains(MailCopy($0)) } : []
+        if !staying.isEmpty {
+            chosenRows = staying
+            markedAlone = true
+            if let next = after.flatMap(heldRow(of:)) { openBeside(next) } else { app?.open(nil) }
+            return
+        }
         chose(after.flatMap(heldRow(of:)).map { [$0] } ?? [])
     }
 

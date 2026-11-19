@@ -535,6 +535,14 @@ final class Mailbox {
         return rows
     }
 
+    /// What the pane's bar and the reader's own buttons act on: the message in the pane alone, whatever rows are
+    /// marked, as the page's reader files the message open (`fileOpen`). The list's keys, the bulk bar and the
+    /// Message menu act on the marks (`targets`).
+    func paneTargets(standing: Bool = true) async -> [API.FolderRow] {
+        guard let open = app?.selection.copy else { return [] }
+        return [standing ? await openRow(open) : knownRow(open)]
+    }
+
     /// The row the list holds for a copy.
     func row(of copy: MailCopy) -> API.FolderRow? {
         guard let list = app?.list, let position = list.position(of: copy) else { return nil }

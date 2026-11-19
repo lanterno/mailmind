@@ -382,20 +382,20 @@ struct MeadowPaneBar: View {
 
     // MARK: Triage
 
+    /// The bar's verbs act on the message in the pane alone: rows marked in the list beside it are the bulk bar's,
+    /// the list's keys' and the Message menu's.
     @ViewBuilder private func triage(_ fold: PaneBarFold) -> some View {
-        let none = !mailbox.hasTarget
+        let none = app.selection.copy == nil
         if filed {
-            verb(.inbox, "Move to Inbox", help: RowAct.toInbox.title, fold: fold) {
-                Task { mailbox.restore(await mailbox.targets()) }
-            }
-            .disabled(none)
+            verb(.inbox, "Move to Inbox", help: RowAct.toInbox.title, fold: fold) { mailbox.restoreOpen() }
+                .disabled(none)
         } else {
-            verb(.archive, "File", key: "E", help: "File to Archive · E", fold: fold) { mailbox.file(.archive) }
+            verb(.archive, "File", key: "E", help: "File to Archive · E", fold: fold) { mailbox.fileOpen(.archive) }
                 .disabled(none)
         }
-        verb(.trash, "Delete", key: "#", help: "Delete · # or Del", del: true, fold: fold) { mailbox.file(.trash) }
+        verb(.trash, "Delete", key: "#", help: "Delete · # or Del", del: true, fold: fold) { mailbox.fileOpen(.trash) }
             .disabled(none)
-        // What the desk's verbs act on, as its keys find them: the rows marked, else the message open.
+        // The desk's verbs on the message in the pane.
         let commands = desk?.paneCommands ?? []
         let snooze = commands.first { $0.id == "snooze" }
         verb(.clock, "Snooze", key: "H", help: "Snooze · H", fold: fold) { snooze?.run() }
@@ -429,10 +429,8 @@ struct MeadowPaneBar: View {
     /// Restore, to the account's Inbox as a row's own button does. The mockup's Delete forever has no place here:
     /// nothing in MailMind removes mail for good.
     private func restore(_ fold: PaneBarFold) -> some View {
-        verb(.restore, "Restore", help: RowAct.restore.title, fold: fold) {
-            Task { mailbox.restore(await mailbox.targets()) }
-        }
-        .disabled(!mailbox.hasTarget)
+        verb(.restore, "Restore", help: RowAct.restore.title, fold: fold) { mailbox.restoreOpen() }
+            .disabled(app.selection.copy == nil)
     }
 
     // MARK: Writing
