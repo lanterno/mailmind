@@ -203,8 +203,10 @@ class Folders:
         except KeyError:
             raise Refused("unknown account")
         listed = self._folders_list_cached(account, acct)
-        with self._uow.read() as c:
-            out = folder_roles.counted(listed, self._store.stored_folder_counts(c, account))
+        with self._uow.read() as c:     # of the folders a sync has read: one MailMind only filed mail into keeps the server's
+            synced = set(self._store.synced_folders(c, account))
+            counts = {f: n for f, n in self._store.stored_folder_counts(c, account).items() if f in synced}
+        out = folder_roles.counted(listed, counts)
         return {"ok": True, "account": account, "folders": [{**f, "takes_filing": destination.takes_filing(f["role"])} for f in out],
                 **self._view_counts(account)}
 

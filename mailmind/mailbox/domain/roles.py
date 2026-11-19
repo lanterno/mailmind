@@ -169,8 +169,9 @@ def playing(folders: Collection[Folder]) -> dict[str | None, str]:
 
 def counted(rail: Iterable[RailFolder], counts: Mapping[str, tuple[int | None, int]]) -> list[RailFolder]:
     """The rail counted as each list counts: a folder a sync has read gives the unread and total of what is stored of it
-    (`counts`, as `stored_rail` takes them), the rows its list shows, in place of what the server's STATUS said, which counts
-    mail snoozed, muted or on its way out too. A folder never read keeps the server's."""
+    (`counts`, as `stored_rail` takes them, of those folders alone), the rows its list shows, in place of what the server's
+    STATUS said, which counts mail snoozed, muted or on its way out too. A folder never read keeps the server's, though
+    MailMind filed mail there."""
     return [{**f, "unseen": counts[f["name"]][0] or 0, "total": counts[f["name"]][1]} if f["name"] in counts else f
             for f in rail]
 
