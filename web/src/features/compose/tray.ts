@@ -5,7 +5,13 @@ import type { GetAnswers } from "../../lib/api/types";
 export type Held = GetAnswers["/api/pending"]["items"][number];
 export type Waiting = GetAnswers["/api/outbox"]["drafts"][number];
 
-const WHY: Record<string, string> = { refused: "the server refused it", no_folder: "no folder to move it to", "account removed": "its account is gone" };
+// A folder_gone change was given back because another app deleted or renamed its folder, which no retry undoes.
+const WHY: Record<string, string> = {
+  refused: "the server refused it",
+  no_folder: "no folder to move it to",
+  folder_gone: "its folder was deleted or renamed in another app",
+  "account removed": "its account is gone",
+};
 
 // Why a change is still waiting: stuck, and why; or when it goes.
 export function heldWhy(p: Pick<Held, "state" | "error" | "attempts">, readOnly: boolean): string {
