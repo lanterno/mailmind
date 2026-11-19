@@ -272,6 +272,24 @@ final class MeadowOverlayTests: XCTestCase {
         XCTAssertNil(SnoozeChooser.preset(forKey: "h"))
     }
 
+    /// The sync popover's items keep room for the focus ring, which reaches past its row: on Check for mail now it no
+    /// longer crosses the title of Check Mail Against the Server, which its second line puts at its top. Between two
+    /// items there is the ring's whole reach.
+    func testTheSyncPopoversItemsLeaveRoomForTheFocusRing() {
+        func height(ringRoom: Bool) -> CGFloat {
+            let items = [
+                MeadowMenuItem(id: "sync", title: "Check for mail now", icon: .refresh) {},
+                MeadowMenuItem(id: "reconcile", title: "Check Mail Against the Server",
+                               detail: "Drop mail deleted elsewhere", icon: .restore) {},
+            ]
+            let menu = MeadowMenu(parts: items.map { .item($0) }, width: 280, model: MeadowMenuModel(), close: {},
+                                  ringRoom: ringRoom)
+            return NSHostingView(rootView: menu.meadowLight(.day)).fittingSize.height
+        }
+        XCTAssertEqual(height(ringRoom: true) - height(ringRoom: false), 2 * MeadowMenu.ringReach, accuracy: 0.5,
+                       "half the reach above and below each item: the whole of it between two")
+    }
+
     func testAnAccountsStateSaysHowItStands() {
         let now = StatusFixtures.at("2026-11-14T15:00:00Z")
         let health = [
