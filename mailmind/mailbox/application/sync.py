@@ -4,7 +4,7 @@ isn't junk. A body read on demand is here too.
 Each sync of an account is a flight (`flights`): one whose account is removed stops at its next message."""
 import email
 import imaplib
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta, timezone
 from email.parser import BytesHeaderParser
 from typing import Any
@@ -19,7 +19,7 @@ from mailmind.mailbox.application.flights import AccountGone, Flight, Flights
 from mailmind.mailbox.application.pool import Pool
 from mailmind.mailbox.application.ports import (Account, Accounts, Attention, Classifier, Index, OpenSession, Stored,
                                                 StoredMail)
-from mailmind.mailbox.application.session import MailSession, select_or_gone
+from mailmind.mailbox.application.session import FolderGone, MailSession, select_or_gone
 from mailmind.mailbox.domain import flags as mail_flags
 from mailmind.mailbox.domain import ingested, sync_plan
 from mailmind.mailbox.domain.events import FlagsChanged
@@ -50,6 +50,18 @@ class Ingest:
         self._attention = attention
         self._index = index
         self.flights = Flights()        # each account's syncs now, which its removal stops
+        self._gone: Callable[[str, str], object] | None = None
+
+    def forgetting_gone(self, gone: Callable[[str, str], object]) -> None:
+        """Forget a folder its server no longer has, with `gone` (Folders.gone, made after this), as a body is fetched
+        from it (`fetch_body`) or Undo reads mail back into it (`ingest_messages`). A sync's callers forget the folders
+        their syncs find gone."""
+        self._gone = gone
+
+    def _went(self, account: str, folder: str) -> None:
+        """`folder` of `account` is gone from its server: forgotten, where this forgets folders."""
+        if self._gone is not None:
+            self._gone(account, folder)
 
     def _still_held(self, acct: Account) -> None:
         """Raise AccountGone for an account the file no longer holds: a sync that starts after its removal reads nothing."""
@@ -342,7 +354,11 @@ class Ingest:
     def _ingest_messages(self, acct: Account, folder: FolderName, wanted: Sequence[str], flight: Flight) -> int:
         s = self._open_session(acct)
         try:
-            s.select(folder)
+            try:
+                select_or_gone(s, folder)
+            except FolderGone:                  # another client deleted or renamed it: forgotten, as a sync forgets it
+                self._went(acct["email"], folder)
+                raise
             uids: set[int] = set()
             for mid in wanted:
                 try:
@@ -401,7 +417,8 @@ class Ingest:
     def fetch_body(self, pk: int) -> Parsed | None:
         """Lazily fetch + store the raw RFC822 for one message (read-only PEEK), record
         attachment metadata, and return the parsed body. Idempotent. Returns parsed dict
-        or None if the message/row is gone. Its folder gone from the server, it raises FolderGone."""
+        or None if the message/row is gone. Its folder gone from the server, the folder is forgotten (`forgetting_gone`)
+        and it raises FolderGone, whoever asked: an open, the backfill, the assistant."""
         with self._uow.read() as c:
             row = self._store.get_message(c, pk)
             fetched = row and row["body_fetched"]
@@ -412,14 +429,18 @@ class Ingest:
             acct = self._accounts.get(row["account"])
             # READ-ONLY borrow: pooled when this account is asked for (pool.py), else a fresh session,
             # logged out after. Mutations never use the pool.
-            with self._pool.borrow(acct) as s:
-                select_or_gone(s, row["folder"])
-                try:
-                    raw = s.body(row["uid"]) or b""
-                except imaplib.IMAP4.abort:
-                    raise
-                except imaplib.IMAP4.error:       # refused: nothing to show, and nothing stored
-                    raw = b""
+            try:
+                with self._pool.borrow(acct) as s:
+                    select_or_gone(s, row["folder"])
+                    try:
+                        raw = s.body(row["uid"]) or b""
+                    except imaplib.IMAP4.abort:
+                        raise
+                    except imaplib.IMAP4.error:       # refused: nothing to show, and nothing stored
+                        raw = b""
+            except FolderGone:
+                self._went(row["account"], row["folder"])
+                raise
             if not raw:
                 return mime.parse(b"")
             parsed = mime.parse(raw)

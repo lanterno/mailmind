@@ -394,9 +394,10 @@ def assemble():
     realtime = Realtime(_directory, _open)
     stats = LiveStats(_directory, _Curation())
     folders = Folders(_uow, store, _directory, pool, ingest, _attention, commands, stats)
+    ingest.forgetting_gone(folders.gone)        # a body fetched, or Undo's read, from a folder another client deleted
     warm = Warming(_directory, _open, lambda *a, **kw: ingest.sync_folder(*a, **kw), folders.gone)
     queries = Queries(_uow, store, _attention, folders, _directory)
-    bodies = Bodies(_uow, store, ingest, _Reader(), folders)
+    bodies = Bodies(_uow, store, ingest, _Reader())
     reversals = Reversals(_uow, store, _directory, server_ops, commands, ingest)
     undo = Undo(_uow, {"move": reversals.move, "gmail_archive": reversals.gmail_archive,
                        "sweep_back": lambda d: reversals.sweep_back([d])[0], "snooze": _reverse_snooze,

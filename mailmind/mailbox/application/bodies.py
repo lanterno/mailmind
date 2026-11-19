@@ -7,7 +7,6 @@ from mailmind.kernel.errors import NotFound
 from mailmind.kernel.ids import FolderName, MessageKey
 from mailmind.kernel.parsed import as_int
 from mailmind.kernel.row import Row
-from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.ports import Reader, StoredMail
 from mailmind.mailbox.application.session import FolderGone
 from mailmind.mailbox.application.sync import Ingest
@@ -30,22 +29,16 @@ def _as_number(text: str) -> int | None:
     return as_int(text) if text.isascii() and text.isdigit() else None
 
 class Bodies:
-    def __init__(self, uow: UnitOfWork, store: StoredMail, ingest: Ingest, reader: Reader, folders: Folders | None = None):
+    def __init__(self, uow: UnitOfWork, store: StoredMail, ingest: Ingest, reader: Reader):
         self._uow = uow
         self._store = store
         self._ingest = ingest
         self._reader = reader
-        self._folders = folders
 
     def _fetch(self, row: Row, pk: int, priority: int, wait: bool = True) -> Parsed | None:
         """The message's body as `Ingest.fetch_body` has it, on the account's gate. Its folder gone from the server
-        (another client deleted or renamed it), the folder is forgotten and FolderGone raised."""
-        try:
-            return gates.run(row["account"], lambda: self._ingest.fetch_body(pk), priority=priority, wait=wait)
-        except FolderGone:
-            if self._folders is not None:
-                self._folders.gone(row["account"], row["folder"])
-            raise
+        (another client deleted or renamed it), `fetch_body` has forgotten the folder and FolderGone is raised."""
+        return gates.run(row["account"], lambda: self._ingest.fetch_body(pk), priority=priority, wait=wait)
 
     def _resolve_cids(self, pk: int, safe_html: str) -> str:
         """The inline images of the message `pk`, as far as `domain.inline_images` may embed them."""
