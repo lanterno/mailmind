@@ -288,7 +288,7 @@ export function sourceKey(s: ListSource | null): readonly unknown[] {
   if (s.kind === "folder") return ["folder", s.account, s.folder];
   if (s.kind === "across") return ["across", s.folder];
   if (s.kind === "documents") return ["documents"];
-  if (s.kind === "search") return ["search", s.q, s.account, s.thread ?? ""];
+  if (s.kind === "search") return ["search", s.q, s.account, s.thread ?? "", s.lane ?? ""];
   if (s.kind === "digest") return ["digest", s.list, s.list === "topic" ? s.label : ""];
   return ["all"];
 }

@@ -51,12 +51,13 @@ export type { SearchScope };
 export const searchScope = pref("search_scope");
 export const setSearchScope = (s: SearchScope) => searchScope.set(s);
 
-// A query the index can't read is refused in words of its own, which the list shows where its results would be.
-async function searchPage(query: string, account: string, offset: number, scope: SearchScope, thread: string | undefined): Promise<ListPage> {
+// A query the index can't read is refused in words of its own, which the list shows where its results would be. A lane's
+// list leaves out the Trash and Junk, as the server reads `lane`.
+async function searchPage(query: string, account: string, offset: number, scope: SearchScope, thread: string | undefined, lane: string | undefined): Promise<ListPage> {
   let d: AnyOf<GetAnswers["/api/search"]>;
   try {
     const where = thread ? `scope=account&account=${q(account)}&thread=${q(thread)}` : `scope=${account ? scope : "all"}&account=${q(account)}`;
-    d = await get(`/api/search?q=${q(query)}&${where}&limit=${PAGE}&offset=${offset}`);
+    d = await get(`/api/search?q=${q(query)}&${where}${lane ? `&lane=${q(lane)}` : ""}&limit=${PAGE}&offset=${offset}`);
   } catch (e) {
     const no = refusalOf(e);
     if (!no) throw e;
@@ -101,7 +102,7 @@ export function useMessages(source: ListSource | null, grouped: boolean) {
     queryFn: ({ pageParam }) => {
       if (source?.kind === "folder") return folderPage(source.account, source.folder, grouped, pageParam);
       if (source?.kind === "across") return folderPage("", source.folder, grouped, pageParam);
-      if (source?.kind === "search") return searchPage(source.q, source.account, pageParam, scope, source.thread);
+      if (source?.kind === "search") return searchPage(source.q, source.account, pageParam, scope, source.thread, source.lane);
       if (source?.kind === "digest") return digestPage(source);
       return allInboxesPage(grouped, pageParam);
     },
