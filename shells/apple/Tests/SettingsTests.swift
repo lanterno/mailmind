@@ -1033,6 +1033,30 @@ final class AccountFixTests: XCTestCase {
         XCTAssertNil(Tested.kind(of: .loggedIn(API.LoggedIn(connect: true, detail: "", email: "ada@example.test", ms: 3, ok: true))))
     }
 
+    /// Under a test's sentence, its trouble in plain words, as the Sync card says it: never the server's code or an
+    /// error's name. Each class either server's test gives has words; the outgoing server's say it is that one.
+    func testATestsTroubleIsSaidInTheSyncCardsPlainWordsNeverItsCode() throws {
+        XCTAssertEqual(Tested.plainWords(of: "AUTHENTICATIONFAILED"), "The server turned down the password.")
+        XCTAssertTrue(StatusWords.syncProblem("AUTH").hasPrefix("The server turned down the password"),
+                      "the Sync card's words for a password turned down")
+        let logins = ["AUTHENTICATIONFAILED", "no password", "connection refused", "host not found", "timeout",
+                      "certificate changed", "SSLCertVerificationError", "SSLError", "abort", "ConnectionResetError"]
+        for detail in logins + ["port must be 1–65535", "SMTP port must be 1–65535", "SMTP NoSmtpServer"] {
+            let words = try XCTUnwrap(Tested.plainWords(of: detail), detail)
+            for code in ["AUTHENTICATIONFAILED", "SSL", "abort", "timeout", "refused", "–65535", "Error", "Smtp"] {
+                XCTAssertFalse(words.contains(code), "\(detail): \(words)")
+            }
+        }
+        for detail in logins.map({ "SMTP " + $0 }) {
+            let words = try XCTUnwrap(Tested.plainWords(of: detail), detail)
+            XCTAssertTrue(words.contains("outgoing server"), "\(detail): \(words)")
+            XCTAssertFalse(words.contains("SMTP"), "\(detail): \(words)")
+        }
+        // Another error's name, which no person needs, says nothing; nor does no class, as Gmail's sentences have.
+        XCTAssertNil(Tested.plainWords(of: "ValueError"))
+        XCTAssertNil(Tested.plainWords(of: nil))
+    }
+
     func testATestThatFailsAsTheSyncDidSaysOnlyThatAndOneThatDiffersSaysWhatIsNew() {
         let page = StatusWords.appPasswords
         let wrong = Tested.failed("Gmail needs an App Password here.", link: page, detail: "AUTH-ish")
