@@ -580,6 +580,29 @@ final class OpenedMessageVerbsTests: XCTestCase {
         await waiting(for: "the list moves on") { world.app.selection.copy == MailCopy(Self.rows[1]) }
     }
 
+    /// Mute takes the thread off the Inbox, so the list moves on as File does, one message or several, as the page's
+    /// mute does; and a message opened from outside the list closes.
+    func testMuteMovesOnAsFileDoes() async throws {
+        let server = Self.server()
+        server.on("POST", API.Post.Mute.path, API.OnThread(ok: true, threadId: "t1"))
+        let world = await world(server)
+        await inbox(world.app)
+        world.mailbox.chose([try XCTUnwrap(world.app.list?.copy(at: 0))])
+        let mute = try XCTUnwrap(world.desk.paneCommands.first { $0.id == "mute" }, "the bar's Mute")
+        XCTAssertEqual(mute.label, "Mute thread")
+        mute.run()
+        await waiting(for: "Mute asks") { !world.server.asked(API.Post.Mute.path).isEmpty }
+        await waiting(for: "the list moves on") { world.app.selection.copy == MailCopy(Self.rows[1]) }
+        XCTAssertEqual(world.mailbox.marked, [MailCopy(Self.rows[1])], "chosen in its row")
+
+        await world.desk.attention.mute([MailCopy(Self.rows[1]), MailCopy(Self.rows[2])])
+        await waiting(for: "several move on past them") { world.app.selection.copy == MailCopy(Self.rows[3]) }
+
+        world.mailbox.open(Self.away)
+        await world.desk.attention.mute([try XCTUnwrap(world.app.selection.copy)])
+        await waiting(for: "a message opened from outside closes") { world.app.selection.copy == nil }
+    }
+
     /// Unsnooze in Snoozed, Unmute in Muted and Dismiss in Waiting take the message off the stack shown, so the list
     /// moves on as File does; and a message opened from outside the stack closes.
     func testUnsnoozeUnmuteAndDismissInTheirStacksMoveOnAsFileDoes() async throws {
