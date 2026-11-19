@@ -649,15 +649,15 @@ final class MeadowOverlayTests: XCTestCase {
     func testTheLegendListsTheWindowsKeys() {
         let listed = Set(KeysLegend.columns().flatMap { $0 }.flatMap(\.keys).map { $0.keys.joined(separator: " ") })
         // The list's single keys (`RowKeys`), the desk's and the composer's, and the frame's.
-        for key in ["J", "K", "N", "P", "E", "D", "#", "B", "M", "S", "U", "Z", "V", "/", "H", "W", "L", "I",
+        for key in ["J", "K", "N", "P", "E", "D", "#", "B", "M", "S", "U", "X", "Z", "V", "/", "H", "W", "L", "I",
                     "R", "A", "F", "C", "[", "↵", "Esc", "?", "⌘K"] {
             XCTAssertTrue(listed.contains(key), "the legend lists \(key)")
         }
-        // Snooze is H, as the window has it.
+        // Snooze is H, as the window has it, and X selects, as the page's x does.
         XCTAssertEqual(KeysLegend.triage.keys.first { $0.words.hasPrefix("Snooze") }?.keys, ["H"])
-        // Space pages the message, as the list's keyDown has it, and x, which the list doesn't use, isn't listed.
+        XCTAssertEqual(KeysLegend.triage.keys.first { $0.keys == ["X"] }?.words, "Select")
+        // Space pages the message, as the list's keyDown has it.
         XCTAssertTrue(listed.contains("Space"))
-        XCTAssertFalse(listed.contains("X"))
     }
 
     func testWithAITurnedOffTheLegendLeavesOutOnlySummarize() {
