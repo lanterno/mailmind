@@ -14,7 +14,8 @@ final class MeadowRailTests: XCTestCase {
 
     func testTheRailListsThePlacesInTheMockupsOrder() async {
         let mailbox = await mailbox()
-        let entries = RailPlaces.entries(mailbox, desk: DeskRail(brief: true, needs: 3, gates: [
+        let needing = (1...3).map { DeskRail.Need(account: Fixture.ada, conversation: "t\($0)") }
+        let entries = RailPlaces.entries(mailbox, desk: DeskRail(brief: true, needing: needing, gates: [
             DeskRail.Gate(account: Fixture.ada, waiting: 2),
         ]))
         let open = entries.filter { $0.shows(open: true) }.map(\.id)
@@ -53,6 +54,39 @@ final class MeadowRailTests: XCTestCase {
         XCTAssertEqual(RailPlaces.current(.allInboxes, in: entries, open: false), "inbox")
         XCTAssertEqual(RailPlaces.current(.desk(.brief), in: entries, open: true), "brief")
         XCTAssertFalse(RailPlaces.places(entries, open: false).contains(trash), "the arrows skip what's folded")
+    }
+
+    /// The Inbox follows the account the window shows, as the page's rail does: that account's own, counting what
+    /// needs you there, else its unread; every account's together under All accounts. What needs you counts as its
+    /// list does, a conversation once where the list shows conversations.
+    func testTheInboxCountsAndOpensTheAccountShownOrEveryAccount() async {
+        let mailbox = await mailbox()
+        let desk = DeskRail(brief: true, needing: [
+            DeskRail.Need(account: Fixture.ada, conversation: "t1"), DeskRail.Need(account: Fixture.ada, conversation: "t1"),
+            DeskRail.Need(account: Fixture.ada, conversation: "t2"), DeskRail.Need(account: Fixture.work, conversation: "t1"),
+        ])
+        XCTAssertEqual(desk.needs(in: nil, grouped: true), 3, "Ada's t1 once, and the work account's t1 apart")
+        XCTAssertEqual(desk.needs(in: nil, grouped: false), 4)
+        XCTAssertEqual(desk.needs(in: Fixture.ada, grouped: true), 2)
+        XCTAssertEqual(desk.needs(in: Fixture.work, grouped: false), 1)
+
+        func inbox(_ desk: DeskRail, scope: String?) -> RailItem? {
+            RailPlaces.entries(mailbox, desk: desk, scope: scope).first { $0.id == "inbox" }?.item
+        }
+        XCTAssertTrue(mailbox.grouped)
+        XCTAssertEqual(inbox(desk, scope: nil)?.place, .allInboxes)
+        XCTAssertEqual(inbox(desk, scope: nil)?.count, .sun(3))
+        XCTAssertEqual(inbox(desk, scope: Fixture.ada)?.place, .folder(account: Fixture.ada, folder: "INBOX"))
+        XCTAssertEqual(inbox(desk, scope: Fixture.ada)?.count, .sun(2))
+        XCTAssertEqual(inbox(desk, scope: Fixture.work)?.count, .sun(1))
+        // Nothing needs you there: the Inbox's unread, as the server counts its messages.
+        let none = DeskRail(brief: true, needing: [DeskRail.Need(account: Fixture.ada, conversation: "t1")])
+        XCTAssertEqual(inbox(none, scope: Fixture.work)?.count, .plain(1))
+        XCTAssertEqual(inbox(DeskRail(brief: true), scope: Fixture.ada)?.count, .plain(4))
+        XCTAssertEqual(inbox(DeskRail(brief: true), scope: nil)?.count, .plain(5))
+        // The account's Inbox is the rail's Inbox while the window shows that account.
+        let scoped = RailPlaces.entries(mailbox, desk: desk, scope: Fixture.ada)
+        XCTAssertEqual(RailPlaces.current(.folder(account: Fixture.ada, folder: "INBOX"), in: scoped, open: true), "inbox")
     }
 
     func testANestedFolderIsCalledByItsOwnNameAndGoneToByItsWholeOne() async {
