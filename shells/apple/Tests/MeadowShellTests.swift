@@ -146,6 +146,38 @@ final class MeadowShellTests: XCTestCase {
         XCTAssertEqual(shell.listWidth, 372)
     }
 
+    /// A window that narrows the list below the width it was dragged to: the splitter moves the list from the width
+    /// shown, so its first drag or key moves it at once, and the width dragged to stays for a window wide enough.
+    func testTheSplitterMovesTheListFromTheWidthShown() {
+        let shell = MeadowShell(defaults: defaults)
+        shell.setListWidth(560)
+        shell.width = 900
+        XCTAssertEqual(shell.shownListWidth, 476, "narrowed beside the pane's least")
+        XCTAssertEqual(shell.shownListWidth, ShellLayout(size: CGSize(width: 900, height: 536), railOpen: false,
+                                                         listWidth: 560, mode: .columns).list?.width,
+                       "as the window lays it out")
+
+        // A drag: its first move takes the list from 476, not from 560, where 10 points narrower showed no change.
+        let start = shell.dragList(from: nil, by: -10)
+        XCTAssertEqual(start, 476)
+        XCTAssertEqual(shell.shownListWidth, 466)
+        shell.dragList(from: start, by: -30)
+        XCTAssertEqual(shell.shownListWidth, 446, "each move from where the drag began")
+        shell.dragList(from: start, by: 200)
+        XCTAssertEqual(shell.shownListWidth, 476, "no wider than the pane leaves room for")
+
+        // A key: a step narrower than shown.
+        shell.setListWidth(560)
+        shell.nudgeList(by: -1)
+        XCTAssertEqual(shell.listWidth, 452)
+        XCTAssertEqual(shell.shownListWidth, 452)
+
+        // Untouched, the width dragged to comes back in a window wide enough.
+        shell.setListWidth(560)
+        shell.width = 1440
+        XCTAssertEqual(shell.shownListWidth, 560)
+    }
+
     func testTheRailAndTheListAreRememberedOnThisMac() {
         let shell = MeadowShell(defaults: defaults)
         XCTAssertFalse(shell.railOpen, "the rail starts folded, as the mockup's does")
