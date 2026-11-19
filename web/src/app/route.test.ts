@@ -362,6 +362,8 @@ describe("lists from the digest, and the brief", () => {
     expect(sourceKey({ kind: "digest", list: "needs" })).not.toEqual(sourceKey({ kind: "digest", list: "tidy" }));
     expect(sourceKey({ kind: "digest", list: "topic", label: "A" })).not.toEqual(sourceKey({ kind: "digest", list: "topic", label: "B" }));
     expect(sourceKey({ kind: "search", q: "x", account: "a", thread: "t" })).not.toEqual(sourceKey({ kind: "search", q: "x", account: "a" }));
+    // A lane leaves out what a search of its words finds in the Trash, so the two are never one list.
+    expect(sourceKey({ kind: "search", q: "is:receipt", account: "a", lane: "papertrail" })).not.toEqual(sourceKey({ kind: "search", q: "is:receipt", account: "a" }));
   });
 });
 

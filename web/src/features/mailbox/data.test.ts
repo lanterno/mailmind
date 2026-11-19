@@ -139,6 +139,13 @@ describe("a search", () => {
     expect(asked()[0]).toBe(`/api/search?q=from%3Abo&scope=all&account=${encodeURIComponent(A)}&limit=200&offset=0`);
     expect(r.result.data!.pages[0]!.rows[0]).toMatchObject({ id: "1:10:INBOX", date: "2026-11-01" });
   });
+  it("asks for a lane's list as one, which leaves out the Trash and Junk, and a search of the same words as none", async () => {
+    api.get.mockResolvedValue({ items: [], has_more: false, total: 0 });
+    await searching({ kind: "search", q: "is:receipt", account: A, lane: "papertrail" });
+    expect(asked()[0]).toBe(`/api/search?q=is%3Areceipt&scope=all&account=${encodeURIComponent(A)}&lane=papertrail&limit=200&offset=0`);
+    await searching({ kind: "search", q: "is:receipt", account: A });
+    expect(asked()[1]).not.toContain("lane=");
+  });
   it("looks only in the account you're on when that is what you chose", async () => {
     api.scope = "account";
     api.get.mockResolvedValue({ items: [], has_more: false, total: 0 });
