@@ -15,6 +15,10 @@ struct ShellLayout: Equatable {
     static let listMin: CGFloat = 300
     static let listMax: CGFloat = 560
     static let listStart: CGFloat = 372
+    /// The narrowest the pane stands beside the list, which gives way to keep it: room for its bar folded as far as
+    /// it goes (`PaneBarFold.folded`), so nothing in the pane runs past the window's edge or over the list. At the
+    /// window's least width the list still has its own least beside it.
+    static let paneLeast: CGFloat = 400
     /// What one press of an arrow key moves the splitter by, as the page's does.
     static let listStep: CGFloat = 24
     /// At this width and under, the rail leaves the row and becomes a drawer.
@@ -75,6 +79,8 @@ struct ShellLayout: Equatable {
             full = CGRect(x: start, y: 0, width: max(0, end - start), height: height)
         case .columns:
             rail = railRect
+            // The list gives way to the pane before the pane gets narrower than its least, down to the list's own.
+            let listWidth = max(Self.listMin, min(listWidth, end - start - gap - Self.paneLeast))
             let listRect = CGRect(x: start, y: 0, width: listWidth, height: height)
             list = listRect
             full = nil
