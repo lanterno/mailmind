@@ -1,6 +1,6 @@
 import SwiftUI
 
-@main
+/// The app. `main.swift` starts it, once a run that isn't a person's has made its preferences its own.
 struct MailMindApp: App {
     @State private var demo = Demo()
     #if os(macOS)

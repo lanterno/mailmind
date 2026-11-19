@@ -23,8 +23,8 @@ final class Updates {
 
     /// Whether a build with this Info.plist checks for updates: one the release recipe made, with a real key in it,
     /// run as a person runs it. Sparkle asks the person before its first automatic check, and checks once a day after
-    /// that if they agree. Its state is kept in the app's defaults, which a demo's run shares with the person's own
-    /// MailMind, so a run on a home of its own never starts it.
+    /// that if they agree. A run on a home of its own has no person to ask and keeps its defaults apart
+    /// (`RunPreferences`), so it never starts it.
     nonisolated static func checks(_ info: [String: Any],
                                    environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool
     {

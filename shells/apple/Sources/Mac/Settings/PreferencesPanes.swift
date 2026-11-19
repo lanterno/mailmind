@@ -113,8 +113,7 @@ struct GeneralPane: View {
 
 /// The read-only switch: MailMind changes nothing on the mail servers, kept by the app and handed to the core as it
 /// opens (`CoreHome.ofThisProcess`), so a change asks to open MailMind again. Only a person's own run has it: a demo
-/// or test run shares the app's defaults, so the switch there would change the person's MailMind, and it runs only as
-/// it was started.
+/// or test run runs only as it was started, since opening it again wouldn't carry its home.
 struct ReadOnlySection: View {
     let status: AppStatus
     @AppStorage(CoreHome.readOnlyKey) private var readOnly = false
