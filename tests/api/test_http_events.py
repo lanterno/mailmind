@@ -215,3 +215,19 @@ def test_new_mail_names_the_message_it_kept_not_a_newer_one_that_was_junk(app, w
             break
     assert json.loads(data.removeprefix("data: ")) == {"account": w.ADA, "folder": "INBOX", "count": 1, "uid": kept}
     s.close()
+
+
+def test_a_round_of_summaries_tells_the_open_tabs_how_many_landed(app, world, ai):
+    # Summaries change what needs you with no mail changing, so nothing else would say so: the lists, the Inbox's tabs,
+    # the rail and the brief read them again on this. A round that summarized nothing says nothing.
+    waiting = app.get("/api/digest").json["ai"]["summaries_waiting"]
+    assert waiting > 0
+    s = Stream(app)
+    s.frame()
+    app.work("assess")
+    head, data = s.event().split("\n")[1:]
+    assert (head, json.loads(data.removeprefix("data: "))) == ("event: summarized", {"count": waiting})
+    app.work("assess")
+    app.post("/api/mute", world.copy(READ_THREAD))       # what is told next: nothing came between
+    assert s.event().split("\n")[1] == "event: mute"
+    s.close()

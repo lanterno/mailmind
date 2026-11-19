@@ -12,6 +12,7 @@ import json
 import re
 from datetime import timedelta
 
+from event_stream import Stream
 from fakes import anthropic_api as fa
 from fixtures import world as w
 from stored_rows import q
@@ -118,6 +119,28 @@ def test_a_backlog_goes_as_a_batch_and_its_answers_come_in_at_half_the_price(app
     golden.note("left with no summary", q("SELECT count(*) AS n FROM messages m LEFT JOIN assessments a "
                                           "ON a.message_key = m.message_key WHERE m.folder = 'INBOX' AND m.is_junk = 0 "
                                           "AND m.message_key IS NOT NULL AND a.message_key IS NULL"))
+
+
+def test_a_batchs_answers_coming_in_tell_the_open_tabs(app, world, ai):
+    """Its answers are summaries landing, as the newest triaged at once are: the round that brings them in says how many,
+    so the lists, the Inbox's tabs, the rail and the brief read them again."""
+    backlog(app, world)
+    ai.requests.clear()
+    s = Stream(app)
+    s.frame()
+
+    def told():
+        head, data = s.event().split("\n")[1:]
+        return head, json.loads(data.removeprefix("data: "))
+
+    app.work("assess")
+    [sent] = [r.body["requests"] for r in ai.requests if r.method == "POST" and r.path == fa.BATCHES]
+    assert told() == ("event: summarized", {"count": len(heard(ai)["triaged one at a time"])})
+    ai.end_batch()
+    app.clock.shift(timedelta(seconds=300))
+    app.work("assess")
+    assert told() == ("event: summarized", {"count": len(sent)})
+    s.close()
 
 
 def test_a_batch_the_api_did_not_take_is_never_sent_again_and_gives_its_messages_back(app, golden, world, ai):
