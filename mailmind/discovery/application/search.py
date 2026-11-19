@@ -16,12 +16,14 @@ class Search:
         self._accounts = accounts
 
     def answer(self, qs: Mapping[str, list[str]]) -> dict[str, Any]:
-        """Local FTS5 + operator search across synced mail. Raises Refused for a query the index won't take."""
+        """Local FTS5 + operator search across synced mail; a lane's leaves out the Trash and Junk. Raises Refused for a
+        query the index won't take."""
         want = search.asked(qs)
         if want is None:
             return search.nothing_asked()
         aliases = self._accounts.aliases()
-        rows = self._index.search(want.spec, want.account, want.limit, want.offset, want.thread)
+        rows = self._index.search(want.spec, want.account, want.limit, want.offset, want.thread,
+                                  search.LANE_LEAVES_OUT if want.lane else ())
         if rows is None:
             raise Refused("bad query")
         return search.page(rows, want, aliases, rel_time, now_iso())

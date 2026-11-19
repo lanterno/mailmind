@@ -16,6 +16,7 @@ class SearchArgs(QueryArgs):
     limit: str | None = None
     offset: str | None = None
     thread: str | None = None               # only this conversation of `account`
+    lane: str | None = None                 # a lane's list ("feed", "papertrail"), which leaves out the Trash and Junk
 
 
 class DocumentsArgs(QueryArgs):

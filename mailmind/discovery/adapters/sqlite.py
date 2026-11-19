@@ -21,10 +21,10 @@ class StoredMail:
             return "0=1", []                # a bare 0 in an ORDER BY would name a column
         return "(m.account, m.folder) IN (VALUES " + ",".join("(?,?)" for _ in pairs) + ")", [x for p in pairs for x in p]
 
-    def search(self, spec, account, limit, offset, thread=None):
+    def search(self, spec, account, limit, offset, thread=None, apart=()):
         """What the query finds, up to one more than `limit`, or None for one the index rejects. A message is one
         result however many folders hold it: its copy in the Inbox, else any but the one in All Mail, among the
-        copies the query found."""
+        copies the query found, leaving out those in the folders that play the roles in `apart`."""
         match, where, params = fts.to_sql(spec)
         where = fts.visible(where) + ["m.pending_removal IS NULL"]      # on its way out by a queued move
         if account:
@@ -33,8 +33,11 @@ class StoredMail:
         if thread:
             where = where + ["m.thread_id = ?"]
             params = params + [thread]
-        where_sql = (" AND " + " AND ".join(where)) if where else ""
         with _uow.read() as c:
+            if apart:
+                not_apart, apart_args = self._in_folders_playing(c, set(apart))
+                where, params = where + [f"NOT {not_apart}"], params + apart_args
+            where_sql = (" AND " + " AND ".join(where)) if where else ""
             try:
                 in_all, in_all_args = self._in_folders_playing(c, {"all"})
                 columns = """m.pk,m.message_key,m.uid,m.account,m.folder,m.from_addr,m.from_name,m.recipients,m.subject,m.date_iso,m.ts,

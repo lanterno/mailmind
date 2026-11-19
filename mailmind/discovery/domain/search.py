@@ -9,6 +9,9 @@ from mailmind.kernel.parsed import required_int
 from mailmind.kernel.row import Row
 
 NO_SUBJECT = "(no subject)"
+# The folders a lane's list leaves out, by the part they play: a lane is the mail kept, as a folder's list is, and what was
+# deleted or is junk isn't.
+LANE_LEAVES_OUT = ("trash", "junk")
 
 
 @dataclass(frozen=True)
@@ -20,6 +23,7 @@ class Asked:
     limit: int
     offset: int
     thread: str | None = None   # only this conversation of `account`
+    lane: bool = False          # a lane's list (Feed, Paper trail), which leaves out the Trash and Junk
 
 
 def asked(qs: Mapping[str, list[str]]) -> Asked | None:
@@ -31,7 +35,7 @@ def asked(qs: Mapping[str, list[str]]) -> Asked | None:
     scope = qs.get("scope", ["account"])[0]
     return Asked(q, QuerySpec.parse(q), scope, None if scope == "all" else qs.get("account", [None])[0],
                  max(1, min(200, required_int(qs.get("limit", ["80"])[0]))), max(0, required_int(qs.get("offset", ["0"])[0])),
-                 qs.get("thread", [None])[0] or None)
+                 qs.get("thread", [None])[0] or None, bool(qs.get("lane", [None])[0]))
 
 
 def nothing_asked() -> dict[str, Any]:

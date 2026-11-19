@@ -1,5 +1,5 @@
 """What Discovery needs from outside it. Each is bound in mailmind.bootstrap.discovery."""
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from typing import Protocol
 
 from mailmind.discovery.domain.known import Facts
@@ -17,7 +17,8 @@ class ViewsStore(Protocol):
 
 class SearchIndex(Protocol):
     """Stored mail as a query finds it. See adapters.sqlite."""
-    def search(self, spec: QuerySpec, account: str | None, limit: int, offset: int, thread: str | None = None) -> list[Row] | None: ...
+    def search(self, spec: QuerySpec, account: str | None, limit: int, offset: int, thread: str | None = None,
+               apart: Collection[str] = ()) -> list[Row] | None: ...
     def for_asking(self, match: str, accounts: str | list[str], limit: int) -> list[Row] | None: ...
     def reach(self, spec: QuerySpec, cap: int, apart: set[str]) -> tuple[int, list[Row], int] | None: ...
     def total(self) -> int: ...
