@@ -178,6 +178,39 @@ final class ListKeysTests: XCTestCase {
         window.contentView = nil
     }
 
+    /// Placed under the first run's welcome, the list takes the keyboard once the first account's rows show, from
+    /// where the window put it as the welcome went, and only then. The splitter keeps only a focus Tab gave it.
+    func testAListPlacedUnderTheWelcomeTakesTheKeyboardOnceTheFirstRowsShow() async throws {
+        let (_, controller) = try await table()
+        let table = controller.table
+        var welcome = true
+        table.welcomeUp = { welcome }
+        let window = window()
+        window.contentView = Host()
+        window.contentView?.addSubview(controller.scrollView)
+        XCTAssertTrue(window.makeFirstResponder(window.contentView))
+        table.takeKeyboardIfNowhere(placed: true)
+        XCTAssertFalse(window.firstResponder === table, "not under the welcome")
+        table.rowsShown()
+        XCTAssertFalse(window.firstResponder === table, "nor while it stands")
+        welcome = false
+        table.rowsShown()
+        XCTAssertTrue(window.firstResponder === table, "the first account's rows show: the list has the keyboard")
+        XCTAssertTrue(window.makeFirstResponder(window.contentView))
+        table.rowsShown()
+        XCTAssertFalse(window.firstResponder === table, "once: rows that come later leave the keyboard where it is")
+        window.contentView = nil
+
+        let tab = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
+                                   context: nil, characters: "\t", charactersIgnoringModifiers: "\t", isARepeat: false,
+                                   keyCode: 48)
+        let click = NSEvent.mouseEvent(with: .leftMouseDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                       windowNumber: 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
+        XCTAssertTrue(MeadowSplitter.keepsFocus(after: tab), "Tab brings the keyboard to the splitter")
+        XCTAssertFalse(MeadowSplitter.keepsFocus(after: click), "a click gives it back to the list")
+        XCTAssertFalse(MeadowSplitter.keepsFocus(after: nil), "and so does the window opening")
+    }
+
     // MARK: Esc
 
     func testEscEndsFocusReadingBeforeTheListsOwnEsc() async throws {
