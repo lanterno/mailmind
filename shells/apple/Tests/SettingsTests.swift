@@ -901,6 +901,46 @@ final class AccountFixTests: XCTestCase {
         XCTAssertEqual(AccountFix.server.button, "Edit Server…")
     }
 
+    func testNoPasswordKeptIsFixedAsATurnedDownOneIsAndSaysTheKeychainHoldsNone() {
+        func fix(_ type: String, credential: String = "keychain", appPasswords: Bool = false) -> AccountFix? {
+            AccountFix.of(kind: "NO_PASSWORD", type: type, error: "NoCredential", credential: credential,
+                          appPasswords: appPasswords)
+        }
+        XCTAssertEqual(fix("imap"), .password)
+        XCTAssertEqual(fix("imap", appPasswords: true), .appPassword)
+        XCTAssertEqual(fix("gmail"), .appPassword)
+        XCTAssertNil(fix("imap", credential: "env"), "a variable is set where it is set")
+        XCTAssertNil(fix("gmail", credential: "op"), "1Password's item is kept in 1Password")
+        XCTAssertNil(fix("proton", credential: "proton_bridge"), "Bridge's password has a card of its own")
+        XCTAssertTrue(AccountDetail.wantsPassword("NO_PASSWORD") && AccountDetail.wantsPassword("AUTH"))
+        XCTAssertFalse(AccountDetail.wantsPassword("NETWORK") || AccountDetail.wantsPassword(nil))
+
+        XCTAssertEqual(StatusWords.syncProblem("NO_PASSWORD", type: "imap", error: "NoCredential", fix: .password), """
+            MailMind has no password for this account: this Mac’s Keychain doesn’t hold one. Choose Change Password \
+            and type it again.
+            """)
+        XCTAssertTrue(StatusWords.syncProblem("NO_PASSWORD", type: "imap", fix: .appPassword)
+            .contains("choose Enter App Password"))
+        XCTAssertTrue(StatusWords.syncProblem("NO_PASSWORD", type: "gmail", fix: .appPassword)
+            .contains("Make a Gmail App Password, then choose Enter App Password"))
+        let proton = StatusWords.syncProblem("NO_PASSWORD", type: "proton")
+        XCTAssertTrue(proton.hasPrefix("MailMind has no Proton Bridge password"), proton)
+        XCTAssertTrue(proton.contains("under Proton Bridge password"), proton)
+        let elsewhere = StatusWords.syncProblem("NO_PASSWORD", type: "imap")
+        XCTAssertTrue(elsewhere.contains("nothing is kept where it reads this account’s password"), elsewhere)
+        for type in ["gmail", "imap", "proton"] {
+            for fix in [nil, AccountFix.appPassword, .password] {
+                let said = StatusWords.syncProblem("NO_PASSWORD", type: type, error: "NoCredential", fix: fix)
+                XCTAssertFalse(said.contains("turned down") || said.contains("didn’t accept"),
+                               "no server refused anything: \(said)")
+            }
+        }
+        XCTAssertEqual(StatusWords.syncHelp("NO_PASSWORD", type: "proton"), StatusWords.protonBridge)
+        XCTAssertEqual(StatusWords.syncHelp("NO_PASSWORD", type: "gmail"), StatusWords.appPasswords)
+        XCTAssertEqual(StatusWords.syncHelp("NO_PASSWORD", type: "imap", provider: icloud.link), icloud.link)
+        XCTAssertNil(StatusWords.syncHelp("NO_PASSWORD", type: "imap"))
+    }
+
     func testAProvidersAppPasswordPageIsOfferedOnlyWhereTheAccountReadsItsServer() {
         XCTAssertEqual(AccountFix.providerPage(icloud, host: "imap.mail.me.com"), icloud.link)
         XCTAssertEqual(AccountFix.providerPage(icloud, host: "IMAP.mail.me.com"), icloud.link, "a name in any case")
@@ -982,6 +1022,7 @@ final class AccountFixTests: XCTestCase {
             .couldntLogIn(API.CouldntLogIn(connect: false, email: nil, error: error, ok: true, says: says))
         }
         XCTAssertEqual(Tested.kind(of: failed("AUTHENTICATIONFAILED")), "AUTH")
+        XCTAssertEqual(Tested.kind(of: failed("no password")), "NO_PASSWORD", "none kept, as the sync found")
         XCTAssertEqual(Tested.kind(of: failed("connection refused")), "NETWORK")
         XCTAssertEqual(Tested.kind(of: failed("host not found")), "NETWORK")
         XCTAssertEqual(Tested.kind(of: failed("timeout")), "TIMEOUT")

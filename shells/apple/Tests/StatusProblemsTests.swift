@@ -8,6 +8,7 @@ final class StatusProblemsTests: XCTestCase {
     func testEachSyncErrorKindIsASentenceWithWhatToDoNext() {
         let next = [
             "AUTH": "change it where MailMind reads this account’s password, then choose Retry",
+            "NO_PASSWORD": "Put it there, then choose Retry",
             "TIMEOUT": "check your internet connection", "NETWORK": "Check your internet connection, then choose Retry",
             "UIDVALIDITY": "Nothing needs doing", "TLS_PIN": "Trust it",
             "IMAP": "Copy Diagnostics", "UNKNOWN": "Copy Diagnostics", "SOMETHING_NEW": "Choose Retry",
