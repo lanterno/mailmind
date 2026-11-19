@@ -290,6 +290,40 @@ final class ReaderDocumentTests: XCTestCase {
         XCTAssertTrue(inSight(), "the box, 1500 points down, is in sight whole")
     }
 
+    /// The box's rewrite row keeps its mark to one line however narrow the box, its rewrites wrapping under it as the
+    /// mockup's row wraps: never "REWRIT" over "E".
+    func testTheRewriteRowKeepsItsMarkToOneLine() async throws {
+        MeadowVoiceOverTests.assistive(true)
+        defer { MeadowVoiceOverTests.assistive(false) }
+        let fake = FakeHost()
+        defer { withExtendedLifetime(fake) {} }
+        let composer = Composer(ComposeSeed(), host: fake)
+        defer { composer.close(force: true) }
+        func mark(width: CGFloat) async throws -> (mark: CGSize, row: CGFloat) {
+            let row = ReplyRewrites(composer: composer).frame(width: width).meadowLight(.day)
+            let host = NSHostingView(rootView: row)
+            let size = CGSize(width: width, height: host.fittingSize.height)
+            host.frame = CGRect(origin: .zero, size: size)
+            let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.contentView = host
+            defer {
+                window.contentView = nil
+                window.close()
+            }
+            window.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(300))
+            let read = MeadowVoiceOverTests.read(host)
+            let found = try XCTUnwrap(read.first { $0.label == "Rewrite" }, MeadowVoiceOverTests.said(read))
+            return (found.size, size.height)
+        }
+        let wide = try await mark(width: 760)
+        let narrow = try await mark(width: 300)
+        XCTAssertEqual(narrow.mark.height, wide.mark.height, accuracy: 0.5, "the mark on one line")
+        XCTAssertEqual(narrow.mark.width, wide.mark.width, accuracy: 0.5, "and as wide as it needs")
+        XCTAssertGreaterThan(narrow.row, wide.row + 10, "the rewrites wrap under it")
+    }
+
     /// A box taller than what shows brings its foot into sight, where Send is.
     func testATallBoxBringsItsFootIntoSight() {
         let box = NSRect(x: 0, y: 0, width: 400, height: 600)
