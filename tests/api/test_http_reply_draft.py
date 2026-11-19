@@ -70,6 +70,19 @@ def test_a_reply_kept_on_this_mac_opens_from_the_journal(app, world):
     assert r.json["original_key"] == world.key(LUNCH)
 
 
+def test_a_reply_kept_here_read_only_opens_after_a_restart(app, world):
+    app.env["MAILMIND_PROFILE"] = "read-only"
+    app.restart()
+    saved = save(app, reply(world))
+    assert saved["pushed"] is False
+    app.restart()
+    found = waiting(app, world)
+    assert found == {"draft_id": saved["draft_id"], "in_drafts": None, "more": 0}
+    r = reopen(app, found)
+    assert r.status == 200 and r.json["text"].startswith("Thursday suits me."), r.json
+    assert drafts_on_the_server(world) == {}
+
+
 def test_a_reply_that_reached_drafts_opens_after_a_restart_though_drafts_was_never_listed_since(app, world):
     saved = save(app, reply(world))
     assert saved["pushed"] is True and len(drafts_on_the_server(world)) == 1
