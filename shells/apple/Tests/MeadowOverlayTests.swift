@@ -216,6 +216,47 @@ final class MeadowOverlayTests: XCTestCase {
         window.contentView = nil
     }
 
+    /// Ask Your Mail… opens the palette on "? " with the cursor after it, never with it chosen, so what is typed next
+    /// is a question and not a plain search; a starter's words open the same way.
+    func testAskOpensThePaletteWithTheCursorAfterItsQuestionMark() async throws {
+        _ = NSApplication.shared
+        let mailbox = Mailbox()
+        let desk = Desk()
+        desk.link.routes = DeskRoutes()
+        let host = NSHostingView(rootView: Color.clear.frame(width: 1000, height: 700)
+            .modifier(WindowOverlays(mailbox: mailbox))
+            .environment(desk)
+            .meadowLight(.day))
+        host.frame = CGRect(x: 0, y: 0, width: 1000, height: 700)
+        // The focus goes only to a key window on screen: this one is, far off it and see-through.
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.alphaValue = 0
+        window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
+        window.makeKeyAndOrderFront(nil)
+        defer {
+            window.orderOut(nil)
+            window.contentView = nil
+        }
+        func editor() -> NSTextView? {
+            (window.firstResponder as? NSTextView).flatMap { $0.isFieldEditor ? $0 : nil }
+        }
+        desk.sheet = .ask
+        try await settle(host) { editor()?.string == "? " }
+        XCTAssertEqual(editor()?.string, "? ", "the palette's field has the keyboard, on a question")
+        // However long the field takes to choose what it holds as the focus lands, the cursor ends after it.
+        try await settle(host) { false }
+        XCTAssertEqual(editor()?.selectedRange(), NSRange(location: 2, length: 0), "the cursor after “? ”")
+
+        let typed = try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+            context: nil, characters: "w", charactersIgnoringModifiers: "w", isARepeat: false, keyCode: 13))
+        window.sendEvent(typed)
+        try await settle(host) { editor()?.string == "? w" }
+        XCTAssertEqual(editor()?.string, "? w", "what is typed asks")
+    }
+
     // MARK: Popovers
 
     /// The snooze chooser drawn in a window, as its popover shows it, until its menu has offered its items.
