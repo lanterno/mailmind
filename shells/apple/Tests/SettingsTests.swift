@@ -1307,6 +1307,64 @@ extension AccountFixTests {
     }
 }
 
+/// The account sheet's form scrolls to its foot as a test's words come under it, so where the sheet can't grow past
+/// its window, its last row (the signature) stays whole, never cut in two.
+@MainActor
+final class FootInSightTests: XCTestCase {
+    @Observable
+    final class Said {
+        var words = ""
+    }
+
+    /// A form taller than its sheet, and the words that come under it.
+    struct Sheet: View {
+        let said: Said
+
+        var body: some View {
+            VStack(spacing: 0) {
+                FootInSight(change: said.words) {
+                    Color.clear.frame(height: 900)
+                }
+                if !said.words.isEmpty { Text(said.words).frame(height: 80) }
+            }
+            .frame(width: 400, height: 300)
+        }
+    }
+
+    func testTheFormScrollsToItsFootAsWordsComeUnderIt() async throws {
+        let said = Said()
+        let host = NSHostingView(rootView: Sheet(said: said))
+        host.frame = CGRect(x: 0, y: 0, width: 400, height: 300)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        defer {
+            window.contentView = nil
+            window.close()
+        }
+        window.layoutIfNeeded()
+        let scroll = try XCTUnwrap(Self.find(NSScrollView.self, in: host), "the form scrolls")
+        func shown() -> NSRect { scroll.documentVisibleRect }
+        func height() -> CGFloat { scroll.documentView?.frame.height ?? 0 }
+        XCTAssertEqual(shown().minY, 0, accuracy: 1, "it opens at its head")
+
+        said.words = "The server didn't answer."
+        for _ in 0..<100 where abs(shown().maxY - height()) > 1 {
+            host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(shown().maxY, height(), accuracy: 1, "its foot in sight, whole")
+    }
+
+    private static func find<V: NSView>(_ kind: V.Type, in view: NSView) -> V? {
+        if let found = view as? V { return found }
+        for child in view.subviews {
+            if let found = find(kind, in: child) { return found }
+        }
+        return nil
+    }
+}
+
 /// The routes Save goes through, each call written down, answered as a test says.
 @MainActor
 private final class SaveRoutes {
