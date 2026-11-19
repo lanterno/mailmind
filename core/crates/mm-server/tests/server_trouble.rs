@@ -264,9 +264,10 @@ fn a_message_opened_from_a_folder_another_client_deleted_says_so_and_leaves_the_
 }
 
 /// A move into a folder another client deleted, queued while the server was away: once the folder is found gone, the
-/// move is given back as one the server refused, its message listed where it was, and nothing is tried.
+/// move is given back, the tray saying its folder went, not that the server refused it; its message is listed where
+/// it was, and nothing is tried.
 #[test]
-fn a_change_queued_for_a_folder_another_client_deleted_is_given_back_as_refused() {
+fn a_change_queued_for_a_folder_another_client_deleted_is_given_back_saying_its_folder_went() {
     let w = synced();
     assert_eq!(plans_total(&w), 0, "opened once, so its sync state is stored");
     w.imap.away(true);
@@ -279,7 +280,7 @@ fn a_change_queued_for_a_folder_another_client_deleted_is_given_back_as_refused(
     assert!(rail.folders.iter().all(|(folder, _)| folder.name != "Plans"));
     assert_eq!(listed(&w), [1, 2, 3, 4], "the message is listed where it was");
     let tray = w.app.commands.list_open(50).unwrap();
-    assert_eq!((&tray["items"][0]["state"], &tray["items"][0]["error"]), (&json!("error"), &json!("refused")));
+    assert_eq!((&tray["items"][0]["state"], &tray["items"][0]["error"]), (&json!("error"), &json!("folder_gone")));
     assert_eq!((&tray["waiting"], &tray["stuck"]), (&json!(0), &json!(1)));
     let mark = w.imap.mark();
     later(&w);
