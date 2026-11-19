@@ -36,9 +36,14 @@ final class Mailbox {
     private(set) var scope = API.SearchScope.all
     private(set) var singleKeys = true
 
-    /// The Inbox's tab. Changing it lists the tab.
+    /// The Inbox's tab. Changing it lists the tab, and reads the brief's tallies with it: the brief's line over the
+    /// list counts what needs you too, so the two count the same mail.
     var tab = InboxTab.needs {
-        didSet { if tab != oldValue { app?.openList() } }
+        didSet {
+            guard tab != oldValue else { return }
+            app?.openList()
+            rereadsTallies?()
+        }
     }
     /// What the list's server said besides its rows.
     private(set) var facts = ListFacts()
@@ -148,6 +153,8 @@ final class Mailbox {
     @ObservationIgnored var undoing: (@MainActor () -> @MainActor (API.Undone?) -> Void)?
     /// The desk's: mail a verb sent away from where it was, so the gate whose card shows it reads its queue again.
     @ObservationIgnored var wentAway: (@MainActor ([MailCopy]) -> Void)?
+    /// The desk's: read the brief's tallies again, which the rail and the brief's line over the Inbox count.
+    @ObservationIgnored var rereadsTallies: (@MainActor () -> Void)?
     /// The desk's: a message's own window inside the mail window's desk, so its reader shows the cards the pane's
     /// does (the summary and what the message proposes, an invite with its RSVP).
     @ObservationIgnored var inDesk: (@MainActor (AnyView) -> AnyView)?
@@ -188,6 +195,7 @@ final class Mailbox {
         stopsTranslating = nil
         undoing = nil
         wentAway = nil
+        rereadsTallies = nil
         inDesk = nil
         joinRound += 1
     }

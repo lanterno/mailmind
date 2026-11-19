@@ -161,6 +161,7 @@ final class Desk {
             mailbox.opensBrief = { self?.openBrief(deliberately: $0) }
             mailbox.undoing = { self?.undoing() ?? { _ in } }
             mailbox.wentAway = { self?.wentAway($0) }
+            mailbox.rereadsTallies = { self?.brief.reread() }
             mailbox.inDesk = { view in self.map { AnyView(view.environment($0)) } ?? view }
             mailbox.rowMenu.append { rows in
                 guard let self else { return [] }
