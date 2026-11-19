@@ -44,6 +44,23 @@ def test_sender_rules(app, golden, world):
     golden.note("the rules document", json.loads(document("rules")))
 
 
+NOT_A_SENDER = "A rule names one address, such as name@example.com, or one domain, such as example.com."
+
+
+@pytest.mark.parametrize("token", ["50506 spam@lottery.example.test", "lin@example.test, bo@example.test",
+                                   "Lin Mori <lin@example.test>", "example..test", "lin@"])
+def test_a_keep_or_block_names_one_address_or_one_domain_and_nothing_beside_it(app, token):
+    """What Curate's rule field was given, pasted with a number before the address, say: a rule on it would never match a
+    sender, so it is refused in words the page and the Mac app show, and nothing is kept. A removal asks only for an
+    address or a domain, so a rule kept before this still goes."""
+    before = app.get("/api/rules").json
+    for verdict in ("keep", "block"):
+        r = app.post("/api/rules", {"token": token, "verdict": verdict})
+        assert (r.status, r.json["detail"]) == (400, NOT_A_SENDER)
+    assert app.get("/api/rules").json == before
+    assert app.post("/api/rules", {"token": token, "verdict": "remove"}).status == 200
+
+
 def test_saved_views(app, golden, world):
     def made(views, name):                      # view ids are random: name them in the record
         vid = next(v["id"] for v in views["views"] if v["name"] == name)

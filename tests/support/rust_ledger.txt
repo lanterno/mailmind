@@ -954,3 +954,8 @@ tests/api/test_http_gate.py::test_filing_a_senders_last_inbox_message_lets_them_
 tests/api/test_http_gate.py::test_a_sender_with_more_in_the_inbox_still_waits
 tests/api/test_http_events.py::test_a_round_of_summaries_tells_the_open_tabs_how_many_landed
 tests/api/test_http_batches.py::test_a_batchs_answers_coming_in_tell_the_open_tabs
+tests/api/test_http_settings.py::test_a_keep_or_block_names_one_address_or_one_domain_and_nothing_beside_it[50506 spam@lottery.example.test]
+tests/api/test_http_settings.py::test_a_keep_or_block_names_one_address_or_one_domain_and_nothing_beside_it[lin@example.test, bo@example.test]
+tests/api/test_http_settings.py::test_a_keep_or_block_names_one_address_or_one_domain_and_nothing_beside_it[Lin Mori <lin@example.test>]
+tests/api/test_http_settings.py::test_a_keep_or_block_names_one_address_or_one_domain_and_nothing_beside_it[example..test]
+tests/api/test_http_settings.py::test_a_keep_or_block_names_one_address_or_one_domain_and_nothing_beside_it[lin@]
