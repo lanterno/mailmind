@@ -197,6 +197,7 @@ impl App {
             outside: seams.outside.clone(),
             logins: logins.clone(),
             events: account_events.clone(),
+            unreached: (!environment.read_only()).then(|| live_sync.clone()),
         });
         let database = Arc::new(Database::new(settings.db(), key, seams.outside.clone()));
         crate::database_version::ready(&database, &*seams.clock)?;

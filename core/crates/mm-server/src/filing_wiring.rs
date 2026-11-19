@@ -143,8 +143,8 @@ impl Reverser for UnblockReverser {
 }
 
 /// What a sync round asks of the others (`Syncing`'s Attention, and its kick): what is snoozed and due wakes first,
-/// new mail kicks the job that triages it, where this process runs one, and a server that answers again lets the
-/// changes queued for it go.
+/// new mail kicks the job that triages it, where this process runs one, a server that answers again lets the
+/// changes queued for it go, and one that couldn't be reached outside a sync has the sync run now.
 #[derive(Debug)]
 pub(crate) struct AroundRounds {
     pub(crate) snoozing: Arc<Snoozing>,
@@ -176,5 +176,9 @@ impl AroundSync for AroundRounds {
         if let Err(fault) = self.commands.release(account) {
             log::warning("commands", "the changes waiting for a server weren't let go", &[], Some(fault.class));
         }
+    }
+
+    fn sync_soon(&self) {
+        self.jobs.kick("sync");
     }
 }

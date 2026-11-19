@@ -22,7 +22,13 @@
 //! server that can't take a login for now) once a second sync in a row has failed too, or three minutes on; until
 //! then it shows as it did before, and its record keeps no error, but its status says it is trying again
 //! (`trying_again`), so nothing says it synced when its last sync didn't. A wake, or a change of network, starts each
-//! such run again (`woke`).
+//! such run again (`woke`). A sync that fails tells the open tabs (`sync-trouble`), which read the status again.
+//!
+//! A connection to an account's server that couldn't be made outside its sync, by trouble that may pass (IDLE's, as
+//! it connects again after its connection was lost, or a job's), says so within seconds rather than at the next
+//! round, minutes on (`unreached`): the account shows as trying again, as after a sync that failed, the tabs are
+//! told, and the sync that measures it runs now. It counts no failed sync: the next that fails is the run's first.
+//! One dropped connection that connects again at once logs in, and says nothing.
 //!
 //! A sync that works after one of the account's failed, a wake between them or not, and a person's Retry, let go of
 //! the waits of the changes queued for its server (`AroundSync::server_back`): they go now, not minutes on.
@@ -312,6 +318,41 @@ impl Syncing {
         self.events.publish(MailboxEvent::Page { topic, data });
     }
 
+    /// How an account's sync stands changed for the worse: the open tabs read it again. Nothing else tells them, as a
+    /// sync that fails stores and says nothing else.
+    fn trouble(&self, account: &str) {
+        self.page(Topic::SyncTrouble, json!({"account": account}));
+    }
+
+    /// A connection to `account`'s server, made outside its sync, couldn't be made (IDLE's as it connects again, or a
+    /// job's): trouble that may pass shows at once as a sync that failed does, trying again, rather than at the next
+    /// sync, minutes on; the tabs hear of it, and the sync that measures it runs now. The run counts no failed sync,
+    /// so the next that fails is its first. Nothing changes while the account's sync runs, which says how it went, or
+    /// once its syncs fail already, or for an account no longer kept; any other trouble is the sync's to say.
+    pub fn unreached(&self, account: &str, error: SyncError) {
+        let (class, kind) = (error.class(), error_kind(error));
+        if !sync_health::may_pass(class, kind) {
+            return;
+        }
+        if !self.accounts.emails().is_ok_and(|emails| emails.iter().any(|e| e == account)) {
+            return;
+        }
+        let now = self.seconds();
+        {
+            let mut held = self.held();
+            if held.flying.contains(account) || held.failing.contains_key(account) {
+                return;
+            }
+            held.failing.insert(account.to_owned(), Failing::heard(class, now));
+            // Its next sync that works lets the changes queued for its server go, as after a sync that failed.
+            held.unreached.insert(account.to_owned());
+        }
+        let message = "a connection to an account's server failed; it is trying again";
+        log::line(&log::Line { level: log::Level::Info, tag: TAG, message, fields: &[], error: Some(class) });
+        self.trouble(account);
+        self.around.sync_soon();
+    }
+
     /// Sync one account's INBOX: how many new messages it kept. A first scan keeps none new.
     fn sync_account(&self, email: &str) -> Result<usize, Fault> {
         // While it reads, a removal stops it at its next step; then nothing more is said or kept of the account, and a
@@ -385,9 +426,11 @@ impl Syncing {
                         fields: &[],
                         error: Some(class),
                     });
+                    self.trouble(email);
                     return Ok(0);
                 }
                 self.set_status(email, "error", class.to_owned());
+                self.trouble(email);
                 let at = when::iso(self.clock.now());
                 command_ports::write(&*self.store, |tx| tx.record_sync_result(email, Some((class, kind)), &at))?;
                 log::warning(TAG, "an account's sync failed", &[], Some(class));

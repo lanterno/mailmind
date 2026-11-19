@@ -7,8 +7,10 @@ use std::time::Duration;
 use mm_accounts::Directory;
 use mm_kernel::errors::Fault;
 use mm_mailbox::digest::NotSyncing;
+use mm_mailbox::ingest::SyncError;
 use mm_mailbox::opening_ports::InboxSync;
 use mm_mailbox::ports::{Accounts, MailSession, MailSessions, SessionError};
+use mm_mailbox::session::ServerError;
 use mm_mailbox::syncing::{AccountSync, Syncing};
 use serde_json::{Value, json};
 
@@ -144,6 +146,14 @@ impl LiveSync {
     pub(crate) fn removed(&self, account: &str) {
         if let Some(syncing) = self.0.get() {
             syncing.removed(account);
+        }
+    }
+
+    /// A connection to the account's server couldn't be made outside its sync (`Syncing::unreached`). Before the
+    /// binding nothing has synced, and nothing is said.
+    pub(crate) fn unreached(&self, account: &str, error: ServerError) {
+        if let Some(syncing) = self.0.get() {
+            syncing.unreached(account, SyncError::Server(error));
         }
     }
 

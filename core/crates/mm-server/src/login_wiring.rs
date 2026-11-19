@@ -2,7 +2,8 @@
 //! `session_for`): TLS, a loopback server's certificate checked against its pin before the password is read or sent,
 //! and the login. Every session it opens, the sync's, the change queue's, reconcile's and a person's reads alike,
 //! comes through here, so a login its server refused waits out its hold (`mm_accounts::logins`): nothing is sent, and
-//! it fails as the refusal did, so each caller does as it did then.
+//! it fails as the refusal did, so each caller does as it did then. A connection that couldn't be made is told to the
+//! sync (`Syncing::unreached`), which says so at once when the trouble may pass and its own sync isn't the one asking.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -67,15 +68,23 @@ pub(crate) struct ImapLogin {
     pub(crate) logins: Arc<Logins>,
     /// Who hears that a server refused a login (CredentialsRejected).
     pub(crate) events: Arc<dyn AccountEvents>,
+    /// Who hears that a server couldn't be reached: the sync, which says so at once. None in a process that only reads,
+    /// whose sync never runs on its own to see the server back.
+    pub(crate) unreached: Option<Arc<crate::wiring::LiveSync>>,
 }
 
 impl ImapLogin {
-    /// `open_session`: a session for `account`, logged in. A login its server refused waits out its hold.
+    /// `open_session`: a session for `account`, logged in. A login its server refused waits out its hold. One that
+    /// couldn't be made is told to the sync.
     pub(crate) fn open(&self, account: &Account, timeout: Duration) -> Result<mm_imap::Session, Trouble> {
         if self.logins.held(account) {
             return Err(Trouble::Imap(mm_imap::Error::Unreachable(login_hold::REFUSED)));
         }
-        self.try_login(account, timeout)
+        let opened = self.try_login(account, timeout);
+        if let (Err(trouble), Some(sync)) = (&opened, &self.unreached) {
+            sync.unreached(&account.email, ServerError::from(*trouble));
+        }
+        opened
     }
 
     /// `try_login`: a session for `account` whatever the hold says, for someone who asked. What the server answers

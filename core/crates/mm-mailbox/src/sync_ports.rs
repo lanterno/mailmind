@@ -199,4 +199,7 @@ pub trait AroundSync: Send + Sync + fmt::Debug {
     /// The account's server answers again after a sync of it failed, or a person asked to try it again: the changes
     /// waiting out a backoff for it go now.
     fn server_back(&self, _account: &str) {}
+    /// A connection to an account's server couldn't be made outside its sync: the sync, which measures whether the
+    /// server answers, runs now, where this process runs one. The served suites start no rounds.
+    fn sync_soon(&self) {}
 }

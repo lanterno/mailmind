@@ -1,7 +1,8 @@
 //! When an account's failed sync shows as one that can't connect (`mailbox.domain.sync_health`). Trouble that may
 //! pass, what a sleep or a change of network leaves for a moment, shows only once the next sync of the account has
 //! failed too, or once the first failure in a row is three minutes old. Any other, a password refused, a certificate
-//! changed or a panic, shows at once. A sync that works ends the run.
+//! changed or a panic, shows at once. A sync that works ends the run. A run may begin before any sync has failed,
+//! with a connection to the server that couldn't be made outside one (`Failing::heard`): it counts from then.
 
 /// The kinds of trouble that may pass (`error_kind`'s): a connection lost or refused, a name not found, a server that
 /// didn't answer in time.
@@ -39,6 +40,12 @@ impl Failing {
             Some(run) => Failing { rounds: run.rounds + 1, since: run.since, class, passing },
             None => Failing { rounds: 1, since: now, class, passing },
         }
+    }
+
+    /// A run begun at `now` by trouble that may pass, heard outside a sync (a connection to the server that couldn't
+    /// be made): no sync has failed in it yet, so the next that fails is its first.
+    pub fn heard(class: &'static str, now: i64) -> Failing {
+        Failing { rounds: 0, since: now, class, passing: true }
     }
 
     /// Whether the run shows as one that can't connect, at `now`.

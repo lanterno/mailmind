@@ -14,6 +14,9 @@ use serde_json::Value;
 pub enum Topic {
     /// A sync finished for an account.
     SyncDone,
+    /// An account's server didn't answer: a sync of it failed, or a connection to it outside one couldn't be made. How
+    /// its sync stands changed (the digest's `status`), so a tab reads it again.
+    SyncTrouble,
     /// It brought new mail into INBOX.
     NewMail,
     /// Rows of mail gone from the server went, in `folder` if it names one; or an account was removed (`removed`), and
@@ -46,6 +49,7 @@ impl Topic {
     pub const fn name(self) -> &'static str {
         match self {
             Topic::SyncDone => "sync-done",
+            Topic::SyncTrouble => "sync-trouble",
             Topic::NewMail => "new-mail",
             Topic::Reconcile => "reconcile",
             Topic::FlagsChanged => "flags-changed",
