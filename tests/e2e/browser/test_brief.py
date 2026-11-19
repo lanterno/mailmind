@@ -279,6 +279,29 @@ def test_needs_you_opens_a_list_of_its_own_with_a_way_back(page, app, world, ai)
     clean(page)
 
 
+def test_the_tally_of_the_waiting_place_says_waiting_of_both_kinds_and_opens_it(page, app, world, ai):
+    """Waiting holds what waits on others and what others wait on you for, so its tally says waiting, of both."""
+    from mailmind.bootstrap.mailbox import store
+    brief_replies(ai)
+    with app.stopped():
+        c = store.conn()
+        try:
+            for name, kind in ((LUNCH[0], "received"), (RECEIPT, "sent")):
+                c.execute("INSERT OR REPLACE INTO followups(account, thread_id, kind, state, first_sent_ts, last_msg_ts, "
+                          "due_ts, created_at) VALUES(?,?,?,'due',1793500000,1793500000,1793600000,?)",
+                          (w.ADA, world.row(name)["thread_id"], kind, NOW))
+            c.commit()
+        finally:
+            c.close()
+    page.goto("/")
+    tally = page.locator(".bf-tally[data-brief='__waiting__']")
+    expect(tally).to_have_text("2 waiting")
+    tally.click()
+    expect(page.locator("#listTitle")).to_have_text("Waiting")
+    expect(page.locator("#rows .row[data-key]")).to_have_count(2)
+    clean(page)
+
+
 def test_a_topic_from_the_brief_lists_its_mail(page, app, world, ai):
     lunch_needs_a_reply(app, world)
     brief_replies(ai, [{"label": "Lunch", "count": 1, "pks": [world.pk(LUNCH[1])]}])
