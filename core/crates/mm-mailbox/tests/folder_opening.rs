@@ -52,6 +52,10 @@ impl StoredLists for Scanned {
         Ok(Page::default())
     }
 
+    fn copy_row(&self, _: &str, _: &str, _: Option<i64>, _: Option<i64>) -> Result<Option<Row>, Fault> {
+        Ok(None)
+    }
+
     fn inboxes_page(&self, _: &[String], _: bool, _: i64, _: i64) -> Result<Page, Fault> {
         Ok(Page::default())
     }

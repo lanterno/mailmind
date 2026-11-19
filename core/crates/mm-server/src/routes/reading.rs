@@ -18,11 +18,12 @@ use serde_json::Value;
 
 use crate::answer;
 use crate::app::App;
-use crate::query::Query;
+use crate::query::{Query, as_int};
 
 pub(super) fn routes() -> Router<Arc<App>> {
     Router::new()
         .route("/api/messages", get(messages))
+        .route("/api/message/row", get(listed_copy))
         .route("/api/inboxes", get(inboxes))
         .route("/api/thread", get(thread))
         .route("/api/folders/across", get(folders_across))
@@ -74,6 +75,19 @@ async fn messages(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Resp
     let account = given.text("account").map(str::to_owned);
     let folder = given.text("folder").unwrap_or(INBOX).to_owned();
     run(&app, &method, &uri, move |app| app.reading.lists.messages_in(account.as_deref(), &folder, page)).await
+}
+
+/// One message's row as its folder lists it, by its UID there or its key.
+async fn listed_copy(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Response<Body> {
+    let given = query(&uri);
+    let number = |name: &str| given.text(name).map(|n| as_int(n).ok_or_else(Problem::bad_request)).transpose();
+    let (uid, key) = match (number("uid"), number("key")) {
+        (Ok(uid), Ok(key)) => (uid, key),
+        (Err(problem), _) | (_, Err(problem)) => return refused(problem, &method, &uri),
+    };
+    let account = given.text("account").map(str::to_owned);
+    let folder = given.text("folder").unwrap_or(INBOX).to_owned();
+    run(&app, &method, &uri, move |app| app.reading.lists.listed_copy(account.as_deref(), &folder, uid, key)).await
 }
 
 /// Every account's Inbox as one list.

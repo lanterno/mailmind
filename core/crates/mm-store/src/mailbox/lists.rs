@@ -138,6 +138,24 @@ impl StoredLists for Database {
         })
     }
 
+    fn copy_row(&self, account: &str, folder: &str, uid: Option<i64>, key: Option<i64>) -> Result<Option<Row>, Fault> {
+        let (limit, offset) = (1_i64, 0_i64);
+        self.read(|c| {
+            let mut picked = IN_FOLDER.to_owned();
+            let mut values: Vec<&dyn ToSql> = vec![&account, &folder];
+            if let Some(uid) = &uid {
+                picked.push_str(" AND m.uid=?");
+                values.push(uid);
+            }
+            if let Some(key) = &key {
+                picked.push_str(" AND m.message_key=?");
+                values.push(key);
+            }
+            values.extend([&limit as &dyn ToSql, &offset]);
+            Ok(rows_of(c, &message_rows_sql(&picked), values.as_slice())?.into_iter().next())
+        })
+    }
+
     fn inboxes_page(&self, accounts: &[String], grouped: bool, limit: i64, offset: i64) -> Result<Page, Fault> {
         let picked = in_inboxes(accounts.len());
         self.read(|c| {

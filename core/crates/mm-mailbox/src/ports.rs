@@ -100,6 +100,9 @@ pub struct Page {
 pub trait StoredLists: Send + Sync + fmt::Debug {
     /// A folder's rows, newest first, or one a conversation (its latest) if `grouped`.
     fn folder_page(&self, account: &str, folder: &str, grouped: bool, limit: i64, offset: i64) -> Result<Page, Fault>;
+    /// The row a folder lists for one copy, by its UID there, its key, or both: of a key's two copies in one folder,
+    /// the newer. None where the folder lists none, as for mail snoozed, muted or on its way out.
+    fn copy_row(&self, account: &str, folder: &str, uid: Option<i64>, key: Option<i64>) -> Result<Option<Row>, Fault>;
     /// The Inboxes of `accounts` as one list, as `folder_page` gives one.
     fn inboxes_page(&self, accounts: &[String], grouped: bool, limit: i64, offset: i64) -> Result<Page, Fault>;
     /// What is snoozed in `accounts`, soonest wake first.

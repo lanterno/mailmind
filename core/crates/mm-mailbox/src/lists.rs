@@ -89,6 +89,26 @@ impl Lists {
         Ok(Value::Object(answer))
     }
 
+    /// One message's row as its folder lists it, from what is stored alone, by its UID there, or by its key where
+    /// that isn't known (`queries.listed_copy`): what a shell shows of a message it didn't come to from a list (a
+    /// notification, a move's Undo), with no folder read a page at a time for it. Not found where the folder lists
+    /// none, as for mail snoozed, muted or on its way out.
+    pub fn listed_copy(
+        &self,
+        account: Option<&str>,
+        folder: &str,
+        uid: Option<i64>,
+        key: Option<i64>,
+    ) -> Result<Value, Failure> {
+        let Some(account) = account.filter(|_| uid.is_some() || key.is_some()) else {
+            return Err(Problem::refused("account and uid or key required").into());
+        };
+        match self.stored.copy_row(account, folder, uid, key)? {
+            None => Err(Problem::not_found("not listed").into()),
+            Some(row) => Ok(json!({"ok": true, "row": listing::listed_item(&row, false, self.clock.now())})),
+        }
+    }
+
     /// Every account's Inbox as one list, newest first, each row naming its account. It answers from what is
     /// stored, so an account that's away or still on its first scan holds up no one.
     pub fn all_inboxes(&self, page: Paging) -> Result<Value, Failure> {
