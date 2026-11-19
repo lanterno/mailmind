@@ -7,8 +7,9 @@ extension FocusedValues {
 }
 
 /// The page's commands (app/commands.ts) in the menu bar, with a Mac's keys: the Message menu acts on what is chosen
-/// or open, the Mailbox menu goes places and searches, and View holds how the list is shown. Each runs as its key, its
-/// button in the pane's bar and its palette entry do. Edit ▸ Undo undoes what the mailbox did last.
+/// or open, the Mailbox menu goes places and searches, and View holds how the list is shown (`MailboxViewItems`, in
+/// Meadow's View group). Each runs as its key, its button in the pane's bar and its palette entry do. Edit ▸ Undo
+/// undoes what the mailbox did last.
 struct MailboxCommands: Commands {
     @FocusedValue(\.mailbox) private var mailbox
     @FocusedValue(\.messageWindow) private var window
@@ -85,28 +86,32 @@ struct MailboxCommands: Commands {
             }
             .disabled(mailbox == nil)
         }
-        CommandGroup(before: .sidebar) {
-            Toggle("Organize by Conversation", isOn: Binding(
-                get: { mailbox?.grouped ?? true },
-                set: { mailbox?.setGrouped($0) }))
-                .disabled(mailbox == nil)
-            Picker("Inbox", selection: Binding(get: { mailbox?.tab ?? .needs }, set: { mailbox?.tab = $0 })) {
-                ForEach(Array(InboxTab.allCases.enumerated()), id: \.offset) { index, tab in
-                    Text(tab.title)
-                        .tag(tab)
-                        .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: [.option, .command])
-                }
-            }
-            .pickerStyle(.inline)
-            .disabled(mailbox?.app?.place?.isInbox != true)
-            Divider()
-        }
     }
 
     /// The folders the Mailbox menu goes to on the account in front, as g then a letter does.
     private static let roles: [(role: String, title: String)] = [
         ("inbox", "Inbox"), ("sent", "Sent"), ("drafts", "Drafts"), ("archive", "Archive"), ("junk", "Junk"), ("trash", "Trash"),
     ]
+}
+
+/// View's items for the list: conversations or messages, and the Inbox's tabs on ⌥⌘1, 2 and 3. Meadow's View group
+/// (`MeadowViewMenu`) holds them: a group placed before the sidebar's was dropped once Meadow replaced that group.
+struct MailboxViewItems: View {
+    let mailbox: Mailbox?
+
+    var body: some View {
+        Toggle("Organize by Conversation", isOn: Binding(
+            get: { mailbox?.grouped ?? true },
+            set: { mailbox?.setGrouped($0) }))
+            .disabled(mailbox == nil)
+        Section("Inbox") {
+            ForEach(Array(InboxTab.allCases.enumerated()), id: \.offset) { index, tab in
+                Toggle(tab.title, isOn: Binding(get: { mailbox?.tab == tab }, set: { on in if on { mailbox?.tab = tab } }))
+                    .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: [.option, .command])
+            }
+        }
+        .disabled(mailbox?.app?.place?.isInbox != true)
+    }
 }
 
 /// What the Message menu's verbs act on in the window in front: a message's own window acts on its message alone, the

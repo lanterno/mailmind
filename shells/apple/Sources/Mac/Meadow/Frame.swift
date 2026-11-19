@@ -288,18 +288,31 @@ struct MeadowCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .sidebar) {
-            Button(shell?.docked == false ? "Show Mailboxes" : shell?.railOpen == true ? "Hide Mailbox Names"
-                : "Show Mailbox Names") {
-                shell?.toggleRail()
-            }
-            .keyboardShortcut("s", modifiers: [.control, .command])
-            .disabled(shell == nil)
-            Button(shell?.focus == true ? "Leave Focus Reading" : "Focus Reading") { shell?.toggleFocus() }
-                .keyboardShortcut(.return, modifiers: .command)
-                .disabled(shell == nil || (shell?.focus != true && mailbox?.app?.selection.copy == nil))
-            MeadowLightPicker(status: .shared)
-            Divider()
+            MeadowViewMenu(shell: shell, mailbox: mailbox)
         }
+    }
+}
+
+/// View's own group, in place of the sidebar's: how the list is shown (`MailboxViewItems`), then the rail, focus
+/// reading and the light.
+struct MeadowViewMenu: View {
+    let shell: MeadowShell?
+    let mailbox: Mailbox?
+
+    var body: some View {
+        MailboxViewItems(mailbox: mailbox)
+        Divider()
+        Button(shell?.docked == false ? "Show Mailboxes" : shell?.railOpen == true ? "Hide Mailbox Names"
+            : "Show Mailbox Names") {
+            shell?.toggleRail()
+        }
+        .keyboardShortcut("s", modifiers: [.control, .command])
+        .disabled(shell == nil)
+        Button(shell?.focus == true ? "Leave Focus Reading" : "Focus Reading") { shell?.toggleFocus() }
+            .keyboardShortcut(.return, modifiers: .command)
+            .disabled(shell == nil || (shell?.focus != true && mailbox?.app?.selection.copy == nil))
+        MeadowLightPicker(status: .shared)
+        Divider()
     }
 }
 
