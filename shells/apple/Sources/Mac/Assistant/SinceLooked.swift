@@ -209,17 +209,7 @@ struct DeskNewMailPill: View {
             Button {
                 desk.go(desk.since.inbox)
             } label: {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(words).font(.callout.weight(.semibold))
-                    if let line = desk.since.pending?.headline, !line.isEmpty {
-                        Text(line).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                    }
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.tint.opacity(0.5)))
-                .shadow(radius: 4, y: 1)
+                NewMailPillFace(words: words, line: desk.since.pending?.headline)
             }
             .buttonStyle(.plain)
             .padding(.top, 8)
@@ -228,6 +218,31 @@ struct DeskNewMailPill: View {
             .transition(.move(edge: .top).combined(with: .opacity))
             .accessibilityHint("Opens the Inbox")
         }
+    }
+}
+
+/// The pill's face: what came in, and the line on it once written, on the window's material, which the list shows
+/// through. In high contrast it stands on solid paper in Meadow's ink, as the other panels do (`MeadowPalette.seen`).
+struct NewMailPillFace: View {
+    let words: String
+    let line: String?
+    @Environment(\.meadow) private var meadow
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(words).font(.callout.weight(.semibold))
+                .foregroundStyle(meadow.opaque ? AnyShapeStyle(meadow.ink) : AnyShapeStyle(.primary))
+            if let line, !line.isEmpty {
+                Text(line).font(.caption).lineLimit(2)
+                    .foregroundStyle(meadow.opaque ? AnyShapeStyle(meadow.ink2) : AnyShapeStyle(.secondary))
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
+        .background(meadow.opaque ? AnyShapeStyle(meadow.paperRaised) : AnyShapeStyle(.regularMaterial),
+                    in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.tint.opacity(0.5)))
+        .shadow(radius: 4, y: 1)
     }
 }
 #endif
