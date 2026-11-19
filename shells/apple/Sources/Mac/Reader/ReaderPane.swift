@@ -140,7 +140,7 @@ struct ReaderPane: View {
             if case .desk(let screen)? = app.place, screen.besideTheInbox {
                 DeskScreen(place: screen)
             } else {
-                PaneEmpty(words: emptyWords) { app.mailbox.tab = .all }
+                PaneEmpty(words: .of(app)) { app.mailbox.tab = .all }
             }
         case .loading:
             Fetching()
@@ -159,21 +159,6 @@ struct ReaderPane: View {
                 }
             }
         }
-    }
-
-    /// What the empty pane says: the Inbox's Needs you emptied, mail to pick from, or none.
-    private var emptyWords: PaneEmptyWords {
-        let list = app.list
-        let loaded = list?.firstRowsAt != nil
-        let hasMail = loaded && (list?.total ?? 0) > 0
-        var inInbox = false
-        switch app.place {
-        case .allInboxes?: inInbox = true
-        case .folder(_, let folder)?: inInbox = folder.caseInsensitiveCompare("INBOX") == .orderedSame
-        default: break
-        }
-        let needsDone = loaded && !hasMail && inInbox && app.mailbox.tab == .needs
-        return PaneEmptyWords.of(needsDone: needsDone, hasMail: hasMail)
     }
 
     /// What the menu bar's Print and Find in Message act on, while a message is open.

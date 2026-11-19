@@ -174,6 +174,38 @@ struct PaneEmptyWords: Equatable {
                               line: String(localized: "New mail drifts in on its own — no need to refresh."),
                               everything: false)
     }
+
+    /// What the empty pane beside `app`'s list says: rows marked for the bulk bar, the Inbox's Needs you emptied,
+    /// mail to pick from, or none.
+    @MainActor
+    static func of(_ app: MailApp) -> PaneEmptyWords {
+        let mailbox = app.mailbox
+        let marked = mailbox.chosenRows.count + mailbox.unheld.count
+        if marked > 1 {
+            return .marked(marked, inTrash: mailbox.chosenRows.first.map { mailbox.inTrash(MailCopy($0)) } ?? false)
+        }
+        let list = app.list
+        let loaded = list?.firstRowsAt != nil
+        let hasMail = loaded && (list?.total ?? 0) > 0
+        var inInbox = false
+        switch app.place {
+        case .allInboxes?: inInbox = true
+        case .folder(_, let folder)?: inInbox = folder.caseInsensitiveCompare("INBOX") == .orderedSame
+        default: break
+        }
+        let needsDone = loaded && !hasMail && inInbox && mailbox.tab == .needs
+        return of(needsDone: needsDone, hasMail: hasMail)
+    }
+
+    /// Several rows marked: how many, as the bulk bar counts them ("4 selected"), and what that bar over the list
+    /// does with them, in its own words: File, Delete and Snooze, or in Trash Restore, and Esc to clear them.
+    static func marked(_ count: Int, inTrash: Bool) -> PaneEmptyWords {
+        PaneEmptyWords(title: String(localized: "\(count) selected"),
+                       line: inTrash
+                           ? String(localized: "Restore them from the bar over the list, or press Esc to clear the selection.")
+                           : String(localized: "File, delete or snooze them from the bar over the list, or press Esc to clear the selection."),
+                       everything: false)
+    }
 }
 
 /// The empty pane: the meadow's picture in a frame, what the pane says, and Everything where it helps.
