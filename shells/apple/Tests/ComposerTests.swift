@@ -381,6 +381,43 @@ final class ComposerTests: XCTestCase {
         XCTAssertTrue(draft.closed, "a soft line alone never stops it")
     }
 
+    /// Send later's popover opens with the keyboard on its first preset, as the page's does, never in the date and
+    /// time of one's own: Return there schedules the message in an hour, and ↓ moves to the next.
+    func testSendLaterOpensWithTheKeyboardOnItsFirstPreset() async throws {
+        _ = NSApplication.shared
+        let draft = written("Later")
+        let window = NSWindow(contentRect: NSRect(x: -20_000, y: -20_000, width: 400, height: 300), styleMask: [.titled],
+                              backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.alphaValue = 0
+        let anchor = NSView(frame: NSRect(x: 20, y: 20, width: 40, height: 20))
+        window.contentView = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+        window.contentView?.addSubview(anchor)
+        window.makeKeyAndOrderFront(nil)
+        defer {
+            window.orderOut(nil)
+            window.contentView = nil
+        }
+        let popover = NSPopover()
+        popover.contentViewController = NSHostingController(rootView: LaterChoices(composer: draft).meadowLight(.day))
+        popover.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .maxY)
+        defer { popover.close() }
+        let shown = try XCTUnwrap(popover.contentViewController?.view.window)
+        await until { shown.isKeyWindow || shown.firstResponder !== shown }
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertFalse(shown.firstResponder is NSDatePicker, "not the date and time: \(String(describing: shown.firstResponder))")
+        XCTAssertFalse(shown.firstResponder is NSTextView, "nor a field's editor")
+        func press(_ code: UInt16, _ key: String) throws {
+            shown.sendEvent(try XCTUnwrap(NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: shown.windowNumber,
+                context: nil, characters: key, charactersIgnoringModifiers: key, isARepeat: false, keyCode: code)))
+        }
+        let hour = Int(Date().timeIntervalSince1970) + 3600
+        try press(36, "\r")
+        await until { !host.sent.isEmpty }
+        XCTAssertEqual(Double(try XCTUnwrap(host.sent.first?.after)), Double(hour), accuracy: 5, "in 1 hour")
+    }
+
     // MARK: Snippets and pictures
 
     func testTabBringsInASnippetThenGoesThroughItsPlaceholders() {
