@@ -49,6 +49,7 @@ struct MessageContent: View {
     @State private var height: CGFloat?
     @Environment(\.meadow) private var meadow
     @Environment(\.meadowLight) private var light
+    @Environment(\.linkHover) private var linkHover
 
     private var images: Bool { shownImages.contains(copy) }
     private var blocked: Int { images ? 0 : opened.blockedImages + opened.blockedCssUrls }
@@ -104,7 +105,8 @@ struct MessageContent: View {
                           },
                           measured: { measured in
                               if abs((height ?? -1) - measured) >= 1 { height = measured }
-                          })
+                          },
+                          hovered: { linkHover?.url = $0 })
                     .id("\(url.absoluteString)\n\(look.css)\n\(look.paper ?? "")")
                     .frame(height: min(shown, MailFrame.tallest))
                     .clipShape(RoundedRectangle(cornerRadius: look.sheet ? 12 : 0))
@@ -171,6 +173,68 @@ struct Fetching: View {
             slow = true
         }
         .accessibilityLabel("Loading")
+    }
+}
+/// Where the link the pointer is over in a body goes, while it is over one, for the status line at the foot of what
+/// reads it: the reading pane, or a message's own window.
+@MainActor
+@Observable
+final class LinkHover {
+    var url: URL?
+
+    /// The words the line says: a web address whole, a mail address as the address alone.
+    static func words(_ url: URL) -> String {
+        guard url.scheme?.lowercased() == "mailto" else { return url.absoluteString }
+        let address = url.absoluteString.dropFirst("mailto:".count).split(separator: "?").first.map(String.init) ?? ""
+        return address.removingPercentEncoding ?? address
+    }
+}
+
+extension EnvironmentValues {
+    /// What reads a body keeps its status line here; none where a body is drawn away from one.
+    @Entry var linkHover: LinkHover?
+}
+
+extension View {
+    /// A status line at the foot of this, as a Mac's browser keeps one: where the link the pointer is over in a body
+    /// inside goes, before anything opens it.
+    func linkStatusLine() -> some View {
+        modifier(LinkStatusLine())
+    }
+}
+
+private struct LinkStatusLine: ViewModifier {
+    @State private var hover = LinkHover()
+
+    func body(content: Content) -> some View {
+        content
+            .environment(\.linkHover, hover)
+            .overlay(alignment: .bottomLeading) { LinkStatus(hover: hover) }
+    }
+}
+
+/// The line itself: the address in the paper's raised face, a hairline round it, cut in its middle when long; nothing
+/// while the pointer is over no link. VoiceOver reads a link where it stands, so the line is for the eye only.
+struct LinkStatus: View {
+    let hover: LinkHover
+    @Environment(\.meadow) private var meadow
+
+    var body: some View {
+        if let url = hover.url {
+            Text(verbatim: LinkHover.words(url))
+                .font(.meadow(.ui, 12))
+                .foregroundStyle(meadow.ink2)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(meadow.paperRaised, in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(meadow.line))
+                .frame(maxWidth: 560, alignment: .leading)
+                .padding(10)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
     }
 }
 #endif

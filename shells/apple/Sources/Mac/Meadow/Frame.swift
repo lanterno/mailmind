@@ -95,6 +95,7 @@ struct MeadowFrame<Pane: View>: View {
                 .placed(layout.list ?? layout.full, named: String(localized: "Message list"))
             pane
                 .environment(\.meadowPaneWidth, layout.pane?.width ?? 0)
+                .linkStatusLine()
                 .meadowPanel()
                 .toastRoom(.pane)
                 .placed(layout.pane, named: String(localized: "Reading pane"))

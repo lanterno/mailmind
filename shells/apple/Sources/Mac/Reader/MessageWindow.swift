@@ -238,6 +238,7 @@ struct MessageWindowContent: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .environment(\.meadowPaneWidth, room.size.width)
             }
+            .linkStatusLine()
             .environment(\.readerFind, find)
         }
         .background { ZStack { meadow.paper; MeadowGrain() }.ignoresSafeArea() }

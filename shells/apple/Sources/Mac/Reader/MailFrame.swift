@@ -21,8 +21,8 @@ struct FrameLink: Equatable, Sendable {
 ///
 /// - The look and the folded quote are written into the document as the scheme answers it: a `<style>` in its head
 ///   and a `<details>` round the quote, which the document's policy allows and which run nothing.
-/// - Link clicks and the content's height are told by a short script of the app's own in an isolated content world
-///   (`FrameScript`). WebKit runs the mail's world with JavaScript off, so nothing of the mail runs at all, and the
+/// - Link clicks, the link the pointer is over and the content's height are told by a short script of the app's own
+///   in an isolated content world (`FrameScript`). WebKit runs the mail's world with JavaScript off, so nothing of the mail runs at all, and the
 ///   isolated world shares only the document's tree with it: its globals, and the one message handler it posts to,
 ///   are invisible from the mail's world. The script reads an `<a>`'s href and text, takes the click so the frame goes
 ///   nowhere, and measures the body; the app treats what it posts as the mail's data, checking a link before anything
@@ -37,6 +37,8 @@ struct MailFrame: NSViewRepresentable {
     let open: (FrameLink) -> Void
     /// The content's height in points once it is known, which the reader gives the frame.
     let measured: (CGFloat) -> Void
+    /// Where the link the pointer is over goes, as a status line says it; nil once it is over none.
+    var hovered: (URL?) -> Void = { _ in }
 
     func makeCoordinator() -> FrameGuard {
         FrameGuard(core: core, url: url, look: look, html: html)
@@ -66,6 +68,7 @@ struct MailFrame: NSViewRepresentable {
             switch message {
             case .link(let link): open(link)
             case .height(let height): measured(height)
+            case .hover(let url): hovered(url)
             }
         }
         view.load(URLRequest(url: url))
@@ -81,6 +84,7 @@ struct MailFrame: NSViewRepresentable {
             switch message {
             case .link(let link): open(link)
             case .height(let height): measured(height)
+            case .hover(let url): hovered(url)
             }
         }
     }
@@ -89,20 +93,29 @@ struct MailFrame: NSViewRepresentable {
         view.stopLoading()
         view.navigationDelegate = nil
         FrameScript.remove(from: view.configuration.userContentController)
+        // A frame that goes leaves no link said under the pointer.
+        coordinator.told?(.hover(nil))
         coordinator.told = nil
         coordinator.find?.remove(view)
     }
 }
 
-/// What the app's script in the frame tells: a link taken, or the content's height.
+/// What the app's script in the frame tells: a link taken, the content's height, or where the link the pointer is
+/// over goes.
 enum FrameMessage: Equatable {
     case link(FrameLink)
     case height(CGFloat)
+    /// The link under the pointer, as `hover(href:)` reads it: nil for none, or one MailMind wouldn't open.
+    case hover(URL?)
 
     /// A message as the script posts it, or nil for anything else. The text is the mail's, so only what fits is read.
     init?(_ body: Any) {
         guard let fields = body as? [String: Any], let kind = fields["kind"] as? String else { return nil }
         switch kind {
+        case "hover":
+            // Only the href, as a string, and nothing beside it.
+            guard Set(fields.keys) == ["kind", "href"], let href = fields["href"] as? String else { return nil }
+            self = .hover(Self.hover(href: href))
         case "link":
             guard let href = fields["href"] as? String, let text = fields["text"] as? String else { return nil }
             self = .link(FrameLink(href: String(href.prefix(8192)), text: String(text.prefix(2000))))
@@ -113,10 +126,23 @@ enum FrameMessage: Equatable {
             return nil
         }
     }
+
+    /// Where a link the pointer is over goes, to say in the status line: a web address or a mail address, whole and
+    /// no longer than a link can be (`LinkOpening`'s schemes); nil for none, an empty href, or one MailMind wouldn't
+    /// open (a script's, a file's, a fragment of the mail's own), which the line then leaves unsaid.
+    static func hover(href: String) -> URL? {
+        let href = href.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !href.isEmpty, href.count <= 8192, !href.unicodeScalars.contains(where: { $0.properties.generalCategory == .control }),
+              let url = URL(string: href), let scheme = url.scheme?.lowercased(),
+              ["http", "https", "mailto"].contains(scheme) else { return nil }
+        if scheme != "mailto", url.host?.isEmpty ?? true { return nil }
+        return url
+    }
 }
 
 /// The app's script in a frame, in a content world of its own: it takes link clicks (a middle click too, as the
-/// page's does) and says how tall the content is whenever that changes. The mail's world can't see it or post to it.
+/// page's does), says the href of the link the pointer comes onto and that it has left it (an empty href), and says
+/// how tall the content is whenever that changes. The mail's world can't see it or post to it.
 @MainActor
 enum FrameScript {
     static let world = WKContentWorld.world(name: "mailmind-frame")
@@ -140,6 +166,18 @@ enum FrameScript {
           };
           document.addEventListener("click", take, true);
           document.addEventListener("auxclick", take, true);
+          let over = null;
+          const hover = (a) => {
+            if (a === over) return;
+            over = a;
+            post({ kind: "hover", href: a ? a.getAttribute("href") || "" : "" });
+          };
+          document.addEventListener("mouseover", (e) => {
+            const t = e.target;
+            const at = t && t.nodeType === 1 ? t : t && t.parentElement;
+            hover(at && at.closest ? at.closest("a[href]") : null);
+          }, true);
+          document.addEventListener("mouseout", (e) => { if (!e.relatedTarget) hover(null); }, true);
           const height = () => {
             const root = document.documentElement, body = document.body;
             if (!body) return 0;
