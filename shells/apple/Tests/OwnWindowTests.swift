@@ -222,6 +222,44 @@ final class OwnWindowTests: XCTestCase {
         window.contentView = nil
     }
 
+    /// Under a layout whose letters aren't Latin (Arabic's characters on the US key codes, as macOS hands them over),
+    /// a key nothing took is the reader's as the key it stands on: س stars and ث archives, as s and e do. With ⌘ held
+    /// it is the menus', and a field gets the Arabic typed in it.
+    func testUnderANonLatinLayoutAKeyIsTheOneItStandsOn() async throws {
+        let close = try KeyLayouts.arabic()
+        defer { close() }
+        let server = OpenedMessageVerbsTests.server()
+        let mailbox = await mailbox(server)
+        let reader = ReaderModel()
+        reader.hold(Self.copy, OpenedMessageVerbsTests.head(Self.copy, thread: nil))
+        let verbs = MessageWindowVerbs(copy: Self.copy, mailbox: mailbox, reader: reader, routes: server.wire)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled],
+                              backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let content = NSView(frame: window.contentLayoutRect)
+        window.contentView = content
+        defer { window.contentView = nil }
+        MessageWindowKeys.Catcher.hang(on: window).verbs = verbs
+
+        XCTAssertTrue(window.makeFirstResponder(content))
+        window.sendEvent(try KeyLayouts.event("س", 1, held: .command, in: window))
+        window.sendEvent(try KeyLayouts.event("س", 1, in: window))
+        await until { server.asked(API.Post.Flag.path).count == 1 }
+
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 100, height: 22))
+        content.addSubview(field)
+        XCTAssertTrue(window.makeFirstResponder(field))
+        window.sendEvent(try KeyLayouts.event("ث", 14, in: window))
+        XCTAssertEqual(field.currentEditor()?.string, "ث", "typed in the field")
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertTrue(server.asked(API.Post.Archive.path).isEmpty, "no e reached the message")
+
+        XCTAssertTrue(window.makeFirstResponder(content))
+        window.sendEvent(try KeyLayouts.event("ث", 14, in: window))
+        await until { !server.asked(API.Post.Archive.path).isEmpty }
+        XCTAssertEqual(server.asked(API.Post.Flag.path).count, 1, "⌘س starred nothing")
+    }
+
     // MARK: Where it opens
 
     /// A second window over the first opens a step down and to the right of it, a third further on, as a Mac cascades;

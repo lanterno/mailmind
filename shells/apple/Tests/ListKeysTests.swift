@@ -100,6 +100,62 @@ final class ListKeysTests: XCTestCase {
         XCTAssertFalse(MailboxTableView.tablesOwn(Int(("x" as Character).asciiValue!)))
     }
 
+    /// Under a layout whose letters aren't Latin (Arabic, its characters on the US key codes, as macOS hands them
+    /// over), each key does what it does under ABC: ت is j, ي is d, ث is e, and ل then س goes to Sent. With ⌘ held it
+    /// is the menus', and a field gets the Arabic typed in it, from the list's table or from the window behind it.
+    func testUnderANonLatinLayoutEachKeyIsTheOneItStandsOn() async throws {
+        let close = try KeyLayouts.arabic()
+        defer { close() }
+        let server = Fixture.server(rows: Array(Fixture.inbox.prefix(6)))
+        let (app, controller) = try await table(server: server)
+        let table = controller.table
+        // A message or its conversation, as the list shows them.
+        func trashed() -> Int { server.asked(API.Post.Trash.path).count + server.asked(API.Post.ThreadTrash.path).count }
+        func archived() -> Int {
+            server.asked(API.Post.Archive.path).count + server.asked(API.Post.ThreadArchive.path).count
+        }
+        table.selectRowIndexes(IndexSet(integer: 1), byExtendingSelection: false)
+        press("ت", table, code: 38)
+        XCTAssertEqual(app.selection.copy?.key, 3, "ت is j: on to the next row")
+        press("ن", table, code: 40)
+        XCTAssertEqual(app.selection.copy?.key, 2, "ن is k: back up")
+        press("ي", table, code: 2, held: .command)
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(trashed(), 0, "⌘ي is the menus', never d")
+        press("ي", table, code: 2)
+        await until { trashed() == 1 }
+        press("ث", table, code: 14)
+        await until { archived() == 1 }
+        press("ل", table, code: 5)
+        press("س", table, code: 1)
+        XCTAssertEqual(app.place, .folder(account: Fixture.ada, folder: "Sent"), "ل then س is g s")
+
+        // A field keeps the Arabic typed in it, and nothing is filed.
+        let window = window()
+        let host = NSHostingView(rootView: Color.clear.frame(width: 860, height: 800))
+        window.contentView = host
+        host.addSubview(controller.scrollView)
+        UntakenKeys.Catcher.hang(on: window, for: app.mailbox)
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 100, height: 22))
+        host.addSubview(field)
+        XCTAssertTrue(window.makeFirstResponder(field))
+        window.sendEvent(try KeyLayouts.event("ث", 14, in: window))
+        window.sendEvent(try KeyLayouts.event("ي", 2, in: window))
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(field.currentEditor()?.string, "ثي", "the field gets what was typed")
+        XCTAssertEqual(archived(), 1, "and nothing is filed")
+        XCTAssertEqual(trashed(), 1)
+
+        // From the window behind the list, a key nothing took goes on to the list as the key it stands on.
+        XCTAssertTrue(window.makeFirstResponder(host))
+        let before = app.selection.copy
+        window.sendEvent(try KeyLayouts.event("ت", 38, in: window))
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertNotEqual(app.selection.copy, before, "ت moves the list, as j does")
+        XCTAssertTrue(window.firstResponder === table, "and the list has the keyboard")
+        window.contentView = nil
+    }
+
     func testWhileADialogIsUpTheListsKeysWait() async throws {
         let (app, controller) = try await table()
         let table = controller.table

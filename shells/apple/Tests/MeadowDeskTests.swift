@@ -343,6 +343,54 @@ final class MeadowDeskTests: XCTestCase {
         XCTAssertEqual(routes.sent("POST", "/api/rules").count, 1, "an n typed in a field decides no one")
     }
 
+    /// Under a layout whose letters aren't Latin (Arabic's characters on the US key codes, as macOS hands them over),
+    /// the gate's Y and N are the keys they stand on: غ lets the visitor in. A field still gets the Arabic typed in it,
+    /// and decides no one.
+    func testUnderANonLatinLayoutTheGatesKeysAreTheOnesTheyStandOn() async throws {
+        let close = try KeyLayouts.arabic()
+        defer { close() }
+        let routes = DeskRoutes()
+        routes.answer("GET", "/api/screener", DeskFixture.screener)
+        routes.answer("GET", "/api/search", API.SearchAnswer.searchPage(API.SearchPage(
+            generated: "2026-11-15T09:00:00Z", hasMore: false, items: [], offset: 0, ok: true, query: "",
+            scope: "account")))
+        routes.answer("POST", "/api/rules", API.RuleChanged(ok: true, reclassified: 0, rules: DeskFixture.rules,
+                                                            token: "hello@studio.example.test", trashed: false))
+        let model = ScreenerModel(account: "ada@example.test", link: CoreLink(routes), notices: DeskNotices())
+        await model.load()
+        let host = NSHostingView(rootView: VStack(spacing: 0) {
+            TextField("Search", text: .constant(""))
+            ScreenerScreen(model: model)
+        }
+        .meadowLight(.day))
+        host.frame = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        defer { window.contentView = nil }
+        func settle() async throws {
+            for _ in 0..<20 {
+                host.layoutSubtreeIfNeeded()
+                try await Task.sleep(for: .milliseconds(10))
+            }
+        }
+        try await settle()
+
+        // The gate holds the keyboard as it shows: غ is Y.
+        window.sendEvent(try KeyLayouts.event("غ", 16, in: window))
+        try await settle()
+        XCTAssertEqual(routes.sent("POST", "/api/rules").first?["token"], .string("hello@studio.example.test"))
+        XCTAssertEqual(routes.sent("POST", "/api/rules").first?["verdict"], .string("keep"))
+
+        // A field with the keyboard keeps what is typed in it.
+        let field = try XCTUnwrap(Self.views(in: host).first { $0 is NSTextField })
+        window.makeFirstResponder(field)
+        window.sendEvent(try KeyLayouts.event("ر", 45, in: window))
+        try await settle()
+        XCTAssertEqual((window.firstResponder as? NSTextView)?.string, "ر", "the field gets the Arabic typed")
+        XCTAssertEqual(routes.sent("POST", "/api/rules").count, 1, "a ر typed in a field decides no one")
+    }
+
     private static func views(in view: NSView) -> [NSView] {
         [view] + view.subviews.flatMap(views(in:))
     }
