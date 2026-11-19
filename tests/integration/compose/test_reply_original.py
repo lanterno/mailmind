@@ -72,7 +72,9 @@ def held_for_a_reply(app, world):
     original = world.row(LUNCH)
     reply(app, original["pk"])
     assert app.post("/api/archive", w.copy_of(original["pk"])).json["ok"]
-    assert query("SELECT 1 FROM messages WHERE pk=?", original["pk"]) == []
+    # Its row followed it to Archive; gone from there too, as a sync that found it moved on would leave it.
+    assert query("SELECT folder FROM messages WHERE pk=?", original["pk"]) == [{"folder": "Archive"}]
+    execute("DELETE FROM messages WHERE pk=?", original["pk"])
     bystander = world.row(OTHER)
     another_message_takes(original["pk"], bystander["pk"])
     return original, bystander
