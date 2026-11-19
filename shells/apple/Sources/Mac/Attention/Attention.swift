@@ -51,6 +51,9 @@ final class AttentionModel {
     /// before the verb is sent, while the list still holds it, and run once the server has taken it: the desk's moves
     /// on as File does (`Mailbox.leaving`).
     @ObservationIgnored var leaving: @MainActor ([MailCopy]) -> @MainActor () -> Void = { _ in {} }
+    /// The subject of the one message a verb acts on when it isn't the one on screen, for words that say which
+    /// (`Mailbox.subjectAway`); nil when it is, or for several.
+    @ObservationIgnored var naming: @MainActor ([MailCopy]) -> String? = { _ in nil }
 
     init(link: CoreLink, notices: DeskNotices) {
         self.link = link
@@ -70,11 +73,12 @@ final class AttentionModel {
             body.copies = copies.map(\.aCopy)
             body.undoGroup = newUndoGroup()
         }
-        // Snoozed, it leaves the list until it wakes.
+        // Snoozed, it leaves the list until it wakes, and the words say until when, and which (`SnoozeWords`).
+        let subject = naming(copies)
         await act(copies, left: leaving(copies),
                   fail: { Self.couldnt(String(localized: "Couldn’t snooze"), $0) }) { routes in
-            _ = try await routes.post(API.Post.Snooze.self, body)
-            return (String(localized: "Snoozed"), true)
+            let snoozed = try await routes.post(API.Post.Snooze.self, body)
+            return (SnoozeWords.said(until: snoozed.until, count: copies.count, subject: subject), true)
         }
     }
 

@@ -453,6 +453,15 @@ extension Mailbox {
         return .some(nil)
     }
 
+    /// The subject of the one message another area's verb acted on, when it isn't the message on screen (a row's
+    /// clock, the brief's card), so its words can say which. Nil for the message open, for several, or for one the
+    /// window doesn't hold.
+    func subjectAway(_ copies: [MailCopy]) -> String? {
+        guard copies.count == 1, let copy = copies.first, copy != app?.selection.copy,
+              let subject = heldRow(of: copy)?.subject, !subject.isEmpty else { return nil }
+        return subject
+    }
+
     /// Where the reader goes once `copies` leave the place shown by another area's verb (a snooze, Reply Later's Done):
     /// worked out now, while the list and the lane still hold them, and gone to once the server has taken them, as
     /// File goes.
