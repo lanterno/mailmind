@@ -171,6 +171,19 @@ final class ReadOnlyTests: XCTestCase {
         XCTAssertEqual(OutboxTray.why(draft(kept: false), readOnly: false), "reaches the server once it’s back")
     }
 
+    /// A change given back says why in the page's words: a folder another app deleted is not the server refusing it.
+    func testAChangeGivenBackSaysWhyAsThePageDoes() {
+        func change(_ error: String) -> API.PendingChange {
+            API.PendingChange(account: Fixture.ada, attempts: 1, createdAt: "2026-11-19T09:00:00+00:00",
+                              dest: "Plans", error: error, folder: "INBOX", id: 1, nextAttemptAt: 0, op: "move",
+                              state: "error")
+        }
+        XCTAssertEqual(OutboxTray.why(change("folder_gone"), readOnly: false),
+                       "its folder was deleted or renamed in another app")
+        XCTAssertEqual(OutboxTray.why(change("refused"), readOnly: false), "the server refused it")
+        XCTAssertEqual(OutboxTray.why(change("something else"), readOnly: false), "couldn’t reach the server")
+    }
+
     // MARK: Sending
 
     private func readOnlySend(_ composing: Composing, digest: API.Digest) -> (FakeRoutes, () -> [UUID]) {
