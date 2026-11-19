@@ -3,7 +3,8 @@ import PDFKit
 import SwiftUI
 import XCTest
 
-/// A message in a window of its own shows what the pane's reader shows for it: the cards the desk puts in a reader.
+/// A message in a window of its own shows and does what the pane's reader does for it: the cards the desk puts in a
+/// reader, and what its verbs say with their Undo.
 @MainActor
 final class OwnWindowTests: XCTestCase {
     private static let key = "5c7e9a1b3d5f7a9c2e4b6d8f0a1c3e5b7d9f2a4c6e8b0d1f3a5c7e9b2d4f6a8c"
@@ -54,6 +55,18 @@ final class OwnWindowTests: XCTestCase {
         return opened
     }
 
+    /// The window over `copy`, as `MessageWindow` makes it, its reader holding `opened`.
+    private func window(_ core: Core, _ mailbox: Mailbox, opened: API.MessageOpened, server: FakeServer,
+                        room: ToastRoom? = nil) -> (AnyView, MessageWindowVerbs)
+    {
+        let reader = ReaderModel()
+        reader.hold(Self.copy, opened)
+        let verbs = MessageWindowVerbs(copy: Self.copy, mailbox: mailbox, reader: reader, routes: server.wire)
+        let content = MessageWindowContent(core: core, copy: Self.copy, reader: reader, find: ReaderFind(), verbs: verbs,
+                                           room: room)
+        return (MessageWindow.inDesk(of: mailbox, content), verbs)
+    }
+
     /// What `view` says, drawn as a PDF 680 points wide, its lines joined.
     private static func words(_ view: some View) -> String {
         let data = NSMutableData()
@@ -92,5 +105,23 @@ final class OwnWindowTests: XCTestCase {
 
         mailbox.leave()
         XCTAssertFalse(shown().contains(DeskFixture.invite.summary), "the mail window gone, its desk goes with it")
+    }
+
+    // MARK: What its verbs say
+
+    /// Delete from the window says so with Undo in the window too, where the person is, as well as in the mail
+    /// window's toast.
+    func testDeleteSaysSoWithUndoInTheWindowToo() async throws {
+        let core = try await openCore()
+        let server = OpenedMessageVerbsTests.server()
+        let mailbox = await mailbox(server)
+        let (view, verbs) = window(core, mailbox, opened: OpenedMessageVerbsTests.head(Self.copy, thread: nil),
+                                   server: server)
+        verbs.file(.trash)
+        await until { !server.asked(API.Post.Trash.path).isEmpty }
+        await until { mailbox.toast?.undo != nil }
+        XCTAssertTrue(verbs.left, "the message has left: the window closes")
+        let said = try XCTUnwrap(mailbox.toast?.text)
+        XCTAssertTrue(Self.words(view).contains(said), "the window says “\(said)” too")
     }
 }
