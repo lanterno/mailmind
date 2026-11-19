@@ -4,13 +4,22 @@ import Foundation
 /// What the mailbox says, in the page's words (features/mailbox/rows.ts, app/App.tsx, lib/emptyWords.ts), so a person
 /// reads the same thing in the app and the page.
 enum Words {
-    /// A folder's name as the rail shows it: its role, or its own name for one of a person's (`roleLabel`).
+    /// A folder's name as the rail shows it: its role, or its own name for one of a person's (`roleLabel`). A nested
+    /// folder is called by its last part ("Clients", not "Folders/Clients"); the server is still sent its whole name.
     static func role(_ folder: API.RailFolder) -> String {
         switch folder.role {
-        case "custom": folder.name
+        case "custom": ownName(folder)
         case "all": String(localized: "All mail")
         default: folder.role.prefix(1).uppercased() + folder.role.dropFirst()
         }
+    }
+
+    /// A folder's own name, its last part (`own_name`). The rail kept for when no server answers names each folder
+    /// whole, knowing no separator: there its last part by "/" is the one a person gave it.
+    static func ownName(_ folder: API.RailFolder) -> String {
+        let own = folder.ownName.isEmpty ? folder.name : folder.ownName
+        guard own == folder.name, let last = own.split(separator: "/").last, own.contains("/") else { return own }
+        return String(last)
     }
 
     /// The part of an address before the @ (`shortAddress`).
