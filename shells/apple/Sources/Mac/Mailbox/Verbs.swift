@@ -296,8 +296,12 @@ extension Mailbox {
         let back = reopens
         reopens = nil
         var undone = false
+        let answered = undoing?()
+        var answer: API.Undone?
+        defer { answered?(answer) }
         do {
             let done = try await calls.post(API.Post.Undo.self, API.NoBody())
+            answer = done
             if let failed = done.failed, failed > 0 {
                 say("\(failed) couldn’t be restored — press ⌘Z to try again")
                 undone = (done.reversed ?? 0) > 0

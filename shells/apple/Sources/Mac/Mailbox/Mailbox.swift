@@ -133,6 +133,9 @@ final class Mailbox {
     /// The sentence being turned into a search now, if one is; and the search left before its translation came.
     @ObservationIgnored var translating: (@MainActor () -> String?)?
     @ObservationIgnored var stopsTranslating: (() -> Void)?
+    /// The desk's: an Undo is asked, and what it does once answered with what it put back, or nil when it failed, so
+    /// mail an Undo puts back in an Inbox is never said to be new (`SinceLooked.undone`).
+    @ObservationIgnored var undoing: (@MainActor () -> @MainActor (API.Undone?) -> Void)?
     /// The areas that have hung their hooks here, each once a window however often its view appears.
     @ObservationIgnored private var joined: Set<String> = []
     /// Counted up each time the hooks are let go (`leave`): an area's view that is still on screen joins again when
@@ -168,6 +171,7 @@ final class Mailbox {
         keepsLiteral = nil
         translating = nil
         stopsTranslating = nil
+        undoing = nil
         joinRound += 1
     }
 

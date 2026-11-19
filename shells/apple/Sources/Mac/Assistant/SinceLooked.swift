@@ -37,12 +37,20 @@ final class SinceLooked {
     static let firstLook: TimeInterval = 6 * 3600
     /// A burst of mail is one line: it's written this long after the last of it.
     static let wait = Duration.milliseconds(1500)
+    /// How long the next sync has to find mail an Undo put back in an Inbox, which isn't new.
+    static let comingBack: TimeInterval = 120
 
     private(set) var pending: Pending?
     @ObservationIgnored var isActive: @MainActor () -> Bool = { NSApp?.isActive ?? true }
     @ObservationIgnored var now: @MainActor () -> Date = Date.init
     @ObservationIgnored private let link: CoreLink
     @ObservationIgnored private var looks: [String: Date] = [:]
+    /// Mail an Undo put back in each account's Inbox, which the next sync finds there as if it came: how many, and
+    /// until when the sync has to find them.
+    @ObservationIgnored private var returning: [String: (count: Int, until: Date)] = [:]
+    /// What each account's new mail counted while an Undo was asked and not yet answered, which its answer may say
+    /// was mail coming back; nil while none is asked.
+    @ObservationIgnored private var duringUndo: [String: Int]?
     @ObservationIgnored private var aiOn = false
     @ObservationIgnored private var writing = false
     @ObservationIgnored private var soon: Task<Void, Never>?
@@ -88,13 +96,51 @@ final class SinceLooked {
         soon?.cancel()
     }
 
-    /// New mail (`onNewMail`): said unless it landed on screen, and its line written a moment after the burst.
+    /// New mail (`onNewMail`): said unless it landed on screen, and its line written a moment after the burst. Mail an
+    /// Undo put back is never new: it is taken off what the sync found.
     func newMail(_ said: Arrived, on place: Place?, ai: Bool) {
         let account = said.account ?? "", folder = said.folder ?? "INBOX"
-        guard !Self.landsOn(place, account: account, folder: folder) else { return }
-        add(count: max(said.count ?? 1, 1), woke: 0, account: account)
+        var count = max(said.count ?? 1, 1)
+        if folder.uppercased() == "INBOX" { count -= cameBack(count, to: account) }
+        guard count > 0, !Self.landsOn(place, account: account, folder: folder) else { return }
+        add(count: count, woke: 0, account: account)
+        if duringUndo != nil { duringUndo?[account, default: 0] += count }
         aiOn = ai
         writeSoon()
+    }
+
+    /// An Undo is asked: what new mail comes before its answer may be the mail it puts back.
+    func undoing() {
+        duringUndo = [:]
+    }
+
+    /// An Undo put `count` messages back in `account`'s `folder` (its answer), or failed (nil): what is back in an
+    /// Inbox is never new mail. What the sync found of it already is taken off the pill, and the rest is waited for.
+    func undone(account: String?, folder: String?, count: Int) {
+        let early = duringUndo ?? [:]
+        duringUndo = nil
+        guard let account, (folder ?? "").uppercased() == "INBOX", count > 0 else { return }
+        let found = min(early[account] ?? 0, count)
+        if found > 0, var held = pending {
+            held.count -= found
+            pending = held.count > 0 || held.woke > 0 ? held : nil
+            if pending == nil { soon?.cancel() }
+        }
+        guard count > found else { return }
+        let was = returning[account].flatMap { $0.until > now() ? $0.count : nil } ?? 0
+        returning[account] = (was + count - found, now().addingTimeInterval(Self.comingBack))
+    }
+
+    /// How many of `count` messages found in `account`'s Inbox are mail an Undo put back, which is waited for no more.
+    private func cameBack(_ count: Int, to account: String) -> Int {
+        guard let back = returning[account] else { return 0 }
+        guard back.until > now() else {
+            returning[account] = nil
+            return 0
+        }
+        let taken = min(back.count, count)
+        returning[account] = back.count > taken ? (back.count - taken, back.until) : nil
+        return taken
     }
 
     /// Mail back from a snooze with no Inbox on screen to show it (`onSnoozeWake`).

@@ -157,6 +157,7 @@ final class Desk {
             // A row's snooze button asks when, as the row's menu does.
             mailbox.snoozes = { rows in self?.askWhen(rows.map(MailCopy.init)) }
             mailbox.opensBrief = { self?.openBrief(deliberately: $0) }
+            mailbox.undoing = { self?.undoing() ?? { _ in } }
             mailbox.rowMenu.append { rows in
                 guard let self else { return [] }
                 return self.commands(for: rows.map(MailCopy.init), stack: self.stack).map { command in
@@ -355,8 +356,12 @@ final class Desk {
     /// The last action taken back, as the page's Undo does it (`/api/undo`).
     func undo() async {
         guard let routes = link.routes else { return }
+        let answered = undoing()
+        var answer: API.Undone?
+        defer { answered(answer) }
         do {
             let undone = try await routes.post(API.Post.Undo.self, API.NoBody())
+            answer = undone
             if let failed = undone.failed, failed > 0 {
                 notices.say(String(localized: "\(failed) couldn’t be restored — Undo again to try again"))
             } else {
@@ -370,6 +375,15 @@ final class Desk {
             notices.say(String(localized: "Couldn’t undo"))
         }
         readAgain()
+    }
+
+    /// An Undo is asked, from the mailbox's toast or the desk's notice: what it puts back in an Inbox is never new
+    /// mail, so the pill leaves it out.
+    func undoing() -> @MainActor (API.Undone?) -> Void {
+        since.undoing()
+        return { [weak self] done in
+            self?.since.undone(account: done?.account, folder: done?.folder, count: done.map { $0.reversed ?? 1 } ?? 0)
+        }
     }
 
     // MARK: Screeners
