@@ -649,6 +649,37 @@ final class OpenedMessageVerbsTests: XCTestCase {
         XCTAssertEqual(asked.query, ["key": "90", "folder": "INBOX", "uid": "90"])
     }
 
+    // MARK: The empty pane
+
+    /// With several rows marked the pane says how many, as the bulk bar counts them, and what that bar does with
+    /// them; in Trash, that it restores them. With none it asks for a message to read.
+    func testTheEmptyPaneSaysHowManyAreMarkedAndWhatTheBulkBarDoes() async throws {
+        let world = await world()
+        await inbox(world.app)
+        XCTAssertEqual(PaneEmptyWords.of(world.app).title, "Pick a message to read")
+        let rows = try [0, 2, 3, 4].map { try XCTUnwrap(world.app.list?.copy(at: $0)) }
+        world.mailbox.chose(rows)
+        XCTAssertNil(world.app.selection.copy, "no message open")
+        let words = PaneEmptyWords.of(world.app)
+        XCTAssertEqual(words.title, "4 selected")
+        XCTAssertEqual(words.line,
+                       "File, delete or snooze them from the bar over the list, or press Esc to clear the selection.")
+        XCTAssertFalse(words.everything)
+
+        let trashed = Self.rows.map { row in
+            var row = row
+            row.folder = "Trash"
+            return row
+        }
+        let trash = await self.world(Self.server(rows: trashed))
+        trash.app.place = .folder(account: Fixture.ada, folder: "Trash")
+        await waiting(for: "Trash's rows") { trash.app.list?.copy(at: 2) != nil }
+        trash.mailbox.chose(try [0, 2].map { try XCTUnwrap(trash.app.list?.copy(at: $0)) })
+        XCTAssertEqual(PaneEmptyWords.of(trash.app),
+                       PaneEmptyWords(title: "2 selected", line: "Restore them from the bar over the list, or press Esc "
+                                          + "to clear the selection.", everything: false))
+    }
+
     // MARK: Undo
 
     /// The Inbox's rows, listed one at a time.
