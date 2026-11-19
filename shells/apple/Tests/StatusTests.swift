@@ -562,4 +562,23 @@ final class StatusHearsTests: XCTestCase {
         }
         XCTAssertEqual(status.pill, StatusWords.Pill(dot: .busy, text: "Couldn’t reach the server · trying again"))
     }
+
+    /// A round of summaries landed: how many still wait for one, which Settings' AI says, is read again.
+    func testSummariesLandingReadHowManyStillWait() async {
+        var digest = StatusFixtures.digest(accounts: [Fixture.ada], status: [Fixture.ada: "ok"],
+                                           last: "2026-11-14T14:59:00Z")
+        digest.ai.summariesWaiting = 3
+        let server = Fixture.server(rows: [])
+        server.on("GET", API.Get.Digest.path, digest)
+        let status = AppStatus(newMail: NewMailAlerts(notifier: SystemNotifier.Silent(), isActive: { true },
+                                                      badge: { _ in }, announce: { _ in }))
+        status.wire = server.wire
+        await status.heard(CoreEvent(id: "1", name: "summarized", data: #"{"count": 9}"#))
+        let started = ContinuousClock.now
+        while status.digest == nil {
+            guard ContinuousClock.now - started < .seconds(3) else { return XCTFail("the digest was never read again") }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertEqual(status.digest?.ai.summariesWaiting, 3)
+    }
 }

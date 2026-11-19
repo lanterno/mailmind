@@ -941,6 +941,74 @@ final class MailboxAccountsTests: XCTestCase {
     }
 }
 
+/// Summaries land with no mail changing (`summarized`): the Inbox's Needs you tab, the rail and the brief's line over
+/// the list read again and count the same mail, as the page's do.
+@MainActor
+final class MailboxSummariesTests: XCTestCase {
+    private static let landed = CoreEvent(id: "1", name: "summarized", data: #"{"count": 2}"#)
+
+    /// Every account's Inbox before the round: two messages, neither summarized, so nothing needs you yet.
+    private func server() -> FakeServer {
+        let server = Fixture.server(rows: [Fixture.row(1, seen: false), Fixture.row(2)])
+        server.on("GET", API.Get.Digest.path, DeskFixture.digest(items: []))
+        return server
+    }
+
+    /// The round landed: the first message needs you, in the Inbox's list and in the digest.
+    private func summarize(_ server: FakeServer) {
+        let rows = [Fixture.row(1, seen: false, needs: true, action: "Reply by Friday", summary: "Asks about Friday."),
+                    Fixture.row(2, summary: "For your information.")]
+        server.on("GET", API.Get.Inboxes.path) { asked in
+            FakeServer.ok(API.InboxesListing(folder: "INBOX", grouped: asked.query["group"] != nil, hasMore: false,
+                                             items: rows, offset: 0, ok: true, total: rows.count))
+        }
+        server.on("GET", API.Get.Digest.path, DeskFixture.digest(items: [
+            DeskFixture.item(1, from: "grace.hopper@example.test", name: "Grace Hopper", subject: "Message 1",
+                             action: "Reply by Friday"),
+            DeskFixture.item(2, from: "grace.hopper@example.test", name: "Grace Hopper", subject: "Message 2",
+                             needs: false, importance: 2),
+        ]))
+    }
+
+    /// The window on every account's Inbox, at its Needs you tab, with the desk keeping the rail's tallies.
+    private func opened(_ server: FakeServer) async -> (MailApp, Desk) {
+        let app = MailApp()
+        app.mailbox.wire = server.wire
+        await app.mailbox.refresh()
+        let desk = Desk()
+        desk.use(app, routes: server.wire)
+        await desk.brief.keepTallied()?.value
+        app.openList()
+        await until { app.mailbox.facts.read == 2 }
+        XCTAssertEqual(app.mailbox.tab, .needs)
+        XCTAssertEqual(app.mailbox.facts.needs, 0)
+        XCTAssertEqual(desk.brief.needs.count, 0)
+        return (app, desk)
+    }
+
+    func testSummariesLandingReadTheTabTheRailAndTheBriefsLineAgainAndNotTheFolders() async {
+        let server = server()
+        let (app, desk) = await opened(server)
+        let folders = server.asked(API.Get.Folders.path).count
+        summarize(server)
+
+        app.heard(Self.landed)
+        await desk.heard(Self.landed)
+
+        await until { app.mailbox.facts.needs == 1 && desk.brief.needs.count == 1 }
+        XCTAssertEqual(app.list?.total, 1, "the Needs you tab lists it")
+        XCTAssertEqual(desk.rail.needs(in: nil, grouped: app.mailbox.grouped), 1, "the rail counts it")
+        XCTAssertEqual(BriefLine(needs: desk.brief.needs, waiting: 0, canWait: 0).tally,
+                       "1 need you · 0 waiting · 0 can wait", "and so does the brief's line over the list")
+        XCTAssertEqual(server.asked(API.Get.Folders.path).count, folders, "the folders count unread mail, which stays")
+        withExtendedLifetime(desk) {}
+    }
+
+    func testSummariesLandingReadTheListOnScreen() {
+        XCTAssertTrue(MailApp.refreshesTheList(Self.landed))
+    }
+}
+
 /// What a test's route waits on until the test lets it go.
 private actor HeldRoute {
     private var free = false
