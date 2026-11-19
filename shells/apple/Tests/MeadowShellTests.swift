@@ -1,3 +1,4 @@
+import SwiftUI
 import XCTest
 
 /// Meadow's shell (#44): where each panel stands at the mockup's widths, the list's limits and the splitter's keys,
@@ -175,5 +176,45 @@ final class MeadowShellTests: XCTestCase {
         XCTAssertEqual(shown(720), [false, false, false, true])
         XCTAssertEqual(shown(481), [false, false, false, true])
         XCTAssertEqual(shown(480), [false, false, false, false])
+    }
+
+    func testThePanesBarGivesThingsUpInTurnUntilItFits() {
+        func shown(_ folds: [PaneBarFold]) -> [[Bool]] {
+            folds.map { [$0.keys, $0.secondLabels, $0.labels, $0.secondary] }
+        }
+        XCTAssertEqual(shown(PaneBarFold(width: 1100).further), [
+            [true, true, true, true], [false, true, true, true], [false, false, true, true],
+            [false, false, false, true], [false, false, false, false],
+        ], "the keys, the second words, every word, then the second buttons")
+        XCTAssertEqual(PaneBarFold(width: 600).further, [PaneBarFold(width: 600), .folded],
+                       "from icons, only the second buttons are left to give up")
+        XCTAssertEqual(PaneBarFold(width: 300).further, [.folded])
+    }
+
+    /// Measured in Meadow's faces over an open message, each further fold of the bar is narrower than the one before,
+    /// so the first that fits is the widest that does.
+    func testEachFoldOfThePanesBarIsNarrowerThanTheOneBefore() async throws {
+        let widths = try await barWidths()
+        for (wider, narrower) in zip(widths, widths.dropFirst()) {
+            XCTAssertLessThan(narrower, wider)
+        }
+    }
+
+    /// The pane's bar over an open message, as wide as each of its folds from the widest asks.
+    private func barWidths() async throws -> [CGFloat] {
+        _ = MeadowFonts.register()
+        let app = MailApp()
+        app.mailbox.wire = Fixture.server().wire
+        await app.mailbox.refresh()
+        app.mailbox.tab = .all
+        app.openList()
+        await until { app.list?.copy(at: 0) != nil }
+        app.mailbox.chose([try XCTUnwrap(app.list?.copy(at: 0))])
+        func width(_ fold: PaneBarFold) -> CGFloat {
+            NSHostingView(rootView: MeadowPaneBar(app: app, mailbox: app.mailbox,
+                                                  writing: PaneWriting(replyTo: app.selection.copy), only: fold)
+                .meadowLight(.day)).fittingSize.width
+        }
+        return PaneBarFold(width: 1100).further.map(width)
     }
 }
