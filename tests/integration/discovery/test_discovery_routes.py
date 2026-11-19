@@ -89,6 +89,18 @@ def test_autocomplete_goes_by_the_first_value(app):
     assert app.get("/api/contacts?q=lin").json["items"]
 
 
+def test_autocomplete_puts_whose_name_or_address_starts_with_what_was_typed_first(app):
+    """"or" is inside Lin Mori's and Noor's names, who write more, and starts Thimble & Co's address; "no" starts Noor's
+    name and Build Bot's address, and only a later word of Bea Novak's."""
+    items = app.get("/api/contacts?q=or").json["items"]
+    assert items[0]["addr"] == "orders@thimble.example.test"
+    rest = [i["n"] for i in items[1:]]
+    assert {"lin@example.test", "noor@studio.example.test"} <= {i["addr"] for i in items[1:]}
+    assert rest == sorted(rest, reverse=True), "the rest the most often first, as before"
+    assert [i["addr"] for i in app.get("/api/contacts?q=no").json["items"]] == [
+        "noor@studio.example.test", "noreply@ci.example.test", "bea@example.test"]
+
+
 def test_a_card_for_what_cant_be_an_address(app):
     for query in ("", "?addr=", "?addr=nobody", "?addr=%00"):
         r = app.get(f"/api/contact{query}")
