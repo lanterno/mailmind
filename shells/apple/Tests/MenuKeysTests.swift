@@ -28,6 +28,31 @@ final class MenuKeysTests: XCTestCase {
         return try XCTUnwrap(NSEvent(cgEvent: made))
     }
 
+    /// Over every account, Mailbox › Drafts (⌘3) goes to the first account's Drafts, as the page's g d does, and
+    /// says whose it is and why; from one account's Inbox, Sent (⌘2) goes to that account's, with nothing to say.
+    func testAFoldersKeyOverEveryAccountSaysWhoseFolderItOpened() async throws {
+        let app = MailApp()
+        self.app = app
+        let mailbox = app.mailbox
+        mailbox.wire = Fixture.server(rows: Array(Fixture.inbox.prefix(6))).wire
+        await mailbox.refresh()
+        app.openList()
+        XCTAssertEqual(app.place, .allInboxes)
+        let drafts = try Self.press(20, .maskCommand)
+        XCTAssertEqual(fired(drafts) { self.bar(mailbox: mailbox, window: nil, writing: nil) }, ["Drafts"], "enabled, and fired")
+        XCTAssertEqual(app.place, .folder(account: Fixture.ada, folder: "Drafts"))
+        let said = try XCTUnwrap(mailbox.toast?.text)
+        XCTAssertTrue(said.hasPrefix("\(mailbox.name(of: Fixture.ada))’s Drafts"), said)
+        XCTAssertTrue(said.contains("All accounts brings only the inboxes together"), said)
+
+        let before = mailbox.toast?.id
+        app.place = .folder(account: Fixture.work, folder: "INBOX")
+        let sent = try Self.press(19, .maskCommand)
+        XCTAssertEqual(fired(sent) { self.bar(mailbox: mailbox, window: nil, writing: nil) }, ["Sent"])
+        XCTAssertEqual(app.place, .folder(account: Fixture.work, folder: "[Gmail]/Sent Mail"), "the account in front's own")
+        XCTAssertEqual(mailbox.toast?.id, before, "with nothing more to say")
+    }
+
     /// Edit, Message and Mailbox as the menu bar holds them for the window in front, as AppKit's menus.
     private func bar(mailbox: Mailbox?, window: MessageWindowVerbs?, writing: MailWriting?) -> NSMenu {
         let tools = ReaderTools(print: {}, find: { [weak self] in self?.found += 1 })
