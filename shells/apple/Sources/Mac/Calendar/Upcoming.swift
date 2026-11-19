@@ -2,15 +2,32 @@
 import SwiftUI
 
 /// When an event is, in the few words a list has room for, as the page's `eventWhen` and `meetingWhen` say it. The
-/// server sends each start as an instant, or a day for one that lasts all day; this only formats it here.
+/// core sends an event's start on the person's own wall clock, "2026-11-20T11:00" with no zone (Today & next, Your
+/// Week, the meeting reminder), which the page's `new Date(start)` reads as local; this only formats it here.
 enum EventWhen {
-    /// The moment a start names: an instant, or a day's first moment here.
+    /// The moment a start names: an instant where it names its zone, a wall-clock time here where it names none (as
+    /// the core writes an event's), else a day's first moment here.
     static func moment(_ start: String, calendar: Calendar = .current) -> Date? {
         let instant = ISO8601DateFormatter()
         if let date = instant.date(from: start) { return date }
         instant.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         if let date = instant.date(from: start) { return date }
+        if let date = wallClock(start, in: calendar.timeZone) { return date }
         return SuggestedTime.day(String(start.prefix(10)), in: calendar.timeZone)
+    }
+
+    /// A time with no zone, "2026-11-20T11:00" or with its seconds, as it reads on a clock in `zone`.
+    static func wallClock(_ text: String, in zone: TimeZone) -> Date? {
+        let reader = DateFormatter()
+        reader.locale = Locale(identifier: "en_US_POSIX")
+        reader.calendar = Calendar(identifier: .gregorian)
+        reader.timeZone = zone
+        reader.isLenient = false
+        for format in ["yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd'T'HH:mm"] {
+            reader.dateFormat = format
+            if let date = reader.date(from: text) { return date }
+        }
+        return nil
     }
 
     /// [big, small]: "3:00 pm" over "today", "Sat" over "8:10 am", "Thu 6" over "all day" a week out.

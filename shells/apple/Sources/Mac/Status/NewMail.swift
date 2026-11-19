@@ -296,15 +296,17 @@ enum Soon {
         }
     }
 
-    static func next(_ upcoming: [API.UpcomingEvent], now: Date, closed: Set<String>) -> Meeting? {
+    /// The core writes a meeting's start and end on the person's wall clock (`EventWhen`), read in `calendar`'s zone.
+    static func next(_ upcoming: [API.UpcomingEvent], now: Date, closed: Set<String>,
+                     calendar: Calendar = .current) -> Meeting? {
         for event in upcoming where !event.allDay {
-            guard let start = Moment.parse(event.start) else { continue }
+            guard let start = EventWhen.moment(event.start, calendar: calendar) else { continue }
             let id = "\(event.key)|\(event.folder)|\(event.uid)|\(event.start)"
             let left = start.timeIntervalSince(now)
             guard !closed.contains(id), left <= ahead, left > -after else { continue }
             let title = event.summary.isEmpty ? String(localized: "(no title)") : event.summary
-            return Meeting(id: id, title: title, start: start, end: Moment.parse(event.end), location: event.location,
-                           organizer: event.organizer,
+            return Meeting(id: id, title: title, start: start, end: EventWhen.moment(event.end, calendar: calendar),
+                           location: event.location, organizer: event.organizer,
                            invite: MailCopy(key: event.key, folder: event.folder, uid: event.uid, account: event.account))
         }
         return nil
