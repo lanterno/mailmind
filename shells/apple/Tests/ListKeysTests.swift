@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import WebKit
 import XCTest
 
@@ -209,6 +210,55 @@ final class ListKeysTests: XCTestCase {
         XCTAssertTrue(MeadowSplitter.keepsFocus(after: tab), "Tab brings the keyboard to the splitter")
         XCTAssertFalse(MeadowSplitter.keepsFocus(after: click), "a click gives it back to the list")
         XCTAssertFalse(MeadowSplitter.keepsFocus(after: nil), "and so does the window opening")
+    }
+
+    /// A click on the window's SwiftUI (the brief's card, a lane) leaves the keyboard there, where no list key once
+    /// worked: a single key nothing takes goes on to the list, which takes the keyboard with it; where no list is
+    /// shown it runs as the list runs it, so z undoes. A field keeps every key typed in it.
+    func testTheListsKeysWorkAfterAClickOnTheWindowsSwiftUI() async throws {
+        let server = Fixture.server(rows: Array(Fixture.inbox.prefix(6)))
+        let (app, controller) = try await table(server: server)
+        let window = window()
+        let host = NSHostingView(rootView: Color.clear.frame(width: 860, height: 800))
+        window.contentView = host
+        host.addSubview(controller.scrollView)
+        let catcher = UntakenKeys.Catcher.hang(on: window, for: app.mailbox)
+        XCTAssertTrue(UntakenKeys.Catcher.hang(on: window, for: app.mailbox) === catcher, "once a window")
+        // The list took the keyboard as it came: a click on SwiftUI takes it from there.
+        try await Task.sleep(for: .milliseconds(20))
+        XCTAssertTrue(window.makeFirstResponder(host), "a click on SwiftUI: the keyboard is its")
+        func type(_ key: String, _ code: UInt16, in window: NSWindow) async throws {
+            window.sendEvent(try XCTUnwrap(NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                context: nil, characters: key, charactersIgnoringModifiers: key, isARepeat: false, keyCode: code)))
+            for _ in 0..<10 { try await Task.sleep(for: .milliseconds(10)) }
+        }
+        try await type("j", 38, in: window)
+        let first = MailCopy(try XCTUnwrap(app.list?.copy(at: 0)))
+        XCTAssertEqual(app.selection.copy, first, "j goes on to the list, which opens its first row")
+        XCTAssertTrue(window.firstResponder === controller.table, "and the list has the keyboard")
+        try await type("j", 38, in: window)
+        XCTAssertEqual(app.selection.copy, MailCopy(try XCTUnwrap(app.list?.copy(at: 1))))
+
+        // A field: what is typed is its own.
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 100, height: 22))
+        host.addSubview(field)
+        XCTAssertTrue(window.makeFirstResponder(field))
+        let open = app.selection.copy
+        try await type("k", 40, in: window)
+        XCTAssertEqual(app.selection.copy, open, "k typed in a field moves nothing")
+        XCTAssertEqual(field.currentEditor()?.string, "k")
+        window.contentView = nil
+
+        // No list shown: z undoes, as the toast says.
+        let bare = self.window()
+        let lone = NSHostingView(rootView: Color.clear.frame(width: 860, height: 800))
+        bare.contentView = lone
+        UntakenKeys.Catcher.hang(on: bare, for: app.mailbox)
+        XCTAssertTrue(bare.makeFirstResponder(lone))
+        try await type("z", 6, in: bare)
+        await until { !server.asked(API.Post.Undo.path).isEmpty }
+        bare.contentView = nil
     }
 
     // MARK: Esc
