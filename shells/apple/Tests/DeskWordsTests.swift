@@ -77,6 +77,14 @@ final class DeskWordsTests: XCTestCase {
         XCTAssertEqual(BriefWords.localDay(Date(timeIntervalSince1970: 1_794_785_400), zone: paris), "2026-11-16")
     }
 
+    /// See all opens Waiting, which holds what others wait on you for as well as what waits on them: it says how many
+    /// Waiting holds, as the tally does, not how many the card beside it lists.
+    func testSeeAllUnderWhoYoureWaitingOnSaysHowManyWaitingHolds() {
+        XCTAssertNil(BriefWords.seeAllWaiting(listed: 3, held: 5), "the card shows all three")
+        XCTAssertEqual(BriefWords.seeAllWaiting(listed: 4, held: 6), "See all 6")
+        XCTAssertEqual(BriefWords.seeAllWaiting(listed: 4, held: 0), "See all 4", "before Waiting's count is read")
+    }
+
     func testAReviewSaysWhatWeekItLookedBackOn() {
         let now = Date(timeIntervalSince1970: 1_794_739_600) // Sun 15 Nov 2026, 11:46 in Paris
         XCTAssertEqual(BriefWords.reviewRange(generated: "2026-11-15T07:00:00Z", now: now, calendar: calendar),
