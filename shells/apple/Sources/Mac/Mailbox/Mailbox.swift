@@ -86,6 +86,8 @@ final class Mailbox {
     var searchFocus = false
     /// The search field has the keyboard, as Return leaves it: the empty pane says ↓ in place of J.
     var inSearchField = false
+    /// Where the person was when they asked their mail a question: Esc on the answer goes back there (`leaveAsk`).
+    var askedFrom: Place?
     /// A text of the window's that can be edited has the keys (the search, the reader's reply box, Find, a dialog's
     /// field), as the window's first responder says (`TypingWatch`).
     var editingText = false

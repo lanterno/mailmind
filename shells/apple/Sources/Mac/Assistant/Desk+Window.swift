@@ -267,8 +267,15 @@ final class Desk {
 
     /// A question asked of your mail ("?…" in the search field), answered in the list's place.
     func ask(_ question: String) async {
-        go(.desk(.ask))
+        goToAnswer()
         await asking.ask(question)
+    }
+
+    /// To the answer in the list's place, remembering where the person was, which Esc goes back to
+    /// (`Mailbox.leaveAsk`).
+    func goToAnswer() {
+        if let place = app?.place, place != .desk(.ask) { app?.mailbox.askedFrom = place }
+        go(.desk(.ask))
     }
 
     func startPlan() {

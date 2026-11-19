@@ -11,8 +11,9 @@ extension Desk {
         return [
             Entries.Mode(prefix: "?", card: { [weak self] words, close in
                 AnyView(AskCard(model: asking, words: words) { copy in
-                    close()
+                    // Opened before the palette goes, so the answer stays beside it (`WindowOverlays.leavesAnswer`).
                     self?.openCited(copy)
+                    close()
                 })
             }, submit: { [weak self] words, _ in
                 guard AskCard.asks(words, now: asking.asking) else { return }
@@ -38,7 +39,7 @@ extension Desk {
     /// A message an answer cites, opened with the answer page in the list's place, as the answer page opens its own:
     /// the answer stays there beside it.
     func openCited(_ copy: MailCopy) {
-        go(.desk(.ask))
+        goToAnswer()
         open(copy)
     }
 }

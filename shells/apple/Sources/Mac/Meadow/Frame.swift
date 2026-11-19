@@ -144,10 +144,16 @@ struct MeadowFrame<Pane: View>: View {
     // MARK: Keys
 
     /// Esc closes the drawer or leaves focus reading, ahead of the list's own Esc, while either is there to undo and
-    /// nothing is being typed.
+    /// nothing is being typed; on an answer, where no list is, it goes back to where the question was asked.
     @ViewBuilder private var escape: some View {
         if (shell.drawerOpen || shell.focus) && !mailbox.typing {
             Button("Leave Focus Reading") { shell.escape() }
+                .keyboardShortcut(.cancelAction)
+                .opacity(0)
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
+        } else if app.place == .desk(.ask) && !mailbox.typing {
+            Button("Back") { mailbox.leaveAsk() }
                 .keyboardShortcut(.cancelAction)
                 .opacity(0)
                 .frame(width: 0, height: 0)

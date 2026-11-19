@@ -60,13 +60,24 @@ struct WindowOverlays: ViewModifier {
     @State private var toastRoom = ToastRoom()
     @State private var snoozeMenu = MeadowMenuModel()
     @State private var focus = DialogFocus()
+    /// The palette came up over an answer, which it leaves there as it goes.
+    @State private var paletteOverAnswer = false
+
+    private var shownDialog: WindowDialog? {
+        WindowDialog.shown(moving: mailbox.moving, folder: mailbox.folderAsk, savingView: mailbox.savingView,
+                           choosingTime: desk?.attention.choosingTime, contact: mailbox.contact, sheet: desk?.sheet,
+                           planned: desk?.plan.command, palette: mailbox.paletteOpen, keys: status.showingKeys)
+    }
+
+    /// Whether the palette going takes the window back from an answer to where its question was asked, as the page's
+    /// Esc stops asking: the palette asked it, no answer was there as it came up, and no message the answer cites was
+    /// opened from it, which the answer stays beside.
+    static func leavesAnswer(palette: Bool, overAnswer: Bool, place: Place?, open: MailCopy?) -> Bool {
+        palette && !overAnswer && place == .desk(.ask) && open == nil
+    }
 
     func body(content: Content) -> some View {
-        let dialog = WindowDialog.shown(moving: mailbox.moving, folder: mailbox.folderAsk, savingView: mailbox.savingView,
-                                        choosingTime: desk?.attention.choosingTime, contact: mailbox.contact,
-                                        sheet: desk?.sheet,
-                                        planned: desk?.plan.command, palette: mailbox.paletteOpen,
-                                        keys: status.showingKeys)
+        let dialog = shownDialog
         content
             .blur(radius: dialog == nil ? 0 : 2)
             .environment(\.meadowAnchors, anchors)
@@ -112,6 +123,7 @@ struct WindowOverlays: ViewModifier {
             // menu's sheet in its place), so a first press never waits armed for the palette to come back.
             .onChange(of: dialog?.kind == "palette") { _, up in
                 if !up, let desk, desk.plan.doing != nil { desk.plan.stop() }
+                if up { paletteOverAnswer = mailbox.app?.place == .desk(.ask) }
             }
     }
 
@@ -162,8 +174,14 @@ struct WindowOverlays: ViewModifier {
         return desk.paletteModes(undoKey: mailbox.singleKeys ? "Z" : "⌘Z")
     }
 
-    /// Close whatever dialog is up.
+    /// Close whatever dialog is up; the palette that asked a question takes the window back from its answer.
     private func close() {
+        var palette = false
+        if case .palette? = shownDialog { palette = true }
+        if Self.leavesAnswer(palette: palette, overAnswer: paletteOverAnswer, place: mailbox.app?.place,
+                             open: mailbox.app?.selection.copy) {
+            mailbox.leaveAsk()
+        }
         mailbox.paletteOpen = false
         mailbox.moving = nil
         mailbox.folderAsk = nil

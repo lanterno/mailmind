@@ -185,9 +185,20 @@ extension Mailbox {
         if app?.selection.copy == nil, !marking { move(by: 1) }
     }
 
-    /// Out of a search, back to the Inbox it was asked from (`leave`).
+    /// Esc on an answer: back to where the question was asked from, as the page's Esc stops asking, and the list there
+    /// takes the keyboard as it shows. Whether the window was on the answer.
+    @discardableResult
+    func leaveAsk() -> Bool {
+        guard let app, app.place == .desk(.ask) else { return false }
+        app.place = askedFrom ?? .allInboxes
+        askedFrom = nil
+        return true
+    }
+
+    /// Out of a search, back to the Inbox it was asked from (`leave`); out of an answer, back to where it was asked.
     func leaveSearch() {
         stopsTranslating?()
+        if leaveAsk() { return }
         guard case .search(let search) = app?.place else { return }
         app?.place = search.account.isEmpty ? .allInboxes : .folder(account: search.account, folder: "INBOX")
     }
