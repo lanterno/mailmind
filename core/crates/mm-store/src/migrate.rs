@@ -68,7 +68,28 @@ impl Migration {
 
 /// The core's migrations after the base, in order. Only ever grows at the end, and keeps step with the Python app's
 /// until the Python app goes: its migration 52 is this list's first.
-pub const MIGRATIONS: &[Migration] = &[];
+pub const MIGRATIONS: &[Migration] = &[Migration::new(52, m52_draft_answers)];
+
+/// Migration 52 (`m0052_draft_answers`): a draft row remembers the message it answers, the Message-ID its save names in
+/// In-Reply-To. Reply then finds a reply saved to a message after its copy has left this Mac, before Drafts is listed
+/// again.
+fn m52_draft_answers(c: &Connection) -> rusqlite::Result<()> {
+    add_column(c, "drafts", "in_reply_to TEXT")
+}
+
+/// A column added to `table` unless it has one of that name already (the Python app's `_addcol`), so a migration that
+/// adds it leaves the same when it runs again.
+fn add_column(c: &Connection, table: &str, column: &str) -> rusqlite::Result<()> {
+    let name = column.split_whitespace().next().unwrap_or_default();
+    let has: i64 =
+        c.query_row(&format!("SELECT count(*) FROM pragma_table_info('{table}') WHERE name = ?1"), [name], |r| {
+            r.get(0)
+        })?;
+    if has == 0 {
+        c.execute_batch(&format!("ALTER TABLE {table} ADD COLUMN {column}"))?;
+    }
+    Ok(())
+}
 
 /// What became of the database as it was made ready.
 #[derive(Clone, Debug, PartialEq, Eq)]
