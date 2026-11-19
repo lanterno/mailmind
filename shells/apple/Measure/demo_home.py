@@ -5,7 +5,9 @@ corpus in their folders (its dates moved up so its newest message is today), and
 data folder that goes when this ends (MAILMIND_HOME), its database encrypted with a key made for the run (MAILMIND_DB_KEY,
 never the Keychain's), the accounts' passwords in a file standing in for the login Keychain (MAILMIND_TEST_KEYCHAIN). With
 that file the core reaches no host off this machine and runs no program, and this process runs under the test suite's
-tripwire as well.
+tripwire as well. The app keeps such a run's preferences apart from yours by itself (Sources/Mac/Shared/
+RunPreferences.swift): none of your MailMind's settings or window frames are read or written, and the run's own are kept
+in the temp home, as Library/Preferences/<the app's identifier>.plist, which this checks after each run.
 
     python shells/apple/Measure/demo_home.py APP            # the app, until you quit it (or Ctrl-C here)
     python shells/apple/Measure/demo_home.py APP --smoke    # opens, waits for mail in the inbox's rows, quits: 0 if it showed
@@ -16,6 +18,7 @@ tripwire as well.
 silicon, Rosetta runs the Intel half as an Intel Mac would.
 """
 import os
+import plistlib
 import secrets
 import signal
 import statistics
@@ -42,6 +45,40 @@ LAUNCHES = 7
 # Seconds a measured launch may take. The app gives up after a minute without mail; one that never got a window
 # (started where it can't reach the screen, as in a sandbox) never measures at all.
 LIMIT = 120
+# Every build of the app is this one, a person's own MailMind and a demo's alike.
+IDENTIFIER = "io.github.lanterno.mailmind"
+
+
+def identifier(app):
+    """The bundle identifier of the app whose executable is `app`, from its Info.plist; MailMind's when it has none."""
+    info = os.path.join(os.path.dirname(os.path.dirname(app)), "Info.plist")
+    try:
+        with open(info, "rb") as file:
+            return plistlib.load(file).get("CFBundleIdentifier") or IDENTIFIER
+    except (OSError, plistlib.InvalidFileException):
+        return IDENTIFIER
+
+
+def kept_apart(home, app_identifier=IDENTIFIER):
+    """What the app kept of its preferences in the demo's home, as a dict, or None when it kept nothing there. A run
+    that kept nothing there may have used the person's own (an app built before RunPreferences, or one that lost it)."""
+    path = os.path.join(home, "Library", "Preferences", f"{app_identifier}.plist")
+    try:
+        with open(path, "rb") as file:
+            kept = plistlib.load(file)
+    except (OSError, plistlib.InvalidFileException):
+        return None
+    return kept if isinstance(kept, dict) else None
+
+
+def check_kept_apart(home, app_identifier=IDENTIFIER):
+    """Ends the demo, saying why, unless the app kept its preferences in the demo's home; else says what it kept."""
+    kept = kept_apart(home, app_identifier)
+    if kept is None:
+        sys.exit("The Mac app kept no preferences in the demo's home, so it may have read or written your own "
+                 "MailMind's: see Sources/Mac/Shared/RunPreferences.swift.")
+    keys = ", ".join(sorted(kept)) or "none set yet"
+    print(f"the Mac app kept its preferences in the demo's home, apart from yours: {keys}")
 
 
 def launch(app, env, pictures=None):
@@ -82,6 +119,7 @@ def main():
     app, flags = sys.argv[1], sys.argv[2:]
     arch = flags[flags.index("--arch") + 1] if "--arch" in flags else ""
     mode = next((flag for flag in flags if flag in ("--smoke", "--measure", "--picture")), "")
+    app_identifier = identifier(app)
     app = command(app, arch)
     rosetta = arch == "x86_64" and os.uname().machine == "arm64"
     how = f" ({arch}{', under Rosetta' if rosetta else ''})" if arch else ""
@@ -102,6 +140,7 @@ def main():
                 sys.exit("The Mac app never showed mail in its inbox on the demo home.")
             print(f"the Mac app{how} showed {said['rows_total']} rows of fictional mail, {said['first_rows_ms']} ms after it "
                   f"started, and kept {said['idle_footprint_mb']} MB idle")
+            check_kept_apart(home, app_identifier)
             return
         if mode == "--picture":
             pictures = os.path.join(ROOT, "shells", "apple", "build", "screenshots", "window")
@@ -109,12 +148,14 @@ def main():
             if said is None:
                 sys.exit("The Mac app never showed mail in its inbox on the demo home.")
             print(f"the Mac app drew its window on fictional mail into {pictures}")
+            check_kept_apart(home, app_identifier)
             return
         if mode == "--measure":
             first = launch(app, env)     # syncs the world into the new database first: not counted
             if first is None:
                 sys.exit("The Mac app never showed mail in its inbox on the demo home.")
             print(f"first launch, syncing the demo accounts: first_rows_ms={first['first_rows_ms']}")
+            check_kept_apart(home, app_identifier)
             runs = [launch(app, env) for _ in range(LAUNCHES)]
             if any(r is None for r in runs):
                 sys.exit("A measured launch never showed mail.")
@@ -131,6 +172,7 @@ def main():
             except KeyboardInterrupt:
                 running.send_signal(signal.SIGTERM)
                 running.wait()
+        check_kept_apart(home, app_identifier)
 
 
 if __name__ == "__main__":
