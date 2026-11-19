@@ -237,6 +237,10 @@ pub fn reverses(entry: &Value, row: &Command) -> bool {
         && text("src_folder") == Some(row.src_folder.as_str())
 }
 
+/// What a change given back because its folder went from the server says, for the tray: another client deleted or
+/// renamed it, which no retry undoes (`gone_folders`).
+pub const FOLDER_GONE: &str = "folder_gone";
+
 /// What a row the worker gave up on says, for the tray.
 pub fn why_given_up(outcome: Outcome) -> &'static str {
     if outcome == Outcome::Removed { "account removed" } else { outcome.name() }
