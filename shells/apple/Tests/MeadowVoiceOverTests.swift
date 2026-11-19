@@ -100,6 +100,69 @@ final class MeadowVoiceOverTests: XCTestCase {
                       "a cleanup's Undo:\n\(Self.said(read))")
     }
 
+    /// Block on Curate's Rules, as a person types a sender and presses it, with the window's desk joined: the sheet
+    /// says "Blocked …" as the server's answer comes, as the page's toast does, though a block that reads stored mail
+    /// again reads the window again too, and the words stay while a person reads them.
+    func testCuratesBlockSaysBlockedOnItsSheetAsTheAnswerComes() async throws {
+        let app = MailApp()
+        let routes = DeskRoutes()
+        routes.answer("GET", "/api/rules", API.RuleBook(rules: DeskFixture.rules))
+        var blocked = DeskFixture.rules
+        blocked.blockSenders.append("offers@spindle.example.test")
+        routes.answer("POST", "/api/rules", API.RuleChanged(ok: true, reclassified: 3, rules: blocked,
+                                                            token: "offers@spindle.example.test", trashed: false))
+        let desk = Desk()
+        desk.use(app, routes: routes)
+        let sheet = CurateSheet(model: desk.curate, nameOf: { $0 }, open: { _ in }, part: .rules, mailbox: app.mailbox)
+        let host = NSHostingView(rootView: sheet.meadowLight(.day))
+        host.sizingOptions = []
+        host.frame = CGRect(x: 0, y: 0, width: 620, height: 600)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        self.window = window
+        await until { desk.curate.rules != nil }
+        try await Task.sleep(for: .milliseconds(200))
+
+        // The sender typed in the rule's field, as a person types it.
+        let field = try XCTUnwrap(Self.fields(in: host).first)
+        XCTAssertTrue(window.makeFirstResponder(field))
+        for typed in "offers@spindle.example.test" {
+            window.sendEvent(try XCTUnwrap(NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                context: nil, characters: String(typed), charactersIgnoringModifiers: String(typed), isARepeat: false,
+                keyCode: 0)))
+        }
+        try await Task.sleep(for: .milliseconds(200))
+
+        // Block, while the server is still answering: nothing is said before it has.
+        routes.hold("POST", "/api/rules")
+        let block = try XCTUnwrap(Self.read(host).first {
+            $0.role == NSAccessibility.Role.button.rawValue && $0.label == "Block"
+        }, Self.said(Self.read(host)))
+        XCTAssertTrue(block.element.accessibilityPerformPress?() ?? false)
+        await until { !routes.sent("POST", "/api/rules").isEmpty }
+        XCTAssertEqual(routes.sent("POST", "/api/rules").first?["verdict"], .string("block"))
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertFalse(Self.read(host).contains { $0.value.hasPrefix("Blocked") }, "said only once it is done")
+
+        let answered = Date()
+        routes.release("POST", "/api/rules")
+        await until { Self.read(host).contains { $0.value == "Blocked offers@spindle.example.test" } }
+        let took = Date().timeIntervalSince(answered)
+        XCTAssertLessThan(took, 0.5, "said as the answer comes")
+        XCTAssertTrue(Self.read(host).contains { $0.label.contains("offers@spindle.example.test") },
+                      "among Always trash:\n\(Self.said(Self.read(host)))")
+        // A block that read stored mail again reads the window again, and the words stay.
+        try await Task.sleep(for: .milliseconds(1200))
+        XCTAssertTrue(Self.read(host).contains { $0.value == "Blocked offers@spindle.example.test" },
+                      Self.said(Self.read(host)))
+    }
+
+    private static func fields(in view: NSView) -> [NSTextField] {
+        ((view as? NSTextField).map { [$0] } ?? []) + view.subviews.flatMap(fields(in:))
+    }
+
     /// The mail window at the mockup's 1440 by 900 on the fixture's mail, its first message open under the pane's bar
     /// with its summary, as VoiceOver reads it.
     private func windowRead() async throws -> [Read] {
