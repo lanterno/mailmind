@@ -4,6 +4,7 @@ at all. Fictional mail and the fake Claude API only."""
 from assistant_ports import Model, Triage, message, triage_on
 from mailmind.assistant.adapters.disabled import DisabledModel
 from mailmind.bootstrap import background
+from mailmind.platform import sse
 
 
 def test_a_kick_for_a_job_this_process_doesnt_run_is_ignored(monkeypatch):
@@ -44,3 +45,16 @@ def test_a_round_triages_a_batch_and_comes_back_at_once_while_more_wait():
     assessments.ASSESS_BATCH = 300
     assert assessments.round() is None
     assert (triage.needs_summary(None, 100), len(model.sent)) == ([], 5)
+
+
+def test_a_round_that_kept_summaries_tells_the_open_tabs_how_many_and_one_that_kept_none_says_nothing():
+    """Summaries change what needs you with no mail changing: the tabs read their lists, counts and brief again."""
+    now = 1_800_000_000
+    tab = sse.HUB.listen()
+    model, triage = Model(), Triage([message(1, ts=now - 60), message(2, ts=now - 120), message(3, ts=now - 31 * 86400)])
+    assert triage_on(model, triage, clock=lambda: now).round() is None
+    assert [(e.topic, e.data) for e in tab.next(0)] == [("summarized", {"count": 2})]
+    assert triage_on(model, triage, clock=lambda: now).round() is None           # only older mail waits
+    assert triage_on(DisabledModel(), Triage([message(4, ts=now)]), clock=lambda: now).round() is None
+    assert tab.next(0) == []
+    tab.close()

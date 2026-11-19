@@ -11,6 +11,7 @@ from mailmind.assistant.application.governor import CostGovernor
 from mailmind.assistant.application.ports import ModelError
 from mailmind.assistant.domain import models, pricing
 from mailmind.assistant.domain.prompts import SYSTEM
+from mailmind.platform import sse
 
 SCHEMA = {"type": "object", "properties": {"summary": {"type": "string"}}, "required": ["summary"]}
 
@@ -382,6 +383,24 @@ def test_the_round_sends_the_backlog_and_triages_the_newest_at_once(backlog):
     assert backlog.model.asked == ["submit_batch"]
     assert len(backlog.model.sent) == 2
     assert backlog.waiting() == [] and len(backlog.sent()) == len(before) - 2
+
+
+def test_the_round_that_brings_a_batchs_answers_in_tells_the_open_tabs():
+    """They are summaries landing too, counted with what the round triaged at once, and told even when someone using AI
+    holds the rest of the round back."""
+    model = Model()
+    governor = CostGovernor(spent=lambda: 0, limit=lambda: 15_000_000)
+    backlog = Backlog(model, governor)
+    tab = sse.HUB.listen()
+    backlog.job.round()
+    assert [(e.topic, e.data) for e in tab.next(0)] == [("summarized", {"count": 2})]     # the newest, at once
+    batched = len(backlog.sent())
+    model.end_batch()
+    with governor.call("interactive", "ask", models.DEFAULT, model):
+        pass                                                # someone asked just now: the rest yields
+    assert backlog.job.round() == backlog.job.ASSESS_YIELD
+    assert [(e.topic, e.data) for e in tab.next(0)] == [("summarized", {"count": batched})] and batched == 6
+    tab.close()
 
 
 def test_the_switch_keeps_the_round_from_sending_one_and_still_brings_one_in(backlog, monkeypatch):
