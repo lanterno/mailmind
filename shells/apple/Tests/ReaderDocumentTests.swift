@@ -474,6 +474,15 @@ final class ReaderDocumentTests: XCTestCase {
         XCTAssertEqual(PaneEmptyWords.of(needsDone: false, hasMail: false).title, "Nothing here.")
     }
 
+    /// Up next says what the AI made of the next message only while AI is on, as the reader does; turned off, it says
+    /// the message's own first words.
+    func testUpNextShowsNoSummaryWhileAIIsTurnedOff() {
+        let summed = Fixture.row(4, summary: "Asks to move Thursday’s review.")
+        XCTAssertEqual(UpNextPlace.gist(of: summed, aiTurnedOff: false), "Asks to move Thursday’s review.")
+        XCTAssertEqual(UpNextPlace.gist(of: summed, aiTurnedOff: true), "A line of fictional mail, number 4.")
+        XCTAssertEqual(UpNextPlace.gist(of: Fixture.row(5), aiTurnedOff: false), "A line of fictional mail, number 5.")
+    }
+
     /// Your own mail, as the reader shows it in Sent (b25, b27): the reply box, About and the trust line name the
     /// people it went to, not you; mail to you names who wrote it, as before.
     func testYourOwnMailIsNamedByWhomItWentTo() {
