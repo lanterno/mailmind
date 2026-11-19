@@ -125,3 +125,30 @@ def test_a_move_queued_into_a_folder_another_client_deleted_is_given_back_saying
     mark = world.mark()
     app.work("commands")
     assert world.writes(mark) == [], "nothing is tried"
+
+
+RECEIPT = "ada-inbox-05-receipt.eml"
+CONFIRM = "ada-inbox-02-lunch-confirm.eml"
+
+
+def filed_into_clients(app, world, name):
+    """`name` moved into Ada's Clients, which MailMind never synced: the row it keeps there is all it stores of it."""
+    assert app.post("/api/move", {**world.copy(name), "to": "Clients"}).status == 200
+    [row] = world.where(name)["db"]
+    assert row["folder"] == "Clients"
+    return {"key": world.key(name), "folder": "Clients", "uid": row["uid"]}
+
+
+def test_a_folder_never_synced_whose_mail_is_only_snoozed_or_muted_is_forgotten_once_deleted_elsewhere(app, world):
+    # What MailMind keeps of a folder is what it stores there, shown or not: a snoozed message or a muted one there
+    # makes it a folder MailMind has, which another client's delete makes it forget.
+    world.server.add_folder(w.ADA, "Clients")
+    subject = world.row(RECEIPT)["subject"]
+    snoozed = filed_into_clients(app, world, RECEIPT)
+    assert app.post("/api/snooze", {**snoozed, "preset": "tomorrow"}).status == 200
+    assert subject in listed(app, "__snoozed__")
+    assert app.post("/api/mute", filed_into_clients(app, world, CONFIRM)).status == 200
+    deleted_elsewhere(world, "Clients")
+    assert "Clients" not in on_rail(app)
+    assert world.where(RECEIPT)["db"] == world.where(CONFIRM)["db"] == []
+    assert subject not in listed(app, "__snoozed__")
