@@ -236,11 +236,12 @@ struct ScreenerScreen: View {
         .task(id: model.visitor?.fromAddr) {
             if let sender = model.visitor?.fromAddr { await model.readLetter(sender) }
         }
-        .onKeyPress(characters: CharacterSet(charactersIn: "yYnN"), phases: .down) { press in
-            guard press.modifiers.isEmpty || press.modifiers == .shift, let sender = model.visitor?.fromAddr else {
+        .onKeyPress(phases: .down) { press in
+            guard press.modifiers.isEmpty || press.modifiers == .shift, let key = SingleKey.typed(press),
+                  "yYnN".contains(key), let sender = model.visitor?.fromAddr else {
                 return .ignored
             }
-            let verdict: API.Verdict = press.characters.lowercased() == "y" ? .keep : .block
+            let verdict: API.Verdict = key.lowercased() == "y" ? .keep : .block
             Task { await model.decide(sender, verdict) }
             return .handled
         }

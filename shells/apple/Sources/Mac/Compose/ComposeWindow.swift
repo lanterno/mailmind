@@ -1044,6 +1044,13 @@ struct LaterChoices: View {
             pick(presets[at].epoch)
             return .handled
         }
+        // A preset's digit where the layout's digits aren't ASCII (Arabic's ١), which the shortcuts above never match.
+        .onKeyPress(phases: .down) { press in
+            guard press.modifiers.isEmpty, let digit = SingleKey.typed(press)?.wholeNumberValue,
+                  presets.indices.contains(digit - 1) else { return .ignored }
+            pick(presets[digit - 1].epoch)
+            return .handled
+        }
     }
 
     /// Move the keyboard `by` presets, from the first to the last and no further, while it is on one.

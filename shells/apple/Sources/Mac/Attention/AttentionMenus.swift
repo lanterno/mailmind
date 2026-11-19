@@ -112,7 +112,7 @@ struct SnoozeChooser: View {
     /// The keys the chooser takes before the menu's: a preset's digit picks it, as the page's chooser numbers them.
     private func listen() {
         menu.onKey = { event in
-            guard let preset = Self.preset(forKey: event.charactersIgnoringModifiers ?? "") else { return false }
+            guard let preset = Self.preset(forKey: SingleKey.typed(event).map(String.init) ?? "") else { return false }
             close()
             pick(.preset(preset))
             return true

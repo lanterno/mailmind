@@ -811,7 +811,7 @@ final class MailboxTableView: NSTableView {
     override func keyDown(with event: NSEvent) {
         setKeyed(true)
         guard let mailbox, event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
-              let typed = event.charactersIgnoringModifiers, let key = typed.first else {
+              let key = SingleKey.typed(event) else {
             return super.keyDown(with: event)
         }
         // A dialog or a chooser is up over the list: its keys are its own, and Esc goes on to close it.
@@ -1067,8 +1067,8 @@ struct UntakenKeys: NSViewRepresentable {
         static func single(_ event: NSEvent, in window: NSWindow, mailbox: Mailbox) -> Character? {
             guard mailbox.singleKeys, !mailbox.typing, !typesText(window.firstResponder),
                   event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
-                  let typed = event.charactersIgnoringModifiers, typed.count == 1, let key = typed.first,
-                  let scalar = key.unicodeScalars.first, scalar.value > 0x20, scalar.value < 0x7F
+                  let key = SingleKey.typed(event), let scalar = key.unicodeScalars.first,
+                  scalar.value > 0x20, scalar.value < 0x7F
             else { return nil }
             guard !event.modifierFlags.contains(.shift) || "#?".contains(key) else { return nil }
             return key

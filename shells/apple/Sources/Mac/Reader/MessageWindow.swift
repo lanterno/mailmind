@@ -410,8 +410,7 @@ struct MessageWindowKeys: NSViewRepresentable {
             guard verbs.mailbox.singleKeys, !verbs.typing,
                   !UntakenKeys.Catcher.typesText(window.firstResponder),
                   event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
-                  let typed = event.charactersIgnoringModifiers, typed.count == 1, let key = typed.first,
-                  let scalar = key.unicodeScalars.first,
+                  let key = SingleKey.typed(event), let scalar = key.unicodeScalars.first,
                   (scalar.value > 0x20 && scalar.value < 0x7F) || scalar.value == 0x7F
             else { return nil }
             guard !event.modifierFlags.contains(.shift) || "#?".contains(key) else { return nil }

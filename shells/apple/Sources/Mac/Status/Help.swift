@@ -417,7 +417,7 @@ struct KeysLegend: View {
         .padding(.horizontal, 24)
         .background {
             DialogKeys(focused: $reading) { press in
-                guard press.characters == "?" || press.key == .escape else { return .ignored }
+                guard SingleKey.typed(press) == "?" || press.key == .escape else { return .ignored }
                 close()
                 return .handled
             }
