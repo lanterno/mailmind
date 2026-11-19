@@ -66,7 +66,7 @@ class Served(AppClient):
                                          stderr=log, text=True, bufsize=1)
         ready = self._line(timeout=60)
         if not ready.startswith("ready "):
-            raise AssertionError(f"the server didn't start: {ready!r}; its output is in {self.log_path}")
+            raise AssertionError(f"the server didn't start: {ready!r}; {self.output()}")
         self.port = int(ready.split()[1])
         self.origin = f"http://127.0.0.1:{self.port}"
         page = self.get("/")
@@ -83,14 +83,26 @@ class Served(AppClient):
             if ready:
                 line = self.proc.stdout.readline()
                 if not line:
-                    raise AssertionError(f"the server ended (status {self.proc.wait()}); its output is in {self.log_path}")
+                    raise AssertionError(f"the server ended (status {self.proc.wait()}); {self.output()}")
                 return line.rstrip("\n")
-        raise AssertionError(f"the server said nothing for {timeout}s; its output is in {self.log_path}")
+        raise AssertionError(f"the server said nothing for {timeout}s; {self.output()}")
+
+    def output(self, lines=40):
+        """Where the server's output is, and its last lines, so a failure says why in the test's own report."""
+        try:
+            with open(self.log_path, "rb") as log:
+                last = log.read().decode("utf-8", "replace").splitlines()[-lines:]
+        except OSError as e:
+            last = [f"(unread: {e})"]
+        return f"its output is in {self.log_path}, ending:\n" + "\n".join(last)
 
     def ask(self, command_line, timeout=60):
         """One command of the protocol; the server's one-line answer must be ok."""
-        self.proc.stdin.write(command_line + "\n")
-        self.proc.stdin.flush()
+        try:
+            self.proc.stdin.write(command_line + "\n")
+            self.proc.stdin.flush()
+        except BrokenPipeError:
+            raise AssertionError(f"the server had ended (status {self.proc.wait()}); {self.output()}") from None
         answer = self._line(timeout)
         if answer != "ok":
             raise AssertionError(f"{command_line.split()[0]}: {answer}")
@@ -122,13 +134,16 @@ class Served(AppClient):
         if self.proc is None:
             return
         proc, self.proc = self.proc, None
-        proc.stdin.close()
+        try:
+            proc.stdin.close()
+        except BrokenPipeError:                             # it had ended, which what asked it next has said
+            pass
         try:
             proc.wait(30)
         except subprocess.TimeoutExpired:
             proc.kill()
             proc.wait()
-            raise AssertionError(f"the server didn't stop when its input ended; its output is in {self.log_path}") from None
+            raise AssertionError(f"the server didn't stop when its input ended; {self.output()}") from None
         finally:
             proc.stdout.close()
 
