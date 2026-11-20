@@ -58,29 +58,41 @@ class Filing:
 
 
     def _file(self, kind: str, pk: int, undo_group: str | None, mutation_id: object, undo: bool = True,
-              to: str | None = None) -> dict[str, Any]:
-        """A move, through the command path: what the person hears of it."""
+              to: str | None = None, tell: bool = True) -> dict[str, Any]:
+        """A move, through the command path: what the person hears of it. One that landed within the request tells the open
+        tabs (`landed`), unless the caller tells them once for many (`tell`)."""
         accepted = self._commands.accept_move(kind, pk, mutation_id, self._pushing(undo_group) if undo else None, to)
-        return self._submit_move(kind, accepted)
+        said, went = self._submit_move(kind, accepted)
+        if went and tell:
+            self.landed()
+        return said
 
 
-    def _submit_move(self, kind: str, accepted: command.Accepted | None) -> dict[str, Any]:
-        """A move accepted and committed: a try at it, and what the person hears of it."""
+    def _submit_move(self, kind: str, accepted: command.Accepted | None) -> tuple[dict[str, Any], bool]:
+        """A move accepted and committed: a try at it, what the person hears of it, and whether it landed on its server
+        within the request, which no worker will tell the open tabs of."""
         if accepted is None:
             raise NotFound(filing_answer.GONE)
         if not accepted.created:
-            return {"ok": True, "msg": "queued", "status": "queued", "undoable": False}
+            return {"ok": True, "msg": "queued", "status": "queued", "undoable": False}, False
         outcome = self._commands.submit(accepted)
         if outcome == command.APPLIED:
             self._stats.invalidate()
             self._folders.invalidate()      # the move changed IMAP UNSEEN/MESSAGES: drop stale rail badges
-            return {"ok": True, "msg": filing_answer.FILED[kind], "undoable": accepted.undoable}
+            return {"ok": True, "msg": filing_answer.FILED[kind], "undoable": accepted.undoable}, True
         if outcome in (command.QUEUED, command.WAITING):
-            return self._waiting(outcome, accepted.undoable)
+            return self._waiting(outcome, accepted.undoable), False
         if outcome == command.CANCELLED:
-            return {"ok": True, "msg": "cancelled", "undoable": False}
+            return {"ok": True, "msg": "cancelled", "undoable": False}, False
         self._stats.invalidate()            # the message is listed again
         raise Conflict(filing_answer.refusal(kind, outcome))
+
+
+    def landed(self) -> None:
+        """Changes a person asked for landed on their server within the request, so no worker will say so: the open tabs
+        read their lists and counts again, once for the request however many messages it moved, as they do when a queued
+        move lands (`settled`)."""
+        sse.publish("commands-changed", {})
 
 
     def _set_flags(self, pk: int, flags: Mapping[str, bool], mutation_id: object) -> dict[str, Any]:
@@ -142,8 +154,8 @@ class Filing:
         return {"ok": True}
 
 
-    def do_write(self, path: str, body: Mapping[str, Any]) -> dict[str, Any]:
-        """Per-message mailbox writes (flags/seen/archive/junk)."""
+    def do_write(self, path: str, body: Mapping[str, Any], tell: bool = True) -> dict[str, Any]:
+        """Per-message mailbox writes (flags/seen/archive/junk). `tell`: as `_file`'s."""
         pk = as_int(body.get("pk"))
         if pk is None:
             raise Refused("bad request")
@@ -156,15 +168,15 @@ class Filing:
         moves = {"/api/archive": "archive", "/api/junk": "junk"}
         if path not in moves:
             raise Refused("unknown")
-        return self._file(moves[path], pk, body.get("undo_group"), body.get("mutation_id"))
+        return self._file(moves[path], pk, body.get("undo_group"), body.get("mutation_id"), tell=tell)
 
 
-    def do_trash(self, body: Mapping[str, Any]) -> dict[str, Any]:
-        """Move one message to the account's Trash."""
+    def do_trash(self, body: Mapping[str, Any], tell: bool = True) -> dict[str, Any]:
+        """Move one message to the account's Trash. `tell`: as `_file`'s."""
         pk = as_int(body.get("pk"))
         if pk is None:
             raise Refused()
-        return self._file("trash", pk, body.get("undo_group"), body.get("mutation_id"))
+        return self._file("trash", pk, body.get("undo_group"), body.get("mutation_id"), tell=tell)
 
 
     def _into_folder(self, pk: object, to: object) -> tuple[int, str, str]:
@@ -306,7 +318,7 @@ class Filing:
         gone quiet costs one wait, not one for each message. What one that wasn't filed raised stands for it."""
         out: dict[int, dict[str, Any] | Problem] = {}
         until = time.monotonic() + self._commands.FILE_WAIT
-        left = False
+        left = landed = False
         for i, (p, one) in enumerate(accepted):
             try:
                 if i and one is not None and one.created and time.monotonic() >= until:
@@ -314,7 +326,8 @@ class Filing:
                               "undoable": one.undoable}
                     left = True
                 else:
-                    out[p] = self._submit_move(kind, one)
+                    out[p], went = self._submit_move(kind, one)
+                    landed = landed or went
             except _NOT_FILED as no:
                 out[p] = no
             except Exception as e:                   # it's back in the queue; the rest are claimed, and wait on this loop
@@ -323,6 +336,8 @@ class Filing:
                 out[p] = {"ok": True, "status": command.QUEUED, "undoable": bool(one and one.undoable)}
         if left:
             self.flags_queued()
+        if landed:                                   # once for them all; the worker tells of each it was left
+            self.landed()
         return out
 
 
@@ -333,14 +348,15 @@ class Filing:
         sse.publish("commands-changed", {})  # a queued move landed: the counts and lists may differ
 
     def _carry_out_one(self, verb: str, one: Mapping[str, Any]) -> dict[str, Any]:
-        """One message of a plan, through the route a click on that message would take."""
+        """One message of a plan, through the route a click on that message would take; a move that lands tells the open
+        tabs nothing, as the plan tells them once for all of its."""
         if verb == "trash":
-            return self.do_trash(one)
+            return self.do_trash(one, tell=False)
         if verb in ("read", "unread"):
             return self.do_write("/api/seen", {**one, "seen": verb == "read"})
         if verb == "star":
             return self.do_write("/api/flag", {**one, "flag": "flagged", "on": True})
-        return self.do_write("/api/junk" if verb == "junk" else "/api/archive", one)
+        return self.do_write("/api/junk" if verb == "junk" else "/api/archive", one, tell=False)
 
     def carry_out(self, verb: str, preset: str | None, messages: Sequence[tuple[MessageKey, FolderName]],
                   undo_group: str | None = None) -> dict[str, Any]:
@@ -361,6 +377,7 @@ class Filing:
                     res = {}
                 done.update(count=res.get("count", 0), failed=len(pks) - res.get("count", 0), undoable=bool(res.get("ok")))
             return done
+        landed = False
         for pk in pks:
             try:
                 res: dict[str, Any] = self._carry_out_one(verb, {"pk": pk, "undo_group": group})
@@ -375,6 +392,9 @@ class Filing:
                 done["count"] += 1
                 done["queued"] += res.get("status") == "queued"
                 done["undoable"] = done["undoable"] or bool(res.get("undoable"))
+                landed = landed or res.get("msg") in filing_answer.FILED.values()   # a move that went, in its verb's word
             else:
                 done["failed"] += 1
+        if landed:
+            self.landed()
         return done

@@ -154,6 +154,8 @@ class Cleanup:
         # 2) SWEEP INBOX copies to Trash (reversible) — each move pushes a 'move' undo under the same group
         targets, capped = cleanup_plan.within_cap(self._mail.sweep_targets(from_addr, cleanup_plan.to_read()))
         swept = cleanup_plan.tally(self._trash(t["pk"], grp) for t in targets)
+        if swept.moved:
+            self._filing.landed()                    # once for the sweep, which trashed each telling no one
         self._filing.reclassify(block_token)         # what stays, in other folders, reads as blocked too
         self._filing.stats_changed()
 

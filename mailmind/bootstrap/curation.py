@@ -66,7 +66,10 @@ class _Conditions:
 
 class _Filing:
     def trash(self, pk, undo_group):
-        return mailbox.filing.do_trash({"pk": pk, "undo_group": undo_group})
+        return mailbox.filing.do_trash({"pk": pk, "undo_group": undo_group}, tell=False)
+
+    def landed(self):
+        mailbox.filing.landed()
 
     def trash_now(self, pk):
         return mailbox.filing.trash_now(pk)
