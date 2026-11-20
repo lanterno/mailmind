@@ -9449,5 +9449,337 @@
 "refused": "Part of this draft is something MailMind can’t reopen without losing it. Edit it in the app that made it."
 }
 }
+},
+{
+"name": "built-draft-keeps-picture-mark",
+"raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nMIME-Version: 1.0\r\nContent-Type: multipart/alternative;\r\n boundary=\"===============0040992764608243447==\"\r\n\r\n--===============0040992764608243447==\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHi Lin,\r\n\r\n![swatch](cid:sw1)\r\n\r\nAda\r\n\r\n--===============0040992764608243447==\r\nMIME-Version: 1.0\r\nContent-Type: multipart/related;\r\n boundary=\"===============4410622890980378624==\"\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/html; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n<div>Hi Lin,</div><img src=3D\"cid:sw1@mailmind\" alt=3D\"swatch\"><div>Ada</div>\r\n\r\n--===============4410622890980378624==\r\nContent-Type: image/png\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: inline; filename=\"swatch.png\"\r\nContent-ID: <sw1@mailmind>\r\nMIME-Version: 1.0\r\n\r\niVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ\r\n\r\n--===============4410622890980378624==--\r\n\r\n--===============0040992764608243447==--\r\n",
+"expected": {
+"subject": "Fabric order",
+"to": [
+"Lin Mori <lin@example.test>"
+],
+"cc": [],
+"bcc": [],
+"irt": null,
+"refs": [],
+"text": "Hi Lin,\r\n\r\n![swatch](cid:sw1)\r\n\r\nAda\r\n",
+"html": "<div>Hi Lin,</div><img src=\"cid:sw1@mailmind\" alt=\"swatch\"><div>Ada</div>\r\n",
+"result": {
+"files": [
+{
+"filename": "swatch.png",
+"content_type": "image/png",
+"size": 33,
+"b64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ",
+"cid": "sw1"
+}
+],
+"inline": 0
+}
+}
+},
+{
+"name": "built-draft-no-recipients",
+"raw": "From: Ada <ada@example.test>\r\nSubject: Half-written\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+"expected": {
+"subject": "Half-written",
+"to": [],
+"cc": [],
+"bcc": [],
+"irt": null,
+"refs": [],
+"text": "Hi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+"html": null,
+"result": {
+"files": [],
+"inline": 0
+}
+}
+},
+{
+"name": "built-draft-keeps-an-address-that-isnt-one",
+"raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nX-MailMind-Draft-To: bob@example\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+"expected": {
+"subject": "Fabric order",
+"to": [
+"Lin Mori <lin@example.test>",
+"bob@example"
+],
+"cc": [],
+"bcc": [],
+"irt": null,
+"refs": [],
+"text": "Hi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+"html": null,
+"result": {
+"files": [],
+"inline": 0
+}
+}
+},
+{
+"name": "built-draft-keeps-cc-that-isnt-one",
+"raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nCc: Cy <cy@example.test>\r\nX-MailMind-Draft-Cc: bob\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+"expected": {
+"subject": "Fabric order",
+"to": [
+"Lin Mori <lin@example.test>"
+],
+"cc": [
+"Cy <cy@example.test>",
+"bob"
+],
+"bcc": [],
+"irt": null,
+"refs": [],
+"text": "Hi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+"html": null,
+"result": {
+"files": [],
+"inline": 0
+}
+}
+},
+{
+"name": "built-draft-keeps-bcc-that-isnt-one-out-of-the-bytes",
+"raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+"expected": {
+"subject": "Fabric order",
+"to": [
+"Lin Mori <lin@example.test>"
+],
+"cc": [],
+"bcc": [],
+"irt": null,
+"refs": [],
+"text": "Hi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+"html": null,
+"result": {
+"files": [],
+"inline": 0
+}
+}
+},
+{
+"name": "built-draft-folds-a-hostile-address",
+"raw": "From: Ada <ada@example.test>\r\nX-MailMind-Draft-To: bob@example Bcc: eve@example.test Injected\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+"expected": {
+"subject": "Fabric order",
+"to": [
+"bob@example Bcc: eve@example.test Injected"
+],
+"cc": [],
+"bcc": [],
+"irt": null,
+"refs": [],
+"text": "Hi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+"html": null,
+"result": {
+"files": [],
+"inline": 0
+}
+}
+},
+{
+"name": "built-draft-keeps-an-accented-address-that-isnt-one",
+"raw": "From: Ada <ada@example.test>\r\nX-MailMind-Draft-To: =?utf-8?b?Wm/DqyA8em/Dq0BleMOkbXBsZT4=?=\r\nX-MailMind-Draft-To: two spaces\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+"expected": {
+"subject": "Fabric order",
+"to": [
+"Zoë <zoë@exämple>",
+"two spaces"
+],
+"cc": [],
+"bcc": [],
+"irt": null,
+"refs": [],
+"text": "Hi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+"html": null,
+"result": {
+"files": [],
+"inline": 0
+}
+}
+},
+{
+"name": "built-draft-keeps-a-long-address-that-isnt-one",
+"raw": "From: Ada <ada@example.test>\r\nX-MailMind-Draft-To: =?utf-8?q?xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx?=\r\n =?utf-8?q?xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx?=\r\n =?utf-8?q?xxxxxxxxxx=40example?=\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+"expected": {
+"subject": "Fabric order",
+"to": [
+"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx@example"
+],
+"cc": [],
+"bcc": [],
+"irt": null,
+"refs": [],
+"text": "Hi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+"html": null,
+"result": {
+"files": [],
+"inline": 0
+}
+}
+},
+{
+"name": "built-draft-keeps-a-hidden-character",
+"raw": "From: Ada <ada@example.test>\r\nX-MailMind-Draft-To: =?utf-8?q?li=E2=80=8Bn=40example=2Etest?=\r\nX-MailMind-Draft-To: =?utf-8?q?=E2=80=AEgnp=2Eexe=40example=2Etest?=\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+"expected": {
+"subject": "Fabric order",
+"to": [
+"li​n@example.test",
+"‮gnp.exe@example.test"
+],
+"cc": [],
+"bcc": [],
+"irt": null,
+"refs": [],
+"text": "Hi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+"html": null,
+"result": {
+"files": [],
+"inline": 0
+}
+}
+},
+{
+"name": "built-draft-keeps-the-same-twice-once",
+"raw": "From: Ada <ada@example.test>\r\nX-MailMind-Draft-To: bob@example\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+"expected": {
+"subject": "Fabric order",
+"to": [
+"bob@example"
+],
+"cc": [],
+"bcc": [],
+"irt": null,
+"refs": [],
+"text": "Hi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+"html": null,
+"result": {
+"files": [],
+"inline": 0
+}
+}
+},
+{
+"name": "built-draft-past-the-recipients-cap",
+"raw": "From: Ada <ada@example.test>\r\nTo: p0@example.test, p1@example.test, p2@example.test, p3@example.test,\r\n p4@example.test, p5@example.test, p6@example.test, p7@example.test,\r\n p8@example.test, p9@example.test, p10@example.test, p11@example.test,\r\n p12@example.test, p13@example.test, p14@example.test, p15@example.test,\r\n p16@example.test, p17@example.test, p18@example.test, p19@example.test,\r\n p20@example.test, p21@example.test, p22@example.test, p23@example.test,\r\n p24@example.test, p25@example.test, p26@example.test, p27@example.test,\r\n p28@example.test, p29@example.test, p30@example.test, p31@example.test,\r\n p32@example.test, p33@example.test, p34@example.test, p35@example.test,\r\n p36@example.test, p37@example.test, p38@example.test, p39@example.test,\r\n p40@example.test, p41@example.test, p42@example.test, p43@example.test,\r\n p44@example.test, p45@example.test, p46@example.test, p47@example.test,\r\n p48@example.test, p49@example.test, p50@example.test, p51@example.test,\r\n p52@example.test, p53@example.test, p54@example.test, p55@example.test,\r\n p56@example.test, p57@example.test, p58@example.test, p59@example.test,\r\n p60@example.test, p61@example.test, p62@example.test, p63@example.test,\r\n p64@example.test, p65@example.test, p66@example.test, p67@example.test,\r\n p68@example.test, p69@example.test, p70@example.test, p71@example.test,\r\n p72@example.test, p73@example.test, p74@example.test, p75@example.test,\r\n p76@example.test, p77@example.test, p78@example.test, p79@example.test,\r\n p80@example.test, p81@example.test, p82@example.test, p83@example.test,\r\n p84@example.test, p85@example.test, p86@example.test, p87@example.test,\r\n p88@example.test, p89@example.test, p90@example.test, p91@example.test,\r\n p92@example.test, p93@example.test, p94@example.test, p95@example.test,\r\n p96@example.test, p97@example.test, p98@example.test, p99@example.test,\r\n p100@example.test\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+"expected": {
+"subject": "Fabric order",
+"to": [
+"p0@example.test",
+"p1@example.test",
+"p2@example.test",
+"p3@example.test",
+"p4@example.test",
+"p5@example.test",
+"p6@example.test",
+"p7@example.test",
+"p8@example.test",
+"p9@example.test",
+"p10@example.test",
+"p11@example.test",
+"p12@example.test",
+"p13@example.test",
+"p14@example.test",
+"p15@example.test",
+"p16@example.test",
+"p17@example.test",
+"p18@example.test",
+"p19@example.test",
+"p20@example.test",
+"p21@example.test",
+"p22@example.test",
+"p23@example.test",
+"p24@example.test",
+"p25@example.test",
+"p26@example.test",
+"p27@example.test",
+"p28@example.test",
+"p29@example.test",
+"p30@example.test",
+"p31@example.test",
+"p32@example.test",
+"p33@example.test",
+"p34@example.test",
+"p35@example.test",
+"p36@example.test",
+"p37@example.test",
+"p38@example.test",
+"p39@example.test",
+"p40@example.test",
+"p41@example.test",
+"p42@example.test",
+"p43@example.test",
+"p44@example.test",
+"p45@example.test",
+"p46@example.test",
+"p47@example.test",
+"p48@example.test",
+"p49@example.test",
+"p50@example.test",
+"p51@example.test",
+"p52@example.test",
+"p53@example.test",
+"p54@example.test",
+"p55@example.test",
+"p56@example.test",
+"p57@example.test",
+"p58@example.test",
+"p59@example.test",
+"p60@example.test",
+"p61@example.test",
+"p62@example.test",
+"p63@example.test",
+"p64@example.test",
+"p65@example.test",
+"p66@example.test",
+"p67@example.test",
+"p68@example.test",
+"p69@example.test",
+"p70@example.test",
+"p71@example.test",
+"p72@example.test",
+"p73@example.test",
+"p74@example.test",
+"p75@example.test",
+"p76@example.test",
+"p77@example.test",
+"p78@example.test",
+"p79@example.test",
+"p80@example.test",
+"p81@example.test",
+"p82@example.test",
+"p83@example.test",
+"p84@example.test",
+"p85@example.test",
+"p86@example.test",
+"p87@example.test",
+"p88@example.test",
+"p89@example.test",
+"p90@example.test",
+"p91@example.test",
+"p92@example.test",
+"p93@example.test",
+"p94@example.test",
+"p95@example.test",
+"p96@example.test",
+"p97@example.test",
+"p98@example.test",
+"p99@example.test",
+"p100@example.test"
+],
+"cc": [],
+"bcc": [],
+"irt": null,
+"refs": [],
+"text": "Hi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+"html": null,
+"result": {
+"files": [],
+"inline": 0
+}
+}
 }
 ]
