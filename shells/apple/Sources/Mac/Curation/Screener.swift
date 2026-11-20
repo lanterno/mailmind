@@ -144,9 +144,9 @@ final class ScreenerModel {
         if chosen == sender { chosen = nil }
         do {
             let changed = try await routes.post(API.Post.Rules.self, API.RuleBody(token: sender, verdict: verdict == .keep ? .keep : .block))
-            let short = sender.split(separator: "@").first.map(String.init) ?? sender
-            notices.say(verdict == .keep ? String(localized: "Allowed \(short)")
-                : String(localized: "Screened out \(short)") + (changed.trashed ? " · trashed" : ""))
+            let who = Self.calling(item, sender)
+            notices.say(verdict == .keep ? String(localized: "Allowed \(who)")
+                : String(localized: "Screened out \(who)") + (changed.trashed ? " · trashed" : ""))
             if let item { recent.insert(Decided(sender: item, verdict: verdict, at: Date()), at: 0) }
             self.changed()
             await load()
@@ -161,6 +161,12 @@ final class ScreenerModel {
         later.removeAll { $0 == sender }
         later.append(sender)
         if chosen == sender { chosen = nil }
+    }
+
+    /// A sender as the rest of the app names them (`Words.calling`): a person by their first name, an organisation
+    /// whole, else their address, never its part before the @ alone.
+    static func calling(_ item: API.ScreenerItem?, _ sender: String) -> String {
+        Words.calling(item?.fromName, address: sender) ?? sender
     }
 
     /// The page's word for each verdict, as a hint names it.
