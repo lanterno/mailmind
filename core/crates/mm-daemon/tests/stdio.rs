@@ -26,7 +26,10 @@ fn run(database: &std::path::Path, key: Option<&str>, input: &str) -> (Vec<serde
         command.env("MAILMIND_DB_KEY", key);
     }
     let mut child = command.spawn().unwrap();
-    child.stdin.take().unwrap().write_all(input.as_bytes()).unwrap();
+    // A daemon that refuses to start may be gone before it reads a line, and then the pipe is closed.
+    if let Err(error) = child.stdin.take().unwrap().write_all(input.as_bytes()) {
+        assert_eq!(error.kind(), std::io::ErrorKind::BrokenPipe, "{error}");
+    }
     let out = child.wait_with_output().unwrap();
     let lines = String::from_utf8(out.stdout).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect();
     (lines, String::from_utf8(out.stderr).unwrap(), out.status.success())
