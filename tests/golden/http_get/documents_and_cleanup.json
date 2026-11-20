@@ -16,7 +16,7 @@
      "subject": "Re: Contract draft v2",
      "uid": 1,
      "url": "/api/message/attachment?key=21&folder=Drafts&uid=1&part_id=3",
-     "when": "16h ago"
+     "when": "yesterday"
     },
     {
      "account": "ada@example.test",
@@ -75,7 +75,7 @@
      "subject": "Re: Contract draft v2",
      "uid": 1,
      "url": "/api/message/attachment?key=21&folder=Drafts&uid=1&part_id=3",
-     "when": "16h ago"
+     "when": "yesterday"
     },
     {
      "account": "ada@example.test",
@@ -134,7 +134,7 @@
      "subject": "Re: Contract draft v2",
      "uid": 1,
      "url": "/api/message/attachment?key=21&folder=Drafts&uid=1&part_id=3",
-     "when": "16h ago"
+     "when": "yesterday"
     },
     {
      "account": "ada@example.test",

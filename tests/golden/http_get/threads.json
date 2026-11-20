@@ -135,7 +135,7 @@
      "snippet": "",
      "subject": "Re: Guild meetup venue",
      "uid": 1,
-     "when": "4d ago"
+     "when": "5d ago"
     },
     {
      "answered": false,
@@ -157,7 +157,7 @@
      "snippet": "Booked for the 14th.",
      "subject": "Re: Guild meetup venue",
      "uid": 2,
-     "when": "4d ago"
+     "when": "5d ago"
     }
    ],
    "ok": true,
@@ -202,7 +202,7 @@
      "snippet": "Bea, the second draft is ready for your comments.",
      "subject": "Contract draft v2",
      "uid": 1,
-     "when": "3d ago"
+     "when": "4d ago"
     },
     {
      "answered": false,
@@ -224,7 +224,7 @@
      "snippet": "Hi Ivo, my comments are in the attached file. Two points stand out.",
      "subject": "Re: Contract draft v2",
      "uid": 1,
-     "when": "16h ago"
+     "when": "yesterday"
     }
    ],
    "ok": true,

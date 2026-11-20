@@ -175,7 +175,7 @@
      "subject": "Contract draft v2",
      "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
      "uid": 1,
-     "when": "3d ago"
+     "when": "4d ago"
     },
     {
      "account": "bea@example.test",
@@ -207,7 +207,7 @@
      "subject": "Re: Contract draft v2",
      "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
      "uid": 1,
-     "when": "16h ago"
+     "when": "yesterday"
     }
    ],
    "offset": 0,
@@ -295,7 +295,7 @@
      "subject": "The finished quilt",
      "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
      "uid": 11,
-     "when": "17h ago"
+     "when": "yesterday"
     },
     {
      "account": "ada@example.test",
@@ -415,7 +415,7 @@
      "subject": "The finished quilt",
      "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
      "uid": 11,
-     "when": "17h ago"
+     "when": "yesterday"
     }
    ],
    "offset": 0,
@@ -503,7 +503,7 @@
      "subject": "The finished quilt",
      "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
      "uid": 11,
-     "when": "17h ago"
+     "when": "yesterday"
     },
     {
      "account": "ada@example.test",
@@ -631,7 +631,7 @@
      "subject": "[quilt] Build #412 passed",
      "thread_id": "rf:ada@example.test:20e13d75692f3245",
      "uid": 4,
-     "when": "4d ago"
+     "when": "5d ago"
     },
     {
      "account": "ada@example.test",
@@ -1086,7 +1086,7 @@
      "subject": "The finished quilt",
      "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
      "uid": 11,
-     "when": "17h ago"
+     "when": "yesterday"
     },
     {
      "account": "ada@example.test",
@@ -1278,7 +1278,7 @@
      "subject": "Contract draft v2",
      "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
      "uid": 1,
-     "when": "3d ago"
+     "when": "4d ago"
     },
     {
      "account": "ada@example.test",
@@ -1342,7 +1342,7 @@
      "subject": "Re: Guild meetup venue",
      "thread_id": "gm:cy@example.test:1800000000000000001",
      "uid": 2,
-     "when": "4d ago"
+     "when": "5d ago"
     },
     {
      "account": "ada@example.test",
@@ -1638,7 +1638,7 @@
      "subject": "[quilt] Build #412 passed",
      "thread_id": "rf:ada@example.test:20e13d75692f3245",
      "uid": 4,
-     "when": "4d ago"
+     "when": "5d ago"
     },
     {
      "account": "ada@example.test",
@@ -1980,7 +1980,7 @@
      "subject": "Re: Contract draft v2",
      "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
      "uid": 1,
-     "when": "16h ago"
+     "when": "yesterday"
     }
    ],
    "offset": 0,
@@ -2059,7 +2059,7 @@
      "subject": "Re: Contract draft v2",
      "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
      "uid": 1,
-     "when": "16h ago"
+     "when": "yesterday"
     },
     {
      "account": "bea@example.test",
@@ -2091,7 +2091,7 @@
      "subject": "New sign-in to your account",
      "thread_id": "rf:bea@example.test:b3330a7a33c000ec",
      "uid": 2,
-     "when": "yesterday"
+     "when": "2d ago"
     },
     {
      "account": "bea@example.test",
@@ -2123,7 +2123,7 @@
      "subject": "Contract draft v2",
      "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
      "uid": 1,
-     "when": "3d ago"
+     "when": "4d ago"
     },
     {
      "account": "bea@example.test",
@@ -2307,7 +2307,7 @@
      "subject": "Re: Contract draft v2",
      "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
      "uid": 1,
-     "when": "16h ago"
+     "when": "yesterday"
     },
     {
      "account": "ada@example.test",
@@ -2339,7 +2339,7 @@
      "subject": "The finished quilt",
      "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
      "uid": 11,
-     "when": "17h ago"
+     "when": "yesterday"
     },
     {
      "account": "ada@example.test",
@@ -2403,7 +2403,7 @@
      "subject": "New sign-in to your account",
      "thread_id": "rf:bea@example.test:b3330a7a33c000ec",
      "uid": 2,
-     "when": "yesterday"
+     "when": "2d ago"
     },
     {
      "account": "ada@example.test",
@@ -2739,7 +2739,7 @@
      "subject": "Re: Contract draft v2",
      "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
      "uid": 1,
-     "when": "16h ago"
+     "when": "yesterday"
     },
     {
      "account": "ada@example.test",
@@ -2803,7 +2803,7 @@
      "subject": "New sign-in to your account",
      "thread_id": "rf:bea@example.test:b3330a7a33c000ec",
      "uid": 2,
-     "when": "yesterday"
+     "when": "2d ago"
     },
     {
      "account": "ada@example.test",
@@ -2963,7 +2963,7 @@
      "subject": "Contract draft v2",
      "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
      "uid": 1,
-     "when": "3d ago"
+     "when": "4d ago"
     },
     {
      "account": "ada@example.test",
@@ -3027,7 +3027,7 @@
      "subject": "[quilt] Build #412 passed",
      "thread_id": "rf:ada@example.test:20e13d75692f3245",
      "uid": 4,
-     "when": "4d ago"
+     "when": "5d ago"
     },
     {
      "account": "cy@example.test",
@@ -3059,7 +3059,7 @@
      "subject": "Re: Guild meetup venue",
      "thread_id": "gm:cy@example.test:1800000000000000001",
      "uid": 2,
-     "when": "4d ago"
+     "when": "5d ago"
     },
     {
      "account": "cy@example.test",
@@ -3091,7 +3091,7 @@
      "subject": "Re: Guild meetup venue",
      "thread_id": "gm:cy@example.test:1800000000000000001",
      "uid": 1,
-     "when": "4d ago"
+     "when": "5d ago"
     },
     {
      "account": "cy@example.test",

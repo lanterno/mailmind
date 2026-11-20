@@ -230,7 +230,7 @@
      "subject": "The finished quilt",
      "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
      "uid": 11,
-     "when": "17h ago"
+     "when": "yesterday"
     },
     {
      "account": "ada@example.test",
@@ -350,7 +350,7 @@
      "subject": "The finished quilt",
      "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
      "uid": 11,
-     "when": "17h ago"
+     "when": "yesterday"
     }
    ],
    "offset": 0,
@@ -438,7 +438,7 @@
      "subject": "The finished quilt",
      "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
      "uid": 11,
-     "when": "17h ago"
+     "when": "yesterday"
     },
     {
      "account": "ada@example.test",
@@ -566,7 +566,7 @@
      "subject": "[quilt] Build #412 passed",
      "thread_id": "rf:ada@example.test:20e13d75692f3245",
      "uid": 4,
-     "when": "4d ago"
+     "when": "5d ago"
     },
     {
      "account": "ada@example.test",
@@ -989,7 +989,7 @@
      "subject": "The finished quilt",
      "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
      "uid": 11,
-     "when": "17h ago"
+     "when": "yesterday"
     },
     {
      "account": "ada@example.test",
@@ -1445,7 +1445,7 @@
      "subject": "[quilt] Build #412 passed",
      "thread_id": "rf:ada@example.test:20e13d75692f3245",
      "uid": 4,
-     "when": "4d ago"
+     "when": "5d ago"
     },
     {
      "account": "ada@example.test",
@@ -1921,7 +1921,7 @@
      "subject": "The finished quilt",
      "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
      "uid": 11,
-     "when": "17h ago"
+     "when": "yesterday"
     },
     {
      "account": "ada@example.test",
@@ -2417,7 +2417,7 @@
      "subject": "[quilt] Build #412 passed",
      "thread_id": "rf:ada@example.test:20e13d75692f3245",
      "uid": 4,
-     "when": "4d ago"
+     "when": "5d ago"
     },
     {
      "account": "ada@example.test",

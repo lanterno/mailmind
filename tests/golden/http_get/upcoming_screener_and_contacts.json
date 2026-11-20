@@ -62,7 +62,7 @@
      "domain": "example.test",
      "from_addr": "lin@example.test",
      "from_name": "Lin Mori",
-     "when": "17h ago"
+     "when": "yesterday"
     },
     {
      "count": 1,
@@ -225,7 +225,7 @@
      "subject": "The finished quilt",
      "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
      "uid": 11,
-     "when": "17h ago"
+     "when": "yesterday"
     },
     {
      "account": "ada@example.test",

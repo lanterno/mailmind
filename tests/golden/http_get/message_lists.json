@@ -70,7 +70,7 @@
      "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
      "ts": 1793557800,
      "uid": 11,
-     "when": "17h ago"
+     "when": "yesterday"
     },
     {
      "account": "ada@example.test",
@@ -301,7 +301,7 @@
      "thread_id": "rf:ada@example.test:20e13d75692f3245",
      "ts": 1793204460,
      "uid": 4,
-     "when": "4d ago"
+     "when": "5d ago"
     },
     {
      "account": "ada@example.test",
@@ -495,7 +495,7 @@
      "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
      "ts": 1793557800,
      "uid": 11,
-     "when": "17h ago"
+     "when": "yesterday"
     },
     {
      "account": "ada@example.test",
@@ -740,7 +740,7 @@
      "thread_id": "rf:ada@example.test:20e13d75692f3245",
      "ts": 1793204460,
      "uid": 4,
-     "when": "4d ago"
+     "when": "5d ago"
     },
     {
      "account": "ada@example.test",
@@ -1236,7 +1236,7 @@
      "thread_id": "gm:cy@example.test:1800000000000000001",
      "ts": 1793201400,
      "uid": 2,
-     "when": "4d ago"
+     "when": "5d ago"
     }
    ],
    "offset": 0,
@@ -1294,7 +1294,7 @@
      "thread_id": "gm:cy@example.test:1800000000000000001",
      "ts": 1793192400,
      "uid": 1,
-     "when": "4d ago"
+     "when": "5d ago"
     }
    ],
    "offset": 0,
