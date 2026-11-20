@@ -728,7 +728,26 @@ final class DeskModelTests: XCTestCase {
         let rule = routes.sent("POST", "/api/rules").first
         XCTAssertEqual(rule?["token"], .string("offers@deals.example.test"))
         XCTAssertEqual(rule?["verdict"], .string("block"))
-        XCTAssertEqual(said, "Screened out offers · trashed")
+        XCTAssertEqual(said, "Screened out Daily Deals · trashed", "the sender as the app names them")
+    }
+
+    /// The Screener's words name a sender as the rest of the app does (`Words.calling`): a person by their first name,
+    /// an organisation whole, and one with no name by their whole address, never the part before the @ in lower case.
+    func testTheScreenersWordsNameTheSenderAsTheAppDoes() async {
+        var queue = DeskFixture.screener
+        queue.items.append(API.ScreenerItem(count: 1, domain: "example.test", fromAddr: "lin@example.test", fromName: "",
+                                            when: "today"))
+        routes.answer("GET", "/api/screener", queue)
+        routes.answer("POST", "/api/rules", API.RuleChanged(ok: true, reclassified: 1, rules: DeskFixture.rules,
+                                                            token: "x", trashed: false))
+        let model = ScreenerModel(account: "ada@example.test", link: link, notices: notices)
+        await model.load()
+        await model.decide("marie@example.test", .keep)
+        XCTAssertEqual(said, "Allowed Marie")
+        await model.decide("hello@studio.example.test", .block)
+        XCTAssertEqual(said, "Screened out Studio Nine")
+        await model.decide("lin@example.test", .block)
+        XCTAssertEqual(said, "Screened out lin@example.test")
     }
 
     func testASenderWhoCameAfterTheAIWasAskedIsNotAskedYetUntilSuggestAgain() async {
