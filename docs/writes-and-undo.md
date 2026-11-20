@@ -244,6 +244,12 @@
   which never comes, so no full run pushes it either. The tray lists it at once, `kept: true`, until a save in a full run
   gives it a due time again, an autosave the one a first save gets. A discard that would take a copy off the server is
   refused (one with no copy there goes at once).
+- A draft keeps whatever was typed, as Mail does: a recipient that isn't an address yet never stops a save. The builder
+  (`builder.recipients`, `draft=True`) writes each such chip of To and Cc on one line (`one_line`: control characters and
+  line separators a space) into a header of MailMind's own, `X-MailMind-Draft-To` and `X-MailMind-Draft-Cc`, which
+  another app shows none of; one of Bcc goes only into the save's record, never the bytes. Reopening reads them back
+  after the addresses (`resume.recipients`, `resume.bcc_of`). A send is refused at the first, in words naming it as it
+  was typed, on one line, cut short past 80 characters.
 - A try sets `tried` to its Message-ID before the APPEND. The next try looks for that copy in Drafts: it stands if it is
   this very save, and goes if a newer one has taken over. A discard takes it too, and the row leaves only after the copy
   has (a server that refuses has the last word: the row goes, and the copy stays listed).
