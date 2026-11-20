@@ -227,6 +227,17 @@ final class DeskWordsTests: XCTestCase {
         utc.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: hour, minute: minute))!
     }
 
+    /// Your Week's lists say how many they show of the week's whole, as its tiles count it: at most eight of the
+    /// thirteen that need you.
+    func testYourWeeksListsSayHowManyTheyShowOfTheWhole() {
+        XCTAssertEqual(ReviewBody.heading("Still needs you", shown: 8, of: 13), "Still needs you · 8 of 13")
+        XCTAssertEqual(ReviewBody.heading("Still needs you", shown: 3, of: 3), "Still needs you · 3")
+        XCTAssertEqual(ReviewBody.heading("Still needs you", shown: 0, of: 0), "Still needs you")
+        XCTAssertEqual(ReviewBody.heading("You’re waiting on a reply", shown: 5, of: 9), "You’re waiting on a reply · 5 of 9")
+        XCTAssertEqual(ReviewBody.heading("You’re waiting on a reply", shown: 2, of: 1), "You’re waiting on a reply · 2",
+                       "never fewer than it shows")
+    }
+
     func testTheVerbsWordsAndWhichTakeASecondPress() {
         XCTAssertEqual(PlanModel.label(.trash), "Delete")
         XCTAssertEqual(PlanModel.done(.star), "Updated")
