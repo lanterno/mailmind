@@ -221,6 +221,31 @@ final class ComposerTests: XCTestCase {
         XCTAssertEqual(draft.focusRequest, .field(.to))
     }
 
+    /// A draft saved with "bob@example" in To and opened again (Drafts' Edit Draft, a draft reopened from the server)
+    /// shows the chip as typed and red, and the send guard holds Send with the same words as when it was typed; a
+    /// good address beside it stays good. A reply's own recipients, which the original named, are taken as they are.
+    func testAReopenedDraftsBadChipIsMarkedAndHoldsTheSend() throws {
+        let opened = try JSONDecoder().decode(API.DraftOpened.self, from: Data("""
+            {"ok": true, "account": "ada@example.test", "draft_id": 41, "version": 3, "mode": "new",
+             "to": ["bob@example", "Bo Lane <bo@example.test>"], "cc": [], "bcc": ["lin@"], "subject": "Plans",
+             "text": "Hello", "tail_text": "", "in_reply_to": "", "references": "", "reply_to": "", "original_from": "",
+             "participants": [], "files": [], "split": "", "notes": {"bcc_dropped": 0, "inline": 0, "plain": false}}
+            """.utf8))
+        let draft = composer(Seeds.resumed(opened))
+        XCTAssertEqual(draft.to.map(\.value), ["bob@example", "Bo Lane <bo@example.test>"], "as typed")
+        XCTAssertEqual(draft.to.map(\.bad), [true, false], "the bad one red, the good one not")
+        XCTAssertEqual(draft.bcc.map(\.bad), [true])
+        draft.send()
+        let said = try XCTUnwrap(draft.check?.lines.first?.text)
+        XCTAssertTrue(said.hasPrefix("“bob@example” isn’t a valid address."), "as when it was typed: \(said)")
+        XCTAssertTrue(host.sent.isEmpty, "Send waits")
+
+        var reply = ComposeSeed()
+        reply.mode = .reply
+        reply.to = ["undisclosed-recipients:;"]
+        XCTAssertEqual(composer(reply).to.map(\.bad), [false], "a reply's recipient as the original named it")
+    }
+
     func testAConfirmLineWaitsBeforeItCanBeWavedThrough() {
         let draft = written("Hello", subject: "")
         draft.send()
