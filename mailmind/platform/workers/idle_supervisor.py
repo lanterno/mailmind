@@ -4,7 +4,8 @@ A worker holds a connection open and waits on it. `reconcile` starts one for eac
 a limit, retires one whose key has gone or is now wanted differently, and leaves the rest be. A
 worker whose connection fails rests, longer each time, then opens another; one whose connection served a while
 (AT_ONCE_AFTER) and was lost opens another at once, so a server gone away is found gone within moments, and one that
-dropped a connection is back on another. One that finds itself no
+dropped a connection is back on another. One resting may be hurried (`hurry`): it opens another now, its rests starting
+over, as its server is found answering again. One that finds itself no
 longer wanted leaves on its own, and asks for a reconcile on its way out. What a connection is, and
 what a worker does with one, is the subclass's to say; this knows nothing of what they watch.
 
@@ -35,6 +36,7 @@ class Watch[S, C: Interruptible]:
         self.conn: C | None = None       # its connection, while it has one
         self.thread: threading.Thread | None = None
         self.rest = rest                 # seconds it rests if its connection fails now
+        self.hurried = False             # asked to leave its rest and connect now, its rests starting over
 
     def leaving(self) -> bool:
         return self.quit or self._stopping()
@@ -51,7 +53,7 @@ class IdleSupervisor[S, C: Interruptible](abc.ABC):
     def __init__(self) -> None:
         self._stop = threading.Event()
         self._conns: list[C] = []            # the workers' connections, to interrupt on stop()
-        self._wake = threading.Condition()   # a worker backing off waits here; stop() and a retirement wake it
+        self._wake = threading.Condition()   # a worker backing off waits here; stop(), a retirement and hurry() wake it
         self._watchers: dict[str, Watch[S, C]] = {}    # key -> Watch: the workers begin() and reconcile() run
         self._watch_lock = threading.Lock()
         self._running = False                # begin() has run, and stop() hasn't
@@ -108,8 +110,11 @@ class IdleSupervisor[S, C: Interruptible](abc.ABC):
         return self._stop.is_set()
 
     def _rest(self, watch: Watch[S, C], seconds: float) -> None:
+        """Rest `seconds`, or until the worker is leaving or hurried: (hurried) its rests start over."""
         with self._wake:
-            self._wake.wait_for(watch.leaving, timeout=seconds)
+            self._wake.wait_for(lambda: watch.leaving() or watch.hurried, timeout=seconds)
+            hurried, watch.hurried = watch.hurried, False
+        watch.rest = self.FIRST_REST if hurried else min(watch.rest * 2, self.LONGEST_REST)
 
     def _worker(self, spec: S, watch: Watch[S, C] | None = None) -> None:
         watch = watch or Watch(spec, self._stopping, self.FIRST_REST)
@@ -126,6 +131,7 @@ class IdleSupervisor[S, C: Interruptible](abc.ABC):
                 self._conns.append(conn)
                 watch.conn = conn                 # set before leaving() is asked: _retire sets quit first
                 watch.rest = self.FIRST_REST
+                watch.hurried = False             # a hurry this connection came too late to answer is spent: it serves
                 began = time.monotonic()
                 self._serve(watch, conn)
             except Exception as e:
@@ -134,7 +140,6 @@ class IdleSupervisor[S, C: Interruptible](abc.ABC):
                 if began is not None and time.monotonic() - began >= self.AT_ONCE_AFTER:
                     continue                      # it served a while, then was lost: the next opens now
                 self._rest(watch, watch.rest)
-                watch.rest = min(watch.rest * 2, self.LONGEST_REST)
             finally:
                 watch.conn = None
                 if conn is not None:
@@ -196,6 +201,21 @@ class IdleSupervisor[S, C: Interruptible](abc.ABC):
         with self._watch_lock:
             watch = self._watchers.get(key)
             return None if watch is None else watch.rest
+
+    def hurry(self, key: str) -> None:
+        """Have `key`'s worker, resting after its connection failed, connect again now, its rests starting over: what its
+        server answering again asks, so the worker isn't left out for the rest of a rest that may run to LONGEST_REST. A
+        worker serving on a connection is left be, and so is a key with none. Before begin() and after stop() it does
+        nothing."""
+        with self._watch_lock:
+            if not self._running or self._stop.is_set():
+                return
+            watch = self._watchers.get(key)
+        if watch is None or watch.conn is not None:
+            return
+        with self._wake:
+            watch.hurried = True
+            self._wake.notify_all()
 
     def stop(self) -> None:
         self._stop.set()

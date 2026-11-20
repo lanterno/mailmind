@@ -18,7 +18,9 @@ its own: one that fails changes nothing and says nothing, and counts no failed s
 after the round's next sync or three minutes on.
 
 A sync that works after one of the account's failed, and a person's Retry, let go of the waits of the changes queued for its
-server (`server_back`, the commands' `release`): they go now, not minutes on.
+server (`server_back`, the commands' `release`): they go now, not minutes on; and its IDLE worker, resting after a
+connection that failed, connects now (Realtime's `hurry`), so new mail is heard within moments, not after a rest that may
+have grown to five minutes.
 
 An account removed (`account_removed`) stops each sync reading its mail at its next message, as its flights were told, and
 nothing is kept of how its syncs went: its status, its run of failures, its body backfill's rest; now, and again as the last

@@ -377,6 +377,15 @@ def _kick(job):
     background._kick(job)
 
 
+def _server_back(account):
+    """The account's server answers again: the changes queued for it go now, and its IDLE worker, resting after a connection
+    that failed, connects now rather than at the end of a rest that may have grown to minutes."""
+    try:
+        commands.release(account)
+    finally:
+        realtime.hurry(account)
+
+
 def _ai_status():
     from mailmind.bootstrap import assistant
     return assistant.status.report()
@@ -413,7 +422,7 @@ def assemble():
                 together={"sweep_back": reversals.sweep_back})
     filing = Filing(_uow, store, _directory, commands, ingest, undo, stats, folders, _attention)
     tidying = Tidying(_uow, store, filing, undo)
-    syncing = Syncing(_uow, store, _directory, ingest, warm, folders, _attention, _kick, commands.release)
+    syncing = Syncing(_uow, store, _directory, ingest, warm, folders, _attention, _kick, _server_back)
     reconciler = Reconciler(_uow, store, _directory, pool, folders, stats, reconcile_trail)
     digest = Digest(_uow, store, _directory, syncing, _ai_status)
     folder_changes = FolderChanges(_uow, store, _directory, commands, folders)
