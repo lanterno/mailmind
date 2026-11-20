@@ -3,10 +3,10 @@ import AppKit
 import Observation
 import SwiftUI
 
-/// The window in front, as AppKit says which window is key, and what it shows: a message in a window of its own. The
-/// menu bar acts on it. SwiftUI hands the menus a window's focused values only once its scene has said them, and a
-/// message window's were stale or missing while it was key, so Message › Reply there did nothing; AppKit always knows
-/// which window is key. Each window says what it shows with `keyWindowShows`.
+/// The window in front, as AppKit says which window is key, and what it shows: a message in a window of its own, or a
+/// composer. The menu bar acts on it. SwiftUI hands the menus a window's focused values only once its scene has said
+/// them, and a message window's were stale or missing while it was key, so Message › Reply there did nothing; AppKit
+/// always knows which window is key. Each window says what it shows with `keyWindowShows`.
 @MainActor
 @Observable
 final class KeyWindow {
@@ -21,12 +21,15 @@ final class KeyWindow {
     /// What a window shows.
     enum Shows {
         case message(MessageWindowVerbs)
+        case composer(Composer)
     }
 
     /// Whether AppKit has said which window is key: until it has, the menus go by what SwiftUI hands them.
     private(set) var heard = false
     /// The message whose own window is key.
     private(set) var message: MessageWindowVerbs?
+    /// The composer whose window is key.
+    private(set) var composer: Composer?
     @ObservationIgnored private weak var key: NSWindow?
     @ObservationIgnored private var watching: [any NSObjectProtocol] = []
 
@@ -62,14 +65,16 @@ final class KeyWindow {
             if let tag = tags[ObjectIdentifier(one)], tag.window === one { shown = tag.shows }
             at = one.parent ?? one.sheetParent
         }
-        var message: MessageWindowVerbs?
+        var message: MessageWindowVerbs?, composer: Composer?
         switch shown {
         case .message(let verbs)?: message = verbs
+        case .composer(let made)?: composer = made
         case nil: break
         }
         // Only what changed is said again: a window says what it shows at each of its updates.
         if !heard { heard = true }
         if self.message !== message { self.message = message }
+        if self.composer !== composer { self.composer = composer }
     }
 
     /// The message window the Message menu acts on: the key one, as AppKit says; before AppKit has said, what SwiftUI

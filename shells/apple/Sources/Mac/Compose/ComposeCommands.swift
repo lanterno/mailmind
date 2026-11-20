@@ -28,9 +28,12 @@ struct ComposeCommands: Commands {
 }
 
 /// Reply, Reply All, Forward and Edit Draft, at the top of the mailbox's Message menu, each with the key Mail gives it,
-/// for what the window in front can write (its `mailWriting`).
+/// for what the window in front can write (its `mailWriting`); and Send Later… for the composer in front, as Mail's
+/// Message menu has it. The page gives Send Later no key, so it has none.
 struct ComposeMessageItems: View {
     let writing: MailWriting?
+    /// The composer whose window is key (`KeyWindow`).
+    var composer: Composer?
 
     var body: some View {
             Button("Reply") {
@@ -53,6 +56,9 @@ struct ComposeMessageItems: View {
                 if let draft = writing?.draft { Task { await Composing.shared.editDraft(draft) } }
             }
             .disabled(writing?.draft == nil)
+            // The composer's Later menu, under Send, as its ▾ opens it.
+            Button("Send Later…") { composer?.laterOpen = true }
+                .disabled(composer == nil || composer?.closed == true)
     }
 }
 #endif

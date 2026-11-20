@@ -101,7 +101,7 @@ struct MessageMenuItems: View {
     let window: MessageWindowVerbs?
     let writing: MailWriting?
     /// Which window is key, as AppKit says: a message's own window is acted on while it is, whatever SwiftUI handed
-    /// on, which was stale or missing there.
+    /// on, which was stale or missing there; and Send Later… acts on a composer's.
     var keyWindow: KeyWindow?
     var door = MailWindowDoor.alwaysOpen
 
@@ -110,7 +110,7 @@ struct MessageMenuItems: View {
         let mailbox = open ? self.mailbox : nil
         let window = keyWindow.map { $0.messageWindow(focused: self.window) } ?? MailWindowDoor.live(self.window)
         let writing = keyWindow.map { $0.writing(focused: self.writing) } ?? self.writing
-        ComposeMessageItems(writing: door.trusts(window) ? writing : nil)
+        ComposeMessageItems(writing: door.trusts(window) ? writing : nil, composer: keyWindow?.composer)
         Divider()
         let verbs = MessageMenuVerbs(window: window, mailbox: mailbox)
         Button("Archive") { verbs.file(.archive) }
