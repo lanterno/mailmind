@@ -156,7 +156,7 @@ pub fn hit(r: &Found, aliases: &BTreeMap<String, Option<String>>, now: Moment) -
     row.insert("thread_id".into(), json!(r.thread_id));
     row.insert("importance".into(), json!(r.importance));
     row.insert("action".into(), json!(r.action));
-    verdict::answers(&mut row, r.importance, r.category.as_deref(), r.action.as_deref());
+    verdict::answers(&mut row, r.importance, r.category.as_deref(), r.action.as_deref(), r.is_junk);
     Value::Object(row)
 }
 

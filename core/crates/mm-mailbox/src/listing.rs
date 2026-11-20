@@ -67,8 +67,13 @@ pub fn int(r: &Row, name: &str) -> Option<i64> {
 }
 
 /// What the AI's verdict on a message asks of you (`kernel.attention.answers`): its importance, category and the
-/// next step it wrote. A message with no verdict asks nothing.
-pub fn attention(importance: &Value, category: &Value, action: &Value) -> [(&'static str, bool); 4] {
+/// next step it wrote. A message with no verdict asks nothing, and nor does one read as junk (`is_junk`), whatever the
+/// AI said of it before: the brief leaves junk out and a sweep files it, so mail from a sender blocked after the AI read
+/// it stops needing you in the lists as it does in the brief.
+pub fn attention(importance: &Value, category: &Value, action: &Value, is_junk: &Value) -> [(&'static str, bool); 4] {
+    if truthy(is_junk) {
+        return [("needs_you", false), ("reply_worthy", false), ("commitment_worthy", false), ("safe_to_file", false)];
+    }
     let importance = importance.as_f64();
     let category = category.as_str();
     let has_step = action.as_str().is_some_and(|a| !mm_kernel::text::strip(a).is_empty());
@@ -90,7 +95,7 @@ pub fn attention(importance: &Value, category: &Value, action: &Value) -> [(&'st
 
 /// What the verdict on row `r` asks of you, added to `it`.
 pub(crate) fn add_attention(it: &mut Map<String, Value>, r: &Row) {
-    for (name, value) in attention(col(r, "importance"), col(r, "category"), col(r, "action")) {
+    for (name, value) in attention(col(r, "importance"), col(r, "category"), col(r, "action"), col(r, "is_junk")) {
         it.insert(name.into(), Value::Bool(value));
     }
 }

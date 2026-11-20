@@ -34,10 +34,18 @@ pub fn safe_to_file(importance: Option<i64>, category: Option<&str>, action: Opt
     importance.filter(|i| *i != 0).unwrap_or(1) <= 2 && !has_step(action) && matches!(category, Some("info" | "other"))
 }
 
-/// All four, as a list row in the API carries them, added to `row`.
-pub fn answers(row: &mut Map<String, Value>, importance: Option<i64>, category: Option<&str>, action: Option<&str>) {
-    row.insert("needs_you".into(), needs_you(importance, category, action).into());
-    row.insert("reply_worthy".into(), reply_worthy(importance, category).into());
-    row.insert("commitment_worthy".into(), commitment_worthy(importance, category, action).into());
-    row.insert("safe_to_file".into(), safe_to_file(importance, category, action).into());
+/// All four, as a list row in the API carries them, added to `row`. A message read as junk asks none of them, whatever
+/// the AI said of it before: the brief leaves junk out and a sweep files it, so mail from a sender blocked after the AI
+/// read it stops needing you in the lists as it does in the brief.
+pub fn answers(
+    row: &mut Map<String, Value>,
+    importance: Option<i64>,
+    category: Option<&str>,
+    action: Option<&str>,
+    junk: bool,
+) {
+    row.insert("needs_you".into(), (!junk && needs_you(importance, category, action)).into());
+    row.insert("reply_worthy".into(), (!junk && reply_worthy(importance, category)).into());
+    row.insert("commitment_worthy".into(), (!junk && commitment_worthy(importance, category, action)).into());
+    row.insert("safe_to_file".into(), (!junk && safe_to_file(importance, category, action)).into());
 }
