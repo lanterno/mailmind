@@ -7,15 +7,23 @@ enum Snoozing: Hashable, Sendable {
     case preset(API.SnoozePreset)
     case until(Date)
 
-    /// The page's words for each preset, in the menu's order, with the digit that picks it there: all in the page's
-    /// sentence case (`SnoozeMenu.tsx`), so no preset reads as a title beside another that doesn't.
-    static func words(_ preset: API.SnoozePreset) -> String {
+    /// The page's words for each preset at `now`, in the menu's order, with the digit that picks it there: all in the
+    /// page's sentence case (`SnoozeMenu.tsx`), so no preset reads as a title beside another that doesn't. Later today
+    /// says what it does once it snoozes to the next morning.
+    static func words(_ preset: API.SnoozePreset, at now: Date = Date(), calendar: Calendar = .current) -> String {
         switch preset {
-        case .laterToday: String(localized: "Later today")
+        case .laterToday: laterTodayIsTomorrow(at: now, calendar: calendar) ? String(localized: "Tomorrow morning")
+            : String(localized: "Later today")
         case .tomorrow: String(localized: "Tomorrow 8am")
         case .weekend: String(localized: "This weekend")
         case .nextWeek: String(localized: "Next week")
         }
+    }
+
+    /// Whether Later today snoozes to the next morning: three hours on runs past midnight, from 21:00, and the server
+    /// snoozes to 8 the next morning instead, as no one wants waking at two (`mm-attention`'s `snoozing`).
+    static func laterTodayIsTomorrow(at now: Date, calendar: Calendar = .current) -> Bool {
+        !calendar.isDate(now.addingTimeInterval(3 * 3600), inSameDayAs: now)
     }
 }
 
