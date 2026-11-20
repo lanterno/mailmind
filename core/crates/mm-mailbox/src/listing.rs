@@ -88,7 +88,8 @@ pub fn attention(importance: &Value, category: &Value, action: &Value) -> [(&'st
     ]
 }
 
-fn add_attention(it: &mut Map<String, Value>, r: &Row) {
+/// What the verdict on row `r` asks of you, added to `it`.
+pub(crate) fn add_attention(it: &mut Map<String, Value>, r: &Row) {
     for (name, value) in attention(col(r, "importance"), col(r, "category"), col(r, "action")) {
         it.insert(name.into(), Value::Bool(value));
     }

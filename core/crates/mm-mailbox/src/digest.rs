@@ -13,7 +13,7 @@ use mm_kernel::seams::Clock;
 use mm_kernel::when::iso;
 use serde_json::{Map, Value, json};
 
-use crate::listing::{attention, col, or, text};
+use crate::listing::{add_attention, col, or, text};
 use crate::ports::{AccountBook, AiStatus, DigestReads, Row, SyncStatus};
 
 /// How many items the digest holds at most.
@@ -69,9 +69,7 @@ impl Digest {
                 it.insert("when".into(), Value::String(rel_time(text(r, "date_iso"), now)));
                 it.insert("summary".into(), col(r, "summary").clone());
                 it.insert("importance".into(), col(r, "importance").clone());
-                for (name, value) in attention(col(r, "importance"), col(r, "category"), col(r, "action")) {
-                    it.insert(name.into(), Value::Bool(value));
-                }
+                add_attention(&mut it, r);
                 it.insert("category".into(), col(r, "category").clone());
                 it.insert("action".into(), or(col(r, "action"), json!("")));
                 let webmail = named(&faces.webmail, col(r, "account"));
