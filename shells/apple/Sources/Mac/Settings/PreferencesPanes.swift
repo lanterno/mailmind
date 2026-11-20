@@ -270,14 +270,14 @@ struct BackupSection: View {
             ? await core.send("GET", API.Get.Export.path, Data())
             : await core.send("GET", API.Get.ExportArchive.path + Core.query(["format": format.rawValue]), Data())
         guard (200..<300).contains(answer.status) else {
-            status.say(Problem(answer).description)
+            status.say(Problem(answer).description, refused: true)
             return
         }
         do {
             try answer.body.write(to: url, options: .atomic)
             status.say(String(localized: "Saved \(url.lastPathComponent)"))
         } catch {
-            status.say(String(localized: "Couldn’t save \(url.lastPathComponent)"))
+            status.say(String(localized: "Couldn’t save \(url.lastPathComponent)"), refused: true)
         }
     }
 }

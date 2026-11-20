@@ -30,6 +30,13 @@ final class Desk {
             }
         }
 
+        /// Whether it says the window's toast on itself while it is up (`DeskSheetToast`), so the window's own,
+        /// under it, waits: Curate's, whose verbs say what they did with Undo.
+        var saysToasts: Bool {
+            if case .curate = self { return true }
+            return false
+        }
+
         /// Whether it floats over the window (`WindowOverlays`) rather than opening as a sheet: Ask and a bulk action
         /// in the palette, the snooze chooser as a popover.
         var floats: Bool {
@@ -171,8 +178,8 @@ final class Desk {
             }
             // What can be taken back is on Edit ▸ Undo too, as the mailbox's own verbs are, so ⌘Z, z and the toast's
             // Undo are one undo.
-            self?.notices.relay = { [weak mailbox] text, undo in
-                mailbox?.say(text, undo: undo)
+            self?.notices.relay = { [weak mailbox] text, undo, refused in
+                mailbox?.say(text, undo: undo, refused: refused)
                 if let undo { mailbox?.offerUndo(undo) }
             }
         }
@@ -395,9 +402,9 @@ final class Desk {
         } catch let problem as Problem {
             notices.say(problem.isReadOnly ? ReadOnlyWords.refused
                 : problem.more["empty"] != nil ? String(localized: "Nothing to undo")
-                : problem.detail ?? String(localized: "Couldn’t undo"))
+                : problem.detail ?? String(localized: "Couldn’t undo"), refused: true)
         } catch {
-            notices.say(String(localized: "Couldn’t undo"))
+            notices.say(String(localized: "Couldn’t undo"), refused: true)
         }
         readAgain()
     }

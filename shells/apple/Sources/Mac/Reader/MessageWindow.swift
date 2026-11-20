@@ -92,8 +92,8 @@ final class MessageWindowVerbs {
         let notices = DeskNotices()
         attention = AttentionModel(link: CoreLink(routes), notices: notices)
         // On Edit ▸ Undo too, as the mail window's are: z and the toast's Undo take it back once between them.
-        notices.relay = { [weak mailbox] text, undo in
-            mailbox?.say(text, undo: undo)
+        notices.relay = { [weak mailbox] text, undo, refused in
+            mailbox?.say(text, undo: undo, refused: refused)
             if let undo { mailbox?.offerUndo(undo) }
         }
         attention.changed = { [weak mailbox] in mailbox?.readAgain() }

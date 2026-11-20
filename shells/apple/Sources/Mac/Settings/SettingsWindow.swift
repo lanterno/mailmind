@@ -440,7 +440,7 @@ struct NoticeBanner: View {
     var body: some View {
         VStack {
             if let notice = status.notice {
-                MeadowToast(notice.text)
+                MeadowToast(icon: MailboxToast.icon(notice.text, refused: notice.refused), notice.text)
                     .id(notice.id)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .accessibilityAddTraits(.updatesFrequently)

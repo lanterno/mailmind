@@ -441,13 +441,13 @@ struct WindowToasts: View {
         VStack(spacing: 8) {
             SendFloatView()
                 .transition(rise)
-            if let toast = mailbox.toast {
+            if let toast = mailbox.toast, Self.saysMailboxToast(under: desk?.sheet) {
                 MailboxToast(mailbox: mailbox, toast: toast)
                     .id(toast.id)
                     .transition(rise)
             }
             if let notice = status.notice {
-                MeadowToast(notice.text)
+                MeadowToast(icon: MailboxToast.icon(notice.text, refused: notice.refused), notice.text)
                     .id(notice.id)
                     .transition(rise)
             }
@@ -461,6 +461,12 @@ struct WindowToasts: View {
         .animation(.snappy(duration: 0.2), value: desk?.notices.shown)
         .animation(.snappy(duration: 0.2), value: Composing.shared.float)
         .animation(.snappy(duration: 0.2), value: Composing.shared.notice)
+    }
+
+    /// Whether the window's foot says the mailbox's toast: not while a sheet that says it on itself is up (Curate's,
+    /// `DeskSheetToast`), so it is said once, there.
+    static func saysMailboxToast(under sheet: Desk.Sheet?) -> Bool {
+        sheet?.saysToasts != true
     }
 }
 

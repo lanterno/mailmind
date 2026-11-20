@@ -35,7 +35,7 @@ final class TasksModel {
         do {
             _ = try await call(routes)
         } catch {
-            notices.say(DeskRefusal.words(error, else: String(localized: "Couldn’t change that task.")))
+            notices.say(DeskRefusal.words(error, else: String(localized: "Couldn’t change that task.")), refused: true)
         }
         await load()
     }
@@ -225,9 +225,9 @@ struct DeskSheetFoot: View {
     }
 }
 
-/// What the window last said, on a sheet over it: a sheet covers the window's foot, where its toast stands, and holds
-/// the window's Undo out of reach while it is up, so what is done on the sheet is said on the sheet, with its Undo,
-/// as the page's toasts show beside its drawer. The window's toast, under the sheet, has already been read out.
+/// What the window last said, on a sheet over it: a sheet holds the window's Undo out of reach while it is up, so
+/// what is done on the sheet is said on the sheet, with its Undo, as the page's toasts show beside its drawer. The
+/// window's own toast waits while the sheet says it (`Desk.Sheet.saysToasts`), so it is said once, and read out here.
 struct DeskSheetToast: View {
     let mailbox: Mailbox?
 
@@ -241,6 +241,7 @@ struct DeskSheetToast: View {
             }
             .id(toast.id)
             .transition(.move(edge: .bottom).combined(with: .opacity))
+            .onAppear { AccessibilityNotification.Announcement(toast.text).post() }
         }
     }
 }

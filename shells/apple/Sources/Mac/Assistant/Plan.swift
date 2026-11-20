@@ -162,7 +162,7 @@ final class PlanModel {
         } catch {
             notices.say(ReadOnlyWords.said(error, else: (error as? Problem)?.status == 410
                 ? String(localized: "That preview has expired. Run the command again.")
-                : String(localized: "Couldn’t finish that. Check what was done before trying again.")))
+                : String(localized: "Couldn’t finish that. Check what was done before trying again.")), refused: true)
         }
         changed()
     }

@@ -108,9 +108,9 @@ struct AccountsPane: View {
                                   : String(localized: "Removed \(StatusWords.short(email))"))
             if chosen == email { chosen = nil }
         } catch let problem as Problem where problem.status == 404 {
-            status.say(problem.detail ?? String(localized: "Couldn’t remove"))
+            status.say(problem.detail ?? String(localized: "Couldn’t remove"), refused: true)
         } catch {
-            status.say(String(localized: "Remove failed"))
+            status.say(String(localized: "Remove failed"), refused: true)
         }
         await status.readAccounts()
         await status.readDigest()

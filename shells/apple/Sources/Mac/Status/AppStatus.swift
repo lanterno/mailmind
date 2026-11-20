@@ -76,6 +76,8 @@ final class AppStatus {
     struct Notice: Equatable, Identifiable {
         let id = UUID()
         let text: String
+        /// Said as a refusal or a failure: shown with the alert, never the tick.
+        var refused = false
     }
 
     init(newMail: NewMailAlerts = NewMailAlerts()) {
@@ -203,7 +205,7 @@ final class AppStatus {
                 preferences = try await core.post(API.Post.Preferences.self, changes).preferences
                 if Self.touchesAI(changes) { await aiChanged() }
             } catch {
-                say((error as? Problem)?.description ?? String(localized: "Couldn’t save that setting"))
+                say((error as? Problem)?.description ?? String(localized: "Couldn’t save that setting"), refused: true)
                 await readPreferences()
             }
         }
@@ -340,7 +342,7 @@ final class AppStatus {
             let kept = digest?.stats.kept ?? 0
             say(String(localized: "Removed \(real.totalPruned.formatted()) messages deleted elsewhere · \(kept.formatted()) here"))
         } catch {
-            say(String(localized: "Couldn’t check mail against the server. Try again later."))
+            say(String(localized: "Couldn’t check mail against the server. Try again later."), refused: true)
         }
     }
 
@@ -352,7 +354,7 @@ final class AppStatus {
             say(String(localized: "Re-syncing \(StatusWords.short(account))"))
             try? await Task.sleep(for: .seconds(2.5))
         } catch {
-            say(String(localized: "Couldn’t retry"))
+            say(String(localized: "Couldn’t retry"), refused: true)
         }
         await readHealth()
     }
@@ -365,14 +367,15 @@ final class AppStatus {
             say(String(localized: "Trusted · re-syncing \(StatusWords.short(account))"))
             try? await Task.sleep(for: .seconds(2.5))
         } catch {
-            say(String(localized: "Couldn’t trust it"))
+            say(String(localized: "Couldn’t trust it"), refused: true)
         }
         await readHealth()
     }
 
     /// Show `text` for a moment, and tell VoiceOver.
-    func say(_ text: String) {
-        let notice = Notice(text: text)
+    /// Say `text` for a moment; `refused` where it says something was turned down or failed, which shows the alert.
+    func say(_ text: String, refused: Bool = false) {
+        let notice = Notice(text: text, refused: refused)
         self.notice = notice
         Announce.say(text)
         noticeGoes?.cancel()

@@ -115,9 +115,9 @@ final class CurateModel {
             let method = preview.unsub.method
             cleaning = Cleaning(preview: preview, scope: .sender, unsubscribe: method == "one-click" || method == "mailto")
         } catch let problem as Problem {
-            notices.say(problem.detail ?? String(localized: "error"))
+            notices.say(problem.detail ?? String(localized: "error"), refused: true)
         } catch {
-            notices.say(String(localized: "Couldn’t load sender"))
+            notices.say(String(localized: "Couldn’t load sender"), refused: true)
         }
     }
 
@@ -143,7 +143,7 @@ final class CurateModel {
                 blockScope: asked.scope, confirmToken: asked.preview.confirmToken, doUnsubscribe: asked.unsubscribe,
                 fromAddr: sender, undoGroup: newUndoGroup()))
         } catch {
-            notices.say(ReadOnlyWords.said(error, else: String(localized: "Cleanup failed")))
+            notices.say(ReadOnlyWords.said(error, else: String(localized: "Cleanup failed")), refused: true)
             return
         }
         if asked.method == "http-page", asked.unsubscribe, let page = done.browserUrl.flatMap(URL.init(string:)),
@@ -180,7 +180,7 @@ final class CurateModel {
             batching = Batching(preview: try await routes.post(API.Post.CleanupBatchPreview.self,
                                                                API.BatchSendersBody(senders: senders)))
         } catch {
-            notices.say(DeskRefusal.words(error, else: String(localized: "Couldn’t load those senders")))
+            notices.say(DeskRefusal.words(error, else: String(localized: "Couldn’t load those senders")), refused: true)
             return
         }
         await explainBatch(senders)
@@ -215,7 +215,7 @@ final class CurateModel {
             notices.say(String(localized: "Blocked \(done.blocked.count) · swept \(done.swept)") + failed,
                         undo: String(localized: "Clean Up"))
         } catch {
-            notices.say(ReadOnlyWords.said(error, else: String(localized: "Cleanup failed")))
+            notices.say(ReadOnlyWords.said(error, else: String(localized: "Cleanup failed")), refused: true)
             return
         }
         await again()
@@ -235,7 +235,7 @@ final class CurateModel {
             let planned = try await routes.post(API.Post.Sweep.self, API.SweepBody(account: account, dryRun: true))
             guard let result = planned.results.first else { return notices.say(String(localized: "Nothing to sweep")) }
             if let error = result.error {
-                notices.say(Self.sweepStopped(error))
+                notices.say(Self.sweepStopped(error), refused: true)
             } else if result.planned == 0, let held = result.heldBack, held > 0 {
                 notices.say(String(localized: "Nothing to sweep: \(held) starred or unread stay"))
             } else if result.planned == 0 {
@@ -244,7 +244,7 @@ final class CurateModel {
                 sweepArmed = result
             }
         } catch {
-            notices.say(Self.sweepFailed(error, planning: true))
+            notices.say(Self.sweepFailed(error, planning: true), refused: true)
         }
     }
 
@@ -273,7 +273,7 @@ final class CurateModel {
                 notices.say(words, undo: undoable ? String(localized: "Sweep") : nil)
             }
         } catch {
-            notices.say(Self.sweepFailed(error, planning: false))
+            notices.say(Self.sweepFailed(error, planning: false), refused: true)
         }
         sweepBusy = nil
         await again()
@@ -378,7 +378,7 @@ final class CurateModel {
             if changed.reclassified > 0 { self.changed() }
             return true
         } catch {
-            notices.say(Self.ruleFailed(error))
+            notices.say(Self.ruleFailed(error), refused: true)
             return false
         }
     }
@@ -411,7 +411,7 @@ final class CurateModel {
             notices.say(String(localized: "Filter removed"))
             await readRules(routes)
         } catch {
-            notices.say(String(localized: "Couldn’t remove the filter"))
+            notices.say(String(localized: "Couldn’t remove the filter"), refused: true)
         }
     }
 

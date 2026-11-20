@@ -320,7 +320,7 @@ final class BriefModel {
         } catch {
             filing.remove(copy)
             notices.say(ReadOnlyWords.said(error, else: verb == .trash ? String(localized: "Couldn’t delete")
-                                                                     : String(localized: "Couldn’t archive")))
+                                                                     : String(localized: "Couldn’t archive")), refused: true)
         }
         changed()
     }
@@ -354,7 +354,7 @@ final class BriefModel {
                 undo: filed.undoable ? Mailbox.words(.archive).undo : nil)
         } catch {
             filing.subtract(copies)
-            notices.say(ReadOnlyWords.said(error, else: String(localized: "Couldn’t archive")))
+            notices.say(ReadOnlyWords.said(error, else: String(localized: "Couldn’t archive")), refused: true)
         }
         changed()
     }
@@ -367,7 +367,7 @@ final class BriefModel {
             tidyRun = try? await routes.get(API.Get.Tidy.self, [:])
             changed()
         } catch {
-            notices.say(ReadOnlyWords.said(error, else: String(localized: "Couldn’t take that back.")))
+            notices.say(ReadOnlyWords.said(error, else: String(localized: "Couldn’t take that back.")), refused: true)
         }
     }
 

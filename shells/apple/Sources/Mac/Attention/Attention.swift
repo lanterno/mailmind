@@ -185,7 +185,7 @@ final class AttentionModel {
             notices.say(said, undo: undo)
             left?()
         } catch {
-            notices.say(ReadOnlyWords.said(error, else: fail(DeskRefusal.message(error))))
+            notices.say(ReadOnlyWords.said(error, else: fail(DeskRefusal.message(error))), refused: true)
         }
         changed()
     }

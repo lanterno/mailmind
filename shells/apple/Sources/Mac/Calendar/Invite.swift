@@ -52,7 +52,7 @@ final class InviteReplies {
             }
         } catch {
             said[invite] = .failed(ReadOnlyWords.said(error, else: String(localized: "Couldn’t RSVP: \(DeskRefusal.message(error))")))
-            notices.say(ReadOnlyWords.said(error, else: String(localized: "RSVP failed")))
+            notices.say(ReadOnlyWords.said(error, else: String(localized: "RSVP failed")), refused: true)
         }
     }
 
@@ -204,7 +204,8 @@ struct InviteCard: View {
             ])
             try CalendarFile.open(file.data, named: "invite.ics")
         } catch {
-            notices.say(DeskRefusal.words(error, else: String(localized: "Couldn’t open the invite’s calendar file.")))
+            notices.say(DeskRefusal.words(error, else: String(localized: "Couldn’t open the invite’s calendar file.")),
+                        refused: true)
         }
     }
 

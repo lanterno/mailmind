@@ -14,6 +14,8 @@ final class DeskNotices {
         let text: String
         /// What Undo takes back, as Edit ▸ Undo names it ("Snooze"); nil where nothing can be taken back.
         let undo: String?
+        /// Said as a refusal or a failure: shown with the alert, never the tick.
+        var refused = false
 
         var undoable: Bool { undo != nil }
     }
@@ -25,13 +27,14 @@ final class DeskNotices {
     private(set) var shown: Notice?
     @ObservationIgnored private var clearing: Task<Void, Never>?
     /// Where the window says things instead, once it has one place for every notice (the mailbox's): what is said,
-    /// and what Undo (`/api/undo`) takes back, if it can.
-    @ObservationIgnored var relay: ((_ text: String, _ undo: String?) -> Void)?
+    /// what Undo (`/api/undo`) takes back, if it can, and whether it is a refusal.
+    @ObservationIgnored var relay: ((_ text: String, _ undo: String?, _ refused: Bool) -> Void)?
 
-    /// Say `text`, offering Undo where `undo` names what it takes back.
-    func say(_ text: String, undo: String? = nil) {
-        if let relay { return relay(text, undo) }
-        let notice = Notice(text: text, undo: undo)
+    /// Say `text`, offering Undo where `undo` names what it takes back; `refused` where it says something was turned
+    /// down or failed, which shows the alert.
+    func say(_ text: String, undo: String? = nil, refused: Bool = false) {
+        if let relay { return relay(text, undo, refused) }
+        let notice = Notice(text: text, undo: undo, refused: refused)
         shown = notice
         AccessibilityNotification.Announcement(text).post()
         clearing?.cancel()
@@ -56,7 +59,7 @@ struct DeskNoticeBanner: View {
 
     var body: some View {
         if let notice = notices.shown {
-            MeadowToast(icon: MailboxToast.icon(notice.text), text: Text(notice.text)) {
+            MeadowToast(icon: MailboxToast.icon(notice.text, refused: notice.refused), text: Text(notice.text)) {
                 if notice.undoable {
                     MeadowToastButton(title: String(localized: "Undo"), icon: .undo) {
                         notices.clear()
