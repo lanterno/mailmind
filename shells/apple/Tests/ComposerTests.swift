@@ -504,6 +504,39 @@ final class ComposerTests: XCTestCase {
         XCTAssertEqual(to.cell?.accessibilityLabel(), "To")
     }
 
+    /// An address typed in To becomes a chip as the field is left by a click elsewhere (on Subject, say), as Tab makes
+    /// it one, rather than stay behind as text the next field's first click seems to have lost.
+    func testLeavingToByAClickMakesWhatIsTypedAChip() async throws {
+        let host = FakeHost()
+        let composer = Composer(ComposeSeed(), host: host)
+        defer { composer.close(force: true) }
+        let view = NSHostingView(rootView: ComposerForm(composer: composer, host: host, aliases: [:], lights: false) { _ in }
+            .frame(width: 720, height: 560)
+            .meadowLight(.day))
+        view.frame = CGRect(x: 0, y: 0, width: 720, height: 560)
+        let window = NSWindow(contentRect: view.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = view
+        defer { window.contentView = nil }
+        var found: RecipientField?
+        for _ in 0..<50 where found == nil {
+            view.layoutSubtreeIfNeeded()
+            found = Self.views(RecipientField.self, in: view).first
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let to = try XCTUnwrap(found, "the To field")
+        XCTAssertTrue(window.makeFirstResponder(to))
+        let editor = try XCTUnwrap(to.currentEditor() as? NSTextView, "To is being typed in")
+        editor.insertText("ren@example.test", replacementRange: editor.selectedRange())
+        await eventually("typed") { composer.typed[.to] == "ren@example.test" }
+        XCTAssertTrue(composer.recipients(.to).isEmpty, "nothing made a chip of it yet")
+
+        // A click elsewhere: the field's editing ends, as a click on Subject ends it.
+        XCTAssertTrue(window.makeFirstResponder(nil))
+        await eventually("a chip") { composer.recipients(.to).map(\.value) == ["ren@example.test"] }
+        XCTAssertEqual(composer.typed[.to] ?? "", "", "and the field is empty for the next")
+    }
+
     private static func views<V: NSView>(_ kind: V.Type, in view: NSView) -> [V] {
         ((view as? V).map { [$0] } ?? []) + view.subviews.flatMap { views(kind, in: $0) }
     }
