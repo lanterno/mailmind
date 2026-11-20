@@ -91,7 +91,10 @@ sync runs now where this process runs one, rather than the status saying Synced 
 One dropped connection that connects again at once logs in, and shows nothing. While an account's trouble may pass, the
 `retry` job tries its sync every 20 s (`Syncing.try_unreached`, `sync_health.RETRY_SECONDS`), so it says it synced within
 moments of the server answering again, not when IDLE's rest or the next round ends, minutes on. A try that fails changes
-nothing and says nothing: it counts no failed sync, so trouble shows as it would have.
+nothing and says nothing: it counts no failed sync, so trouble shows as it would have. A sync that works after one that
+failed, a try's or any other, and a person's Retry, hurry the account's IDLE worker (`server_back`, then
+`realtime.hurry`, the Rust core's `Realtime::hurry`): one resting leaves its rest and connects now, its rests starting
+over, so mail that comes once the server is back is heard without a Get New Mail. One serving on a connection is left be.
 
 `realtime.stop()` and a retirement only interrupt a worker's session (`MailSession.interrupt`, a
 socket shutdown); the worker closes its own connection. Closing a socket another thread may be
