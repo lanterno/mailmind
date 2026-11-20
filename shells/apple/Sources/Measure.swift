@@ -83,9 +83,12 @@ final class Measure {
     /// what the core sent for them. Its exit code is the result: 0 once they do, 3 after a minute without.
     private func scrollFar(_ model: ListModel) async -> Never {
         let target = model.total * 9 / 10
+        let deadline = ContinuousClock.now + .seconds(60)
+        // The first rows can reach the model before the table is in its window: wait for the table, then jump.
+        while scrollView == nil, ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(50)) }
         let started = ContinuousClock.now
         scroll(toRow: target, rows: model.total)
-        while ContinuousClock.now - started < .seconds(60) {
+        while ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(50))
             let shown = shownRows()
             if let first = shown.map(\.position).min(), first >= model.total * 85 / 100, shown.allSatisfy(\.real) {
@@ -103,8 +106,14 @@ final class Measure {
 
     #if os(macOS)
     /// The list's scroll view. Moving its clip view is what a trackpad does, so scrolling is measured the way a
-    /// person scrolls.
-    private lazy var scrollView: NSScrollView? = NSApp.windows.compactMap { window in window.contentView.flatMap { Self.tallest(in: $0) } }.first
+    /// person scrolls. Looked for again until the table is in its window, then kept.
+    private var found: NSScrollView?
+    private var scrollView: NSScrollView? {
+        if found == nil {
+            found = NSApp.windows.compactMap { window in window.contentView.flatMap { Self.tallest(in: $0) } }.first
+        }
+        return found
+    }
 
     private static func tallest(in view: NSView) -> NSScrollView? {
         if let scroll = view as? NSScrollView, (scroll.documentView?.frame.height ?? 0) > 100_000 { return scroll }
@@ -145,9 +154,16 @@ final class Measure {
         scrollView.reflectScrolledClipView(clip)
     }
     #else
-    /// The list's scroll view. Setting its offset is what a finger's drag does.
-    private lazy var scrollView: UIScrollView? = UIApplication.shared.connectedScenes
-        .compactMap { $0 as? UIWindowScene }.flatMap(\.windows).compactMap { Self.tallest(in: $0) }.first
+    /// The list's scroll view. Setting its offset is what a finger's drag does. Looked for again until the list is in
+    /// its window, then kept.
+    private var found: UIScrollView?
+    private var scrollView: UIScrollView? {
+        if found == nil {
+            found = UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }.flatMap(\.windows).compactMap { Self.tallest(in: $0) }.first
+        }
+        return found
+    }
 
     private static func tallest(in view: UIView) -> UIScrollView? {
         if let scroll = view as? UIScrollView, scroll.contentSize.height > 100_000 { return scroll }
