@@ -155,9 +155,43 @@ def test_and_isnt_counted_as_dropped():
     assert resume.bcc_of(message("lin@example.test"), json.dumps(["LIN@example.test"]), False) == (["lin@example.test"], 0)
 
 
-def test_a_recorded_chip_naming_no_address_counts_for_nothing():
-    assert resume.bcc_of(message(), json.dumps(["not an address"]), False) == ([], 0)
-    assert resume.bcc_of(message(), json.dumps(["not an address"]), True) == ([], 0)
+def test_a_recorded_chip_naming_no_address_is_what_was_typed_and_goes_as_one_that_does():
+    assert resume.bcc_of(message(), json.dumps(["not an address"]), True) == (["not an address"], 0)
+    assert resume.bcc_of(message(), json.dumps(["not an address"]), False) == ([], 1)
+
+
+def test_a_recorded_chip_naming_no_address_comes_after_the_drafts_own():
+    assert resume.bcc_of(message("lin@example.test"), json.dumps(["lin@example.test", "eve at example"]), True) == (
+        ["lin@example.test", "eve at example"], 0)
+    assert resume.bcc_of(message("lin@example.test"), json.dumps(["lin@example.test", "eve at example"]), False) == (
+        ["lin@example.test"], 1)
+
+
+def headed(*lines):
+    return resume.read(("From: ada@example.test\r\n" + "".join(f"{line}\r\n" for line in lines) + "\r\nHello\r\n").encode())[0]
+
+
+def test_what_was_typed_that_isnt_an_address_reopens_after_the_addresses():
+    msg = headed("To: Lin <lin@example.test>", "X-MailMind-Draft-To: bob@example", "X-MailMind-Draft-To: cy@",
+                 "X-MailMind-Draft-Cc: dee at example")
+    assert (resume.recipients(msg, "To"), resume.recipients(msg, "Cc")) == (["Lin <lin@example.test>", "bob@example", "cy@"],
+                                                                            ["dee at example"])
+
+
+def test_it_reopens_as_typed_from_its_encoded_words_and_folds():
+    msg = headed("X-MailMind-Draft-To: =?utf-8?q?Zo=C3=AB_=3Czo=C3=AB=40ex=C3=A4mple=3E?=",
+                 "X-MailMind-Draft-Cc: a very long", " folded line")
+    assert (resume.recipients(msg, "To"), resume.recipients(msg, "Cc")) == (["Zoë <zoë@exämple>"], ["a very long folded line"])
+
+
+def test_it_reopens_once_and_never_beside_an_address_it_names():
+    msg = headed("To: lin@example.test", "X-MailMind-Draft-To: LIN@example.test", "X-MailMind-Draft-To: bob@example",
+                 "X-MailMind-Draft-To: BOB@EXAMPLE", "X-MailMind-Draft-To:  ")
+    assert resume.recipients(msg, "To") == ["lin@example.test", "bob@example"]
+
+
+def test_a_recorded_chip_of_nothing_counts_for_nothing():
+    assert resume.bcc_of(message(), json.dumps(["", " \r\n "]), True) == ([], 0)
 
 
 def test_no_record_is_no_bcc():

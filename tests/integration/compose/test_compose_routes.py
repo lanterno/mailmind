@@ -110,7 +110,8 @@ def test_a_recipient_may_be_a_string_of_them(app):
     assert (r.status, r.json["recipients"]) == (200, 2)
 
 
-@pytest.mark.parametrize("to, said", [(["lin at example dot test"], "not a valid address: 'lin'"), ([], "at least one recipient is required")])
+@pytest.mark.parametrize("to, said", [(["lin at example dot test"], "“lin at example dot test” in To isn’t a valid address."),
+                                      ([], "Add at least one recipient.")])
 def test_a_recipient_is_judged_in_its_own_words(app, to, said):
     r = app.post("/api/send", new(to=to))
     assert (r.status, r.json) == (400, problems.refused(said))

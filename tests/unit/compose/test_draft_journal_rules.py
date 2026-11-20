@@ -92,6 +92,12 @@ def test_bcc_is_kept_here_as_the_composer_holds_it_since_the_bytes_never_say():
     assert json.loads(record["bcc"]) == ["Lin Ma <lin@example.test>", "bea@example.test"]
 
 
+def test_bcc_that_isnt_an_address_yet_is_kept_as_typed_after_the_addresses_on_one_line_and_once():
+    record = journal.record_of(spec(bcc=["eve at example", "Lin Ma <lin@example.test>", "EVE AT EXAMPLE", "bo@\r\nBcc: x", " "]),
+                               BUILT)
+    assert json.loads(record["bcc"]) == ["Lin Ma <lin@example.test>", "eve at example", "bo@ Bcc: x"]
+
+
 def test_no_bcc_is_none():
     assert journal.record_of(spec(), BUILT)["bcc"] is None
 

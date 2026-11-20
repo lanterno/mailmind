@@ -21,7 +21,7 @@
  },
  {
   "body": {
-   "detail": "at least one recipient is required",
+   "detail": "Add at least one recipient.",
    "status": 400,
    "title": "Refused",
    "type": "/problems/refused"
@@ -41,7 +41,7 @@
  },
  {
   "body": {
-   "detail": "not a valid address: 'lin'",
+   "detail": "“lin at example dot test” in To isn’t a valid address.",
    "status": 400,
    "title": "Refused",
    "type": "/problems/refused"
@@ -163,7 +163,7 @@
  },
  {
   "body": {
-   "detail": "too many recipients (max 100)",
+   "detail": "A message may have at most 100 recipients.",
    "status": 400,
    "title": "Refused",
    "type": "/problems/refused"
