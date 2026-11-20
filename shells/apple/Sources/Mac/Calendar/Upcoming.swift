@@ -30,19 +30,33 @@ enum EventWhen {
         return nil
     }
 
-    /// [big, small]: "3:00 pm" over "today", "Sat" over "8:10 am", "Thu 6" over "all day" a week out.
-    static func short(start: String, allDay: Bool, now: Date, calendar: Calendar = .current,
+    /// [big, small]: "3:00 pm" over "today", "Sat" over "8:10 am", "Thu 6" over "all day" a week out. The core lists
+    /// what hasn't ended, so a meeting under way is said as one: "now" over "until 00:30" (or the day it ends, where
+    /// that isn't today), never as a start "today" that was yesterday's; one begun before today that `end` doesn't
+    /// show running says the day it began, "yesterday".
+    static func short(start: String, end: String? = nil, allDay: Bool, now: Date, calendar: Calendar = .current,
                       locale: Locale = .current) -> (big: String, small: String) {
         guard let date = moment(start, calendar: calendar) else { return (start, "") }
-        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: now),
-                                           to: calendar.startOfDay(for: date)).day ?? 0
+        let today = calendar.startOfDay(for: now)
+        let days = calendar.dateComponents([.day], from: today, to: calendar.startOfDay(for: date)).day ?? 0
         let time = allDay ? String(localized: "all day") : clock(date, calendar: calendar, locale: locale)
-        if days <= 0 {
+        if !allDay, date <= now, let end = end.flatMap({ moment($0, calendar: calendar) }), end > now {
+            return (String(localized: "now"), String(localized: "until \(until(end, now: now, calendar: calendar, locale: locale))"))
+        }
+        if days == 0 || (days < 0 && allDay) {
             return allDay ? (String(localized: "Today"), time) : (time, String(localized: "today"))
         }
+        if days == -1 { return (time, String(localized: "yesterday")) }
         var style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone).weekday(.abbreviated)
-        if days >= 7 { style = style.day() }
+        if days >= 7 || days < 0 { style = style.day() }
         return (date.formatted(style), time)
+    }
+
+    /// When a meeting under way ends: its time where that is within a day, else the day ("Sun").
+    private static func until(_ end: Date, now: Date, calendar: Calendar, locale: Locale) -> String {
+        if end.timeIntervalSince(now) < 24 * 3600 { return clock(end, calendar: calendar, locale: locale) }
+        return end.formatted(Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
+            .weekday(.abbreviated))
     }
 
     /// A week's meeting or deadline, whichever side of now it falls on: "Thu, Nov 20, 3:00 pm".
@@ -84,18 +98,20 @@ struct UpcomingList: View {
     }
 
     private func row(_ event: API.UpcomingEvent) -> some View {
-        let when = EventWhen.short(start: event.start, allDay: event.allDay, now: now)
+        let when = EventWhen.short(start: event.start, end: event.end, allDay: event.allDay, now: now)
         return HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 0) {
                 Text(when.big)
                     .font(.meadow(.ui, 13, .heavy))
                     .monospacedDigit()
                     .foregroundStyle(meadow.ink)
+                    .lineLimit(1)
+                // A meeting under way says until when, which a twelve-hour clock writes wider than the column.
                 Text(when.small)
                     .font(.meadow(.ui, 12, .semibold))
                     .foregroundStyle(meadow.ink3)
+                    .lineLimit(2)
             }
-            .lineLimit(1)
             .frame(width: 62, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
                 Button(event.summary.isEmpty ? String(localized: "(no title)") : event.summary) {
