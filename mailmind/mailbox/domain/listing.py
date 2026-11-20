@@ -18,7 +18,7 @@ SUMMARY_CHARS = 300
 
 def _attention(r: Row) -> dict[str, bool]:
     """What the verdict on row `r` asks of you."""
-    return verdict.answers(r["importance"], r["category"], r["action"])
+    return verdict.answers(r["importance"], r["category"], r["action"], r["is_junk"])
 
 
 def _who(r: Row) -> dict[str, Any]:

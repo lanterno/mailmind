@@ -18,7 +18,7 @@ from mailmind.platform.db.uow import UnitOfWork
 
 def _attention(r: Row) -> dict[str, bool]:
     """What the verdict on row `r` asks of you. The page reads these and never works them out."""
-    return verdict.answers(r["importance"], r["category"], r["action"])
+    return verdict.answers(r["importance"], r["category"], r["action"], r["is_junk"])
 
 
 class Digest:

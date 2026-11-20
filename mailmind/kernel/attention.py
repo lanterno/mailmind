@@ -33,8 +33,12 @@ def safe_to_file(importance: int | None, category: str | None, action: str | Non
     return (importance or 1) <= 2 and not _has_step(action) and category in ("info", "other")
 
 
-def answers(importance: int | None, category: str | None, action: str | None) -> dict[str, bool]:
-    """All four, as a list row in the API carries them."""
+def answers(importance: int | None, category: str | None, action: str | None, junk: object) -> dict[str, bool]:
+    """All four, as a list row in the API carries them. A message read as junk asks none of them, whatever the AI said
+    of it before: the brief leaves junk out and a sweep files it, so mail from a sender blocked after the AI read it
+    stops needing you in the lists as it does in the brief."""
+    if junk:
+        return {"needs_you": False, "reply_worthy": False, "commitment_worthy": False, "safe_to_file": False}
     return {"needs_you": needs_you(importance, category, action),
             "reply_worthy": reply_worthy(importance, category),
             "commitment_worthy": commitment_worthy(importance, category, action),
