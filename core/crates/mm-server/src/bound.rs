@@ -109,7 +109,7 @@ impl Discovery {
         Discovery {
             search: Search::new(store.clone(), names.clone(), roles.clone(), clock.clone(), zone.clone()),
             views: SavedViews::new(store.clone(), Arc::new(Drawn)),
-            contacts: Contacts::new(store.clone(), clock.clone()),
+            contacts: Contacts::new(store.clone(), clock.clone(), zone.clone()),
             suggesting: Suggesting::new(store.clone()),
             known: KnownContacts::new(
                 store,
@@ -195,10 +195,11 @@ impl Curation {
                 Arc::new(Enabled(directory.clone())),
                 filing,
                 clock.clone(),
+                zone.clone(),
             )),
             filters: Filters::new(store.clone(), Arc::new(ArrivalConditions(zone.clone())), Arc::new(Drawn)),
             audit: Audit::new(store.clone()),
-            cleanup: Cleanup::new(store.clone(), store, clock.clone()),
+            cleanup: Cleanup::new(store.clone(), store, clock.clone(), zone.clone()),
             database: database.clone(),
         }
     }
@@ -252,7 +253,7 @@ impl Attention {
                 clock: clock.clone(),
                 read_only,
             })),
-            follow_ups: FollowUps::new(book.clone(), accounts.clone(), events.clone(), clock.clone()),
+            follow_ups: FollowUps::new(book.clone(), accounts.clone(), events.clone(), clock.clone(), zone.clone()),
             tasks: Tasks::new(book, accounts, events, clock.clone(), zone.clone()),
             database: database.clone(),
         }

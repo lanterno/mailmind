@@ -110,7 +110,7 @@ impl Search {
             .ok_or_else(|| Problem::refused("bad query"))?;
         let now = self.clock.now();
         let limit = usize::try_from(want.limit).unwrap_or(0);
-        let items: Vec<Value> = rows.iter().take(limit).map(|r| hit(r, &aliases, now)).collect();
+        let items: Vec<Value> = rows.iter().take(limit).map(|r| hit(r, &aliases, now, &*self.zone)).collect();
         Ok(json!({
             "ok": true,
             "query": want.q,
@@ -129,7 +129,7 @@ pub(crate) fn cut(text: &str, n: usize) -> String {
 }
 
 /// A result as the list shows it.
-pub fn hit(r: &Found, aliases: &BTreeMap<String, Option<String>>, now: Moment) -> Value {
+pub fn hit(r: &Found, aliases: &BTreeMap<String, Option<String>>, now: Moment, zone: &dyn Zone) -> Value {
     fn text(v: &Option<String>) -> Option<&str> {
         v.as_deref().filter(|s| !s.is_empty())
     }
@@ -145,7 +145,7 @@ pub fn hit(r: &Found, aliases: &BTreeMap<String, Option<String>>, now: Moment) -
         row.insert(name.into(), value);
     }
     row.insert("subject".into(), json!(text(&r.subject).unwrap_or(NO_SUBJECT)));
-    row.insert("when".into(), json!(relative::rel_time(r.date_iso.as_deref(), now)));
+    row.insert("when".into(), json!(relative::rel_time(r.date_iso.as_deref(), now, zone)));
     row.insert("date".into(), json!(cut(r.date_iso.as_deref().unwrap_or_default(), 10)));
     row.insert("snippet".into(), json!(cut(r.snippet.as_deref().unwrap_or_default(), 200)));
     row.insert("seen".into(), json!(r.seen));

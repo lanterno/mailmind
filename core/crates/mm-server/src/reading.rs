@@ -45,11 +45,13 @@ pub(crate) struct Adapters {
     pub(crate) fetch: Arc<dyn BodyFetch>,
     /// How the sync stands now, for the digest.
     pub(crate) live_sync: Arc<crate::wiring::LiveSync>,
+    /// The person's, whose days the lists' "yesterday" counts.
+    pub(crate) zone: Arc<dyn mm_kernel::zone::Zone>,
 }
 
 impl Reading {
     pub(crate) fn assemble(made: Adapters, environment: &Environment, seams: &Seams) -> Reading {
-        let Adapters { accounts, database, syncs, ai, folders, invites, fetch, live_sync } = made;
+        let Adapters { accounts, database, syncs, ai, folders, invites, fetch, live_sync, zone } = made;
         let clock = seams.clock.clone();
         let opening = MessageOpening {
             drafts: Drafts::new(database.clone(), Arc::new(DraftsFolder(folders)), clock.clone()),
@@ -60,11 +62,11 @@ impl Reading {
         exports.sweep_left_behind();
         Reading {
             exports,
-            lists: Lists::new(accounts.clone(), database.clone(), database.clone(), syncs, clock.clone()),
+            lists: Lists::new(accounts.clone(), database.clone(), database.clone(), syncs, clock.clone(), zone.clone()),
             bodies: Bodies::new(database.clone(), fetch, Arc::new(opening), seams.sanitizer.clone()),
-            documents: DocumentHub::new(database.clone(), accounts.clone(), clock.clone()),
+            documents: DocumentHub::new(database.clone(), accounts.clone(), clock.clone(), zone.clone()),
             outbox: Outbox::new(database.clone(), clock.clone(), environment.profile() == "full"),
-            digest: Digest::new(accounts, database, live_sync, ai, environment.profile(), clock),
+            digest: Digest::new(accounts, database, live_sync, ai, environment.profile(), clock, zone),
         }
     }
 }

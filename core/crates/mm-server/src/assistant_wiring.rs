@@ -496,7 +496,7 @@ impl PlanSearch for Planning {
         let shown = reach.rows.iter().take(sample).map(|r| {
             json!({"from": said(&r.from_name).or(said(&r.from_addr)).unwrap_or_default(),
                    "subject": said(&r.subject).unwrap_or(mm_discovery::search::NO_SUBJECT),
-                   "when": mm_kernel::relative::rel_time(r.date_iso.as_deref(), now)})
+                   "when": mm_kernel::relative::rel_time(r.date_iso.as_deref(), now, &*self.zone)})
         });
         Ok(Some(Reached {
             count: reach.count,

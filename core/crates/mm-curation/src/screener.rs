@@ -7,6 +7,7 @@ use std::sync::Arc;
 use mm_kernel::errors::{Failure, Problem};
 use mm_kernel::relative::rel_time;
 use mm_kernel::seams::Clock;
+use mm_kernel::zone::Zone;
 use serde_json::{Value, json};
 
 use crate::classifier::{by_rule, classify};
@@ -27,6 +28,8 @@ pub struct Screener {
     boxes: Arc<dyn Mailboxes>,
     filing: Arc<dyn Filing>,
     clock: Arc<dyn Clock>,
+    /// The person's, whose days a sender's latest "yesterday" counts.
+    zone: Arc<dyn Zone>,
 }
 
 impl Screener {
@@ -36,8 +39,9 @@ impl Screener {
         boxes: Arc<dyn Mailboxes>,
         filing: Arc<dyn Filing>,
         clock: Arc<dyn Clock>,
+        zone: Arc<dyn Zone>,
     ) -> Screener {
-        Screener { rules, mail, boxes, filing, clock }
+        Screener { rules, mail, boxes, filing, clock, zone }
     }
 
     /// `GET /api/rules`.
@@ -66,7 +70,7 @@ impl Screener {
                     "from_name": row.name.as_deref().filter(|n| !n.is_empty()).unwrap_or(&row.addr),
                     "domain": domain_of(&row.addr),
                     "count": row.n,
-                    "when": rel_time(row.iso.as_deref(), now),
+                    "when": rel_time(row.iso.as_deref(), now, &*self.zone),
                 })
             })
             .collect();

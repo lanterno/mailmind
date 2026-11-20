@@ -12,6 +12,7 @@ use mm_kernel::errors::{Failure, Problem};
 use mm_kernel::log;
 use mm_kernel::relative::{ago, rel_time};
 use mm_kernel::seams::Clock;
+use mm_kernel::zone::Zone;
 use serde_json::{Value, json};
 
 use crate::events::AttentionEvent;
@@ -82,8 +83,8 @@ pub fn unpinning_ends(current: Option<&FollowUp>) -> bool {
 
 /// A thread waiting on someone: on the other side if it was sent (who is the first address it went to), else on you
 /// (`mailbox.domain.listing.waiting_item`).
-pub fn waiting_item(r: &WaitingRow, now: mm_kernel::seams::Moment) -> Value {
-    let when = rel_time(r.date_iso.as_deref(), now);
+pub fn waiting_item(r: &WaitingRow, now: mm_kernel::seams::Moment, zone: &dyn Zone) -> Value {
+    let when = rel_time(r.date_iso.as_deref(), now, zone);
     let label = if r.kind == SENT {
         format!("Sent {} ago · no reply", ago(r.first_sent, now))
     } else {
@@ -111,6 +112,8 @@ pub struct FollowUps {
     accounts: Arc<dyn Accounts>,
     events: Arc<dyn Events>,
     clock: Arc<dyn Clock>,
+    /// The person's, whose days a waiting thread's "yesterday" counts.
+    zone: Arc<dyn Zone>,
 }
 
 impl FollowUps {
@@ -119,8 +122,9 @@ impl FollowUps {
         accounts: Arc<dyn Accounts>,
         events: Arc<dyn Events>,
         clock: Arc<dyn Clock>,
+        zone: Arc<dyn Zone>,
     ) -> FollowUps {
-        FollowUps { threads: Threads::new(book.clone(), accounts.clone()), book, accounts, events, clock }
+        FollowUps { threads: Threads::new(book.clone(), accounts.clone()), book, accounts, events, clock, zone }
     }
 
     fn now_iso(&self) -> String {
@@ -177,7 +181,7 @@ impl FollowUps {
         let accounts = self.accounts.emails()?;
         let now = self.clock.now();
         let rows = self.book.waiting_on_others(&accounts, 100)?;
-        Ok(json!({"ok": true, "items": rows.iter().map(|r| waiting_item(r, now)).collect::<Vec<_>>()}))
+        Ok(json!({"ok": true, "items": rows.iter().map(|r| waiting_item(r, now, &*self.zone)).collect::<Vec<_>>()}))
     }
 }
 

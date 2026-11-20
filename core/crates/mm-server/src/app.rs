@@ -313,6 +313,7 @@ impl App {
                 invites: mm_calendar::invites::Invites::new(zones.clone(), zone.clone()),
                 fetch: fetch.clone(),
                 live_sync: live_sync.clone(),
+                zone: zone.clone(),
             },
             environment,
             seams,

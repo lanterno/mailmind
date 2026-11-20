@@ -7,6 +7,7 @@
 
 use mm_kernel::ago::{ago, rel_time, rel_time_future};
 use mm_kernel::seams::Moment;
+use mm_kernel::zone::Zone;
 use serde_json::{Map, Value, json};
 
 use crate::ports::Row;
@@ -125,8 +126,8 @@ fn marks(it: &mut Map<String, Value>, r: &Row) {
     it.insert("bucket".into(), col(r, "bucket").clone());
 }
 
-fn when(r: &Row, now: Moment) -> Value {
-    Value::String(rel_time(text(r, "date_iso"), now))
+fn when(r: &Row, now: Moment, zone: &dyn Zone) -> Value {
+    Value::String(rel_time(text(r, "date_iso"), now, zone))
 }
 
 /// Where a page of `shown` items stands in the `total`.
@@ -135,9 +136,9 @@ pub fn window(shown: usize, total: i64, offset: i64) -> [(&'static str, Value); 
 }
 
 /// A row of a list of a folder or of the Inboxes, one conversation's latest message if `grouped`.
-pub fn listed_item(r: &Row, grouped: bool, now: Moment) -> Value {
+pub fn listed_item(r: &Row, grouped: bool, now: Moment, zone: &dyn Zone) -> Value {
     let mut it = who(r);
-    it.insert("when".into(), when(r, now));
+    it.insert("when".into(), when(r, now, zone));
     marks(&mut it, r);
     it.insert("importance".into(), col(r, "importance").clone());
     add_attention(&mut it, r);
@@ -172,9 +173,9 @@ pub fn snoozed_item(r: &Row, now: Moment) -> Value {
 }
 
 /// The start of a thread's row in a view that isn't a folder: its latest message and how many the thread holds.
-fn thread_row(r: &Row, now: Moment) -> Map<String, Value> {
+fn thread_row(r: &Row, now: Moment, zone: &dyn Zone) -> Map<String, Value> {
     let mut it = who(r);
-    it.insert("when".into(), when(r, now));
+    it.insert("when".into(), when(r, now, zone));
     marks(&mut it, r);
     it
 }
@@ -186,8 +187,8 @@ fn thread_tail(it: &mut Map<String, Value>, r: &Row) {
 }
 
 /// A muted thread's latest message, which counts as read whatever its flag says.
-pub fn muted_item(r: &Row, now: Moment) -> Value {
-    let mut it = thread_row(r, now);
+pub fn muted_item(r: &Row, now: Moment, zone: &dyn Zone) -> Value {
+    let mut it = thread_row(r, now, zone);
     it.insert("seen".into(), Value::Bool(true));
     thread_tail(&mut it, r);
     it.insert("muted".into(), Value::Bool(true));
@@ -197,13 +198,13 @@ pub fn muted_item(r: &Row, now: Moment) -> Value {
 
 /// A thread waiting on someone: on the other side if it was sent (who is the first address it went to), else on
 /// you.
-pub fn waiting_item(r: &Row, now: Moment) -> Value {
+pub fn waiting_item(r: &Row, now: Moment, zone: &dyn Zone) -> Value {
     let label = if text(r, "f_kind") == Some("sent") {
         format!("Sent {} ago · no reply", ago(int(r, "f_first_sent"), now))
     } else {
-        format!("Awaiting your reply · {}", rel_time(text(r, "date_iso"), now))
+        format!("Awaiting your reply · {}", rel_time(text(r, "date_iso"), now, zone))
     };
-    let mut it = thread_row(r, now);
+    let mut it = thread_row(r, now, zone);
     thread_tail(&mut it, r);
     it.insert("waiting".into(), Value::Bool(true));
     it.insert("account".into(), col(r, "account").clone());
@@ -215,8 +216,8 @@ pub fn waiting_item(r: &Row, now: Moment) -> Value {
 }
 
 /// A thread pinned to reply to later.
-pub fn replylater_item(r: &Row, now: Moment) -> Value {
-    let mut it = thread_row(r, now);
+pub fn replylater_item(r: &Row, now: Moment, zone: &dyn Zone) -> Value {
+    let mut it = thread_row(r, now, zone);
     thread_tail(&mut it, r);
     it.insert("replylater".into(), Value::Bool(true));
     it.insert("account".into(), col(r, "account").clone());
@@ -226,7 +227,7 @@ pub fn replylater_item(r: &Row, now: Moment) -> Value {
 
 /// A conversation's messages as it opens, each once: a Gmail copy in the Inbox and in All Mail is one message. One
 /// with no Message-ID has nothing to be the same as.
-pub fn thread_items(rows: &[Row], now: Moment) -> Vec<Value> {
+pub fn thread_items(rows: &[Row], now: Moment, zone: &dyn Zone) -> Vec<Value> {
     let mut seen_ids = std::collections::HashSet::new();
     let mut items = Vec::new();
     for r in rows {
@@ -236,7 +237,7 @@ pub fn thread_items(rows: &[Row], now: Moment) -> Vec<Value> {
             continue;
         }
         let mut it = who(r);
-        it.insert("when".into(), when(r, now));
+        it.insert("when".into(), when(r, now, zone));
         it.insert("snippet".into(), cut(r, "snippet", SNIPPET_CHARS));
         for name in ["seen", "flagged", "answered", "has_attach", "is_junk"] {
             it.insert(name.into(), flag(r, name));

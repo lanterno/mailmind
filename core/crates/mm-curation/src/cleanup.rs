@@ -7,6 +7,7 @@ use std::sync::Arc;
 use mm_kernel::errors::Failure;
 use mm_kernel::relative::rel_time;
 use mm_kernel::seams::Clock;
+use mm_kernel::zone::Zone;
 use serde_json::{Value, json};
 
 use crate::classifier::Bucket;
@@ -91,11 +92,18 @@ pub struct Cleanup {
     rules: Arc<dyn RuleBook>,
     mail: Arc<dyn SenderMail>,
     clock: Arc<dyn Clock>,
+    /// The person's, whose days a sender's last "yesterday" counts.
+    zone: Arc<dyn Zone>,
 }
 
 impl Cleanup {
-    pub fn new(rules: Arc<dyn RuleBook>, mail: Arc<dyn SenderMail>, clock: Arc<dyn Clock>) -> Cleanup {
-        Cleanup { rules, mail, clock }
+    pub fn new(
+        rules: Arc<dyn RuleBook>,
+        mail: Arc<dyn SenderMail>,
+        clock: Arc<dyn Clock>,
+        zone: Arc<dyn Zone>,
+    ) -> Cleanup {
+        Cleanup { rules, mail, clock, zone }
     }
 
     /// `GET /api/cleanup/senders`: the ranked candidates, each with how much of its mail each account holds.
@@ -116,7 +124,7 @@ impl Cleanup {
                     .unwrap_or_default();
                 json!({
                     "from_addr": c.addr, "from_name": c.name, "domain": c.domain, "count": c.count, "unseen": c.unseen,
-                    "unseen_ratio": c.unseen_ratio, "last_seen": rel_time(c.last_iso.as_deref(), now),
+                    "unseen_ratio": c.unseen_ratio, "last_seen": rel_time(c.last_iso.as_deref(), now, &*self.zone),
                     "bucket": c.bucket, "lu_likely": c.list_likely, "noise_score": c.score, "accounts": accounts,
                 })
             })

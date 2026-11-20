@@ -7,6 +7,7 @@ use mm_kernel::errors::{Failure, Problem};
 use mm_kernel::relative::{ago, rel_time};
 use mm_kernel::seams::Clock;
 use mm_kernel::text::strip;
+use mm_kernel::zone::Zone;
 use serde_json::{Value, json};
 
 use crate::ports::ContactMail;
@@ -28,11 +29,13 @@ pub fn address(addr: Option<&str>) -> Option<String> {
 pub struct Contacts {
     mail: Arc<dyn ContactMail>,
     clock: Arc<dyn Clock>,
+    /// The person's, whose days a message's "yesterday" counts.
+    zone: Arc<dyn Zone>,
 }
 
 impl Contacts {
-    pub fn new(mail: Arc<dyn ContactMail>, clock: Arc<dyn Clock>) -> Contacts {
-        Contacts { mail, clock }
+    pub fn new(mail: Arc<dyn ContactMail>, clock: Arc<dyn Clock>, zone: Arc<dyn Zone>) -> Contacts {
+        Contacts { mail, clock, zone }
     }
 
     /// Everyone who has written to you, the most often first and then the latest.
@@ -58,7 +61,7 @@ impl Contacts {
                 json!({
                     "key": r.key, "folder": r.folder, "uid": r.uid, "account": r.account,
                     "subject": r.subject.as_deref().filter(|s| !s.is_empty()).unwrap_or(NO_SUBJECT),
-                    "thread_id": r.thread_id, "when": rel_time(r.date_iso.as_deref(), now), "seen": r.seen,
+                    "thread_id": r.thread_id, "when": rel_time(r.date_iso.as_deref(), now, &*self.zone), "seen": r.seen,
                 })
             })
             .collect();

@@ -1,11 +1,13 @@
 //! How long ago a moment was, or how soon one comes, as the page says it (`mailmind.kernel.when`): `3h ago`,
 //! `yesterday`, `Oct 27`; `5d`; `wakes tomorrow 9:00 AM`. Each is told the time now, so nothing here reads a clock.
 //!
-//! The Python app says a wake time in the computer's own time zone. The Rust server has no time zone yet, so it says
-//! one in UTC, as the suites' clock (`TZ=UTC`) does.
+//! How long ago is counted in the person's calendar days, in the zone it is handed. The Python app says a wake time
+//! in the computer's own time zone; this one still says it in UTC, as the suites' clock (`TZ=UTC`) does.
 
+use crate::relative::since;
 use crate::seams::Moment;
 use crate::when::{civil, days_from_civil};
+use crate::zone::Zone;
 
 const DAY: i64 = 86_400;
 const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -18,30 +20,21 @@ pub struct Written {
     pub offset: i64,
 }
 
-/// `rel_time`: how long before `now` the stored ISO time `iso` was. A time that won't read is its first ten
-/// characters, and none is "".
-pub fn rel_time(iso: Option<&str>, now: Moment) -> String {
+/// `rel_time`: how long before `now` the stored ISO time `iso` was, in the person's calendar days in `zone`, as the
+/// list's day heads count them (`relative::since`). A time that won't read is its first ten characters, and none is
+/// "".
+pub fn rel_time(iso: Option<&str>, now: Moment, zone: &dyn Zone) -> String {
     let Some(iso) = iso.filter(|i| !i.is_empty()) else {
         return String::new();
     };
     let Some(written) = from_iso(iso) else {
         return iso.chars().take(10).collect();
     };
-    let delta = now.micros() - written.at.micros();
-    let days = delta.div_euclid(DAY * 1_000_000);
-    let seconds = delta.rem_euclid(DAY * 1_000_000) / 1_000_000;
-    match days {
-        0 if seconds / 3600 == 0 => "just now".to_owned(),
-        0 => format!("{}h ago", seconds / 3600),
-        1 => "yesterday".to_owned(),
-        d if d < 7 => format!("{d}d ago"),
-        d if d < 30 => format!("{}w ago", d.div_euclid(7)),
-        _ => {
-            let local = written.at.micros().div_euclid(1_000_000) + written.offset;
-            let (_, month, day) = civil(local.div_euclid(DAY));
-            format!("{} {day:02}", MONTHS[month as usize - 1])
-        }
-    }
+    since(written.at, now, zone, || {
+        let local = written.at.micros().div_euclid(1_000_000) + written.offset;
+        let (_, month, day) = civil(local.div_euclid(DAY));
+        format!("{} {day:02}", MONTHS[month as usize - 1])
+    })
 }
 
 /// `ago`: how long before `now` the Unix time `ts` was, as `3d`, `5h` or `12m`. None, or 0, is "a while".

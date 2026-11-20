@@ -11,6 +11,7 @@ use mm_kernel::ago::rel_time;
 use mm_kernel::errors::Failure;
 use mm_kernel::seams::Clock;
 use mm_kernel::when::iso;
+use mm_kernel::zone::Zone;
 use serde_json::{Map, Value, json};
 
 use crate::listing::{add_attention, col, or, text};
@@ -28,6 +29,8 @@ pub struct Digest {
     /// How this process runs: `full` or `read-only`.
     profile: &'static str,
     clock: Arc<dyn Clock>,
+    /// The person's, whose days an item's "yesterday" counts.
+    zone: Arc<dyn Zone>,
 }
 
 impl Digest {
@@ -38,8 +41,9 @@ impl Digest {
         ai: Arc<dyn AiStatus>,
         profile: &'static str,
         clock: Arc<dyn Clock>,
+        zone: Arc<dyn Zone>,
     ) -> Digest {
-        Digest { accounts, stored, syncing, ai, profile, clock }
+        Digest { accounts, stored, syncing, ai, profile, clock, zone }
     }
 
     pub fn answer(&self) -> Result<Value, Failure> {
@@ -66,7 +70,7 @@ impl Digest {
                     it.insert(name.into(), value);
                 }
                 it.insert("subject".into(), or(col(r, "subject"), json!("(no subject)")));
-                it.insert("when".into(), Value::String(rel_time(text(r, "date_iso"), now)));
+                it.insert("when".into(), Value::String(rel_time(text(r, "date_iso"), now, &*self.zone)));
                 it.insert("summary".into(), col(r, "summary").clone());
                 it.insert("importance".into(), col(r, "importance").clone());
                 add_attention(&mut it, r);

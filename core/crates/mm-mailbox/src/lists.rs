@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use mm_kernel::errors::{Failure, Problem};
 use mm_kernel::seams::Clock;
+use mm_kernel::zone::Zone;
 use serde_json::{Map, Value, json};
 
 use crate::listing;
@@ -26,6 +27,8 @@ pub struct Lists {
     counts: Arc<dyn StoredMail>,
     syncs: Arc<dyn FolderSyncs>,
     clock: Arc<dyn Clock>,
+    /// The person's, whose days a row's "yesterday" counts.
+    zone: Arc<dyn Zone>,
 }
 
 /// Which page of a list, and whether as one row a conversation.
@@ -43,8 +46,9 @@ impl Lists {
         counts: Arc<dyn StoredMail>,
         syncs: Arc<dyn FolderSyncs>,
         clock: Arc<dyn Clock>,
+        zone: Arc<dyn Zone>,
     ) -> Lists {
-        Lists { accounts, stored, counts, syncs, clock }
+        Lists { accounts, stored, counts, syncs, clock, zone }
     }
 
     /// What a view that isn't a folder reads: the account named, or with none named every account, as the
@@ -73,7 +77,8 @@ impl Lists {
         let scan = if page.offset == 0 { self.syncs.on_open(account, folder)? } else { Opened::Done };
         let found = self.stored.folder_page(account, folder, page.grouped, page.limit, page.offset)?;
         let now = self.clock.now();
-        let items: Vec<Value> = found.rows.iter().map(|r| listing::listed_item(r, page.grouped, now)).collect();
+        let items: Vec<Value> =
+            found.rows.iter().map(|r| listing::listed_item(r, page.grouped, now, &*self.zone)).collect();
         let mut answer = Map::new();
         answer.insert("ok".into(), json!(true));
         answer.insert("account".into(), json!(account));
@@ -105,7 +110,9 @@ impl Lists {
         };
         match self.stored.copy_row(account, folder, uid, key)? {
             None => Err(Problem::not_found("not listed").into()),
-            Some(row) => Ok(json!({"ok": true, "row": listing::listed_item(&row, false, self.clock.now())})),
+            Some(row) => {
+                Ok(json!({"ok": true, "row": listing::listed_item(&row, false, self.clock.now(), &*self.zone)}))
+            }
         }
     }
 
@@ -121,7 +128,8 @@ impl Lists {
         }
         let found = self.stored.inboxes_page(&emails, page.grouped, page.limit, page.offset)?;
         let now = self.clock.now();
-        let items: Vec<Value> = found.rows.iter().map(|r| listing::listed_item(r, page.grouped, now)).collect();
+        let items: Vec<Value> =
+            found.rows.iter().map(|r| listing::listed_item(r, page.grouped, now, &*self.zone)).collect();
         let mut answer = Map::new();
         answer.insert("ok".into(), json!(true));
         answer.insert("folder".into(), json!(INBOX));
@@ -154,7 +162,7 @@ impl Lists {
         page: Paging,
         folder: &str,
         marked: &str,
-        item: fn(&Row, mm_kernel::seams::Moment) -> Value,
+        item: fn(&Row, mm_kernel::seams::Moment, &dyn Zone) -> Value,
     ) -> Result<Value, Failure> {
         let accounts = self.over(account)?;
         let all = match folder {
@@ -164,8 +172,10 @@ impl Lists {
         };
         let total = all.len() as i64;
         let now = self.clock.now();
-        let items: Vec<Value> =
-            py_slice(&all, page.offset, page.offset.saturating_add(page.limit)).iter().map(|r| item(r, now)).collect();
+        let items: Vec<Value> = py_slice(&all, page.offset, page.offset.saturating_add(page.limit))
+            .iter()
+            .map(|r| item(r, now, &*self.zone))
+            .collect();
         let mut answer = Map::new();
         answer.insert("ok".into(), json!(true));
         answer.insert("account".into(), json!(account));
@@ -182,7 +192,7 @@ impl Lists {
             return Err(Problem::refused("missing account/thread").into());
         };
         let rows = self.stored.thread(account, thread_id)?;
-        let items = listing::thread_items(&rows, self.clock.now());
+        let items = listing::thread_items(&rows, self.clock.now(), &*self.zone);
         let reply_key = items.last().and_then(|it| it.get("key")).cloned().unwrap_or(Value::Null);
         let count = items.len();
         Ok(json!({"ok": true, "account": account, "thread_id": thread_id, "items": items, "count": count,

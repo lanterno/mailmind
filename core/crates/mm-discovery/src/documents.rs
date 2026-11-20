@@ -10,6 +10,7 @@ use std::sync::Arc;
 use mm_kernel::ago::rel_time;
 use mm_kernel::errors::Fault;
 use mm_kernel::seams::Clock;
+use mm_kernel::zone::Zone;
 use serde_json::{Map, Value, json};
 
 use crate::ports::{AccountNames, Row, StoredDocuments};
@@ -331,6 +332,8 @@ pub struct DocumentHub {
     stored: Arc<dyn StoredDocuments>,
     accounts: Arc<dyn AccountNames>,
     clock: Arc<dyn Clock>,
+    /// The person's, whose days a document's "yesterday" counts.
+    zone: Arc<dyn Zone>,
 }
 
 impl fmt::Debug for DocumentHub {
@@ -344,8 +347,9 @@ impl DocumentHub {
         stored: Arc<dyn StoredDocuments>,
         accounts: Arc<dyn AccountNames>,
         clock: Arc<dyn Clock>,
+        zone: Arc<dyn Zone>,
     ) -> DocumentHub {
-        DocumentHub { stored, accounts, clock }
+        DocumentHub { stored, accounts, clock, zone }
     }
 
     /// A page of the documents, as `want` asks.
@@ -353,6 +357,6 @@ impl DocumentHub {
         let accounts = self.accounts.emails()?;
         let rows = if accounts.is_empty() { Vec::new() } else { self.stored.attachments(&accounts)? };
         let now = self.clock.now();
-        Ok(page(&rows, want, |iso| rel_time(iso, now)))
+        Ok(page(&rows, want, |iso| rel_time(iso, now, &*self.zone)))
     }
 }
