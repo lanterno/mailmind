@@ -551,12 +551,16 @@ extension Mailbox {
         say(String(localized: "Choose a message first"), refused: true)
     }
 
-    /// Read again what a verb changed: the list in place, the lane, the message open from outside them, and the
-    /// sidebar's counts.
+    /// Read again what a verb changed: the list in place, the lane, the message open from outside them, the sidebar's
+    /// counts, and the brief's tallies (the rail's Needs you and the Inbox's brief row), which count the same mail as
+    /// the list. The server has taken the change by now, so the tallies leave out all it filed: a conversation's every
+    /// message, where only the row's own left them at once (`sentAway`), and with no event to follow when its moves
+    /// reached the server inside the request.
     func readAgain() {
         app?.list?.refresh()
         lane?.refresh()
         rereadOutside()
+        rereadsTallies?()
         Task { await readCounts() }
     }
 }
