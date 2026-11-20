@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DigestItem } from "../mailbox";
-import { commitments, eventWhen, meetingWhen, greeting, nameIn, needsNote, ofWhole, reviewRange, waitAge } from "./model";
+import { clock, commitments, eventWhen, meetingWhen, greeting, nameIn, needsNote, ofWhole, reviewRange, waitAge } from "./model";
 
 const item = (key: number, over: Partial<DigestItem> = {}) => ({ key, folder: "INBOX", uid: key, importance: 1, needs_you: false, safe_to_file: false, commitment_worthy: false, ...over }) as DigestItem;
 
@@ -32,6 +32,11 @@ describe("the side column's words", () => {
     expect(eventWhen({ start: new Date(2026, 10, 2).toISOString(), all_day: true }, now)).toEqual(["Today", "all day"]);
     expect(eventWhen({ start: new Date(2026, 10, 4).toISOString(), all_day: true }, now)[1]).toBe("all day");
   });
+  it("says the next day's event by its weekday, a week out with its date", () => {
+    const tomorrow = new Date(2026, 10, 3, 9, 0), later = new Date(2026, 10, 10, 9, 0);
+    expect(eventWhen({ start: tomorrow.toISOString(), all_day: false }, now)).toEqual([tomorrow.toLocaleDateString(undefined, { weekday: "short" }), clock(tomorrow)]);
+    expect(eventWhen({ start: later.toISOString(), all_day: false }, now)[0]).toBe(later.toLocaleDateString(undefined, { weekday: "short", day: "numeric" }));
+  });
   it("says a review written today looked back over the last seven days", () => {
     expect(reviewRange(new Date(2026, 10, 2, 0, 5).toISOString(), now)).toBe("last 7 days");
   });
@@ -53,6 +58,45 @@ describe("the side column's words", () => {
     expect(nameIn('"Lin Park" <lin@example.test>')).toBe("Lin Park");
     expect(nameIn("<lin@example.test>")).toBe("lin@example.test");
     expect(nameIn(null)).toBe("");
+  });
+});
+
+// Today & next across midnight, in zones on each side of the world. The server sends an event's start and end on the
+// person's wall clock with no zone ("2026-11-20T23:30"), which a browser reads as its own, so each case sets the zone
+// this process reads them in, as the Mac app's `DeskWordsTests` sets its calendar's.
+describe("when an event is, across midnight", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  const events: [string, string][] = [["2026-11-20T23:30", "2026-11-21T00:30"], ["2026-11-20T23:55", "2026-11-21T00:40"], ["2026-11-21T23:00", "2026-11-21T23:30"]];
+  const at = (day: number, hour: number, minute: number) => new Date(2026, 10, day, hour, minute);
+  const said = (now: Date) => events.map(([start, end]) => eventWhen({ start, end, all_day: false }, now).join(" / "));
+  const clockAt = (iso: string) => clock(new Date(iso));
+
+  it.each([["Pacific/Auckland", -780], ["Europe/Paris", -60], ["America/Los_Angeles", 480], ["Asia/Kolkata", -330]] as const)("says a meeting under way is on until it ends, in %s", (zone, offset) => {
+    vi.stubEnv("TZ", zone);
+    expect(at(21, 0, 1).getTimezoneOffset()).toBe(offset);   // the zone took
+    // Saturday at 00:01: Friday night's meetings are on, never "today" by when they began.
+    expect(said(at(21, 0, 1))).toEqual([`now / until ${clockAt("2026-11-21T00:30")}`, `now / until ${clockAt("2026-11-21T00:40")}`, `${clockAt("2026-11-21T23:00")} / today`]);
+    // Friday at 23:50: the first is on, the second today's, the third tomorrow's.
+    const saturday = new Date("2026-11-21T23:00").toLocaleDateString(undefined, { weekday: "short" });
+    expect(said(at(20, 23, 50))).toEqual([`now / until ${clockAt("2026-11-21T00:30")}`, `${clockAt("2026-11-20T23:55")} / today`, `${saturday} / ${clockAt("2026-11-21T23:00")}`]);
+    // Friday at 23:00: none has begun.
+    expect(said(at(20, 23, 0))).toEqual([`${clockAt("2026-11-20T23:30")} / today`, `${clockAt("2026-11-20T23:55")} / today`, `${saturday} / ${clockAt("2026-11-21T23:00")}`]);
+    // Ended a moment ago, as a list a minute old can still hold it: said as yesterday's, not today's.
+    expect(said(at(21, 0, 45))[0]).toBe(`${clockAt("2026-11-20T23:30")} / yesterday`);
+    // A start with no end, begun before today: the day it began.
+    expect(eventWhen({ start: "2026-11-20T23:30", all_day: false }, at(21, 0, 1))[1]).toBe("yesterday");
+    // Under way into another day: the day it ends.
+    const monday = new Date("2026-11-23T17:00").toLocaleDateString(undefined, { weekday: "short" });
+    expect(eventWhen({ start: "2026-11-20T09:00", end: "2026-11-23T17:00", all_day: false }, at(21, 0, 1))).toEqual(["now", `until ${monday}`]);
+    // A day's event that began yesterday and runs today is today's.
+    expect(eventWhen({ start: "2026-11-20T00:00", end: "2026-11-22T00:00", all_day: true }, at(21, 0, 1))).toEqual(["Today", "all day"]);
+  });
+
+  it("says a meeting under way on a 24-hour clock and a 12-hour one alike", () => {
+    vi.stubEnv("TZ", "Europe/Paris");
+    const [big, small] = eventWhen({ start: "2026-11-20T23:30", end: "2026-11-21T00:30", all_day: false }, at(21, 0, 1));
+    expect(big).toBe("now");
+    expect(small).toMatch(/^until (00:30|12:30\s?am)$/);
   });
 });
 
