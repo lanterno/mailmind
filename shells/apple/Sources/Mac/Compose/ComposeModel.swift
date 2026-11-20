@@ -487,6 +487,10 @@ extension API.DraftTone {
 
 /// The server's rewrites, in the row's order and words.
 extension API.RewriteOp {
+    /// What a rewrite row offers, the composer's window's and a reply box's alike: the page's composer's row
+    /// (`REWRITES`), the page's only one.
+    static let offered: [API.RewriteOp] = [.shorten, .elaborate, .formal, .friendly, .fix, .translate]
+
     var label: String {
         switch self {
         case .shorten: "Shorten"

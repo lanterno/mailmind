@@ -396,29 +396,24 @@ struct ReplyRewrites: View {
     @State private var language = ""
     @Environment(\.meadow) private var meadow
 
-    /// The rewrites the box offers, as the mockup names them.
-    private static let rewrites: [(op: API.RewriteOp, label: LocalizedStringKey)] = [
-        (.shorten, "Shorter"), (.friendly, "Warmer"), (.formal, "More formal"), (.fix, "Fix grammar"),
-        (.translate, "Translate"),
-    ]
-
     var body: some View {
         ChipFlow(spacing: 4, stretchesLast: false) {
             MeadowAIMark(composer.busy == .rewrite ? "Rewriting…" : "Rewrite")
                 .fixedSize()
                 .padding(.leading, 4)
                 .padding(.trailing, 6)
-            ForEach(Self.rewrites, id: \.op) { rewrite in
-                Button(rewrite.label) {
-                    if rewrite.op == .translate {
+            // The composer's rewrites, in its words, as the page offers them wherever a reply is written.
+            ForEach(API.RewriteOp.offered, id: \.self) { op in
+                Button(op.label) {
+                    if op == .translate {
                         translating = true
                     } else {
-                        Task { await composer.rewrite(rewrite.op) }
+                        Task { await composer.rewrite(op) }
                     }
                 }
                 .meadowButton(.quiet, small: true)
                 .disabled(composer.busy != .none)
-                .popover(isPresented: rewrite.op == .translate ? $translating : .constant(false), arrowEdge: .bottom) {
+                .popover(isPresented: op == .translate ? $translating : .constant(false), arrowEdge: .bottom) {
                     translateAsk
                 }
             }

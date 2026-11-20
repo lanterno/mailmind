@@ -91,8 +91,6 @@ struct ComposerForm: View {
         }
     }
 
-    private static let rewrites: [API.RewriteOp] = [.shorten, .elaborate, .formal, .friendly, .fix, .translate]
-
     var body: some View {
         VStack(spacing: 0) {
             head
@@ -322,7 +320,7 @@ struct ComposerForm: View {
             MeadowAIMark(composer.busy == .rewrite ? "Rewriting…" : "Rewrite")
                 .padding(.leading, 4)
                 .padding(.trailing, 6)
-            ForEach(Self.rewrites, id: \.self) { op in
+            ForEach(API.RewriteOp.offered, id: \.self) { op in
                 Button(op.label) {
                     if op == .translate {
                         translating = true
