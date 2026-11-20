@@ -10,7 +10,7 @@ from mailmind.compose.application.ports import Account, Accounts, Book, Copies, 
 from mailmind.compose.domain import draft, draft_journal, resume as reopening
 from mailmind.compose.domain.builder import Built, Composed, build_message, thread_ids
 from mailmind.content import mime
-from mailmind.content.headers import header_chips, header_text
+from mailmind.content.headers import header_text
 from mailmind.kernel.errors import Conflict, Locked, NotFound, Problem, Refused, Unreachable, Unreadable
 from mailmind.kernel.ids import FolderName
 from mailmind.kernel.parsed import as_int, required_int
@@ -464,7 +464,7 @@ class Drafts:
                 self._book.draft_repoint(c, d, folder, uid, uidvalidity, forget=forget)
         return {"ok": True, "draft_id": d["id"], "version": d["version"], "mode": mode, "account": account,
                 "subject": reopening.subject_of(msg, subject_then),
-                "to": header_chips(msg, "To"), "cc": header_chips(msg, "Cc"), "bcc": bcc,
+                "to": reopening.recipients(msg, "To"), "cc": reopening.recipients(msg, "Cc"), "bcc": bcc,
                 "text": own, "tail_text": tail, "in_reply_to": irt or "", "references": " ".join(refs),
                 "original_key": original["message_key"] if original else None,
                 "participants": reopening.participants_of(original) if original else [], "files": files, "split": how,

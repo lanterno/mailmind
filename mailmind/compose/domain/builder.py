@@ -1,9 +1,15 @@
 """Building an outgoing message, with no I/O. Every header is set through EmailMessage, which refuses
 an embedded CR or LF, and every address is validated and IDNA-normalized before that, so neither
 header nor SMTP injection has a way in. Bcc is never written into the bytes: it rides only in the
-envelope list returned."""
+envelope list returned.
+
+A send is refused at the first recipient that isn't an address, in words naming it as it was typed. A draft keeps
+whatever was typed, as Mail does, so a slip in one address never stops it being saved: what isn't an address goes on
+one line (`one_line`) into a header of MailMind's own for To and for Cc (`TYPED`), one a recipient, which reopening reads
+back after the addresses, and into nothing for Bcc, which a save records beside the bytes."""
 import email.policy
 import email.utils
+import unicodedata
 from datetime import datetime, timezone
 from email.headerregistry import Address
 from email.message import EmailMessage
@@ -16,6 +22,13 @@ from mailmind.compose.domain.attachments import Attachment, in_the_text
 from mailmind.kernel.addresses import MAX_RECIPIENTS, clean, parse_addr_list, validate_pair
 
 _MSGID = re.compile(r"^<[^<>\s]+@[^<>\s]+>$")
+# Where a draft keeps what was typed in To and in Cc that isn't an address yet. Another app shows none of it.
+TYPED = {"To": "X-MailMind-Draft-To", "Cc": "X-MailMind-Draft-Cc"}
+SHOWN_MOST = 80             # characters of what was typed that a refusal names, past which it is cut short
+# What one_line leaves of addresses._DANGER, the characters that show as nothing: a refusal shows each as its escape.
+_HIDDEN = re.compile("[\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]")
+NO_RECIPIENT = "Add at least one recipient."
+TOO_MANY = f"A message may have at most {MAX_RECIPIENTS} recipients."
 
 
 class Tail(TypedDict):
@@ -102,6 +115,50 @@ def _each_once(addrs: Iterable[str]) -> list[str]:
     return list(first.values())
 
 
+def one_line(typed: str) -> str:
+    """What was typed, on one line, as the Mac's `Addresses.oneLine` makes a name: each control character and each line or
+    paragraph separator a space, a run of spaces one, and the ends trimmed. Nothing left in it can break a header."""
+    spaced = "".join(" " if unicodedata.category(c) == "Cc" or c in "\u2028\u2029" else c for c in typed)
+    return " ".join(p for p in spaced.split(" ") if p).strip()
+
+
+def not_an_address(field: str, typed: str) -> str:
+    """What a send is told of what was typed in `field` that isn't an address: it named as typed, on one line, cut short
+    past SHOWN_MOST characters, a character that shows as nothing written as its escape."""
+    line = one_line(typed)
+    shown = line if len(line) <= SHOWN_MOST else line[:SHOWN_MOST - 1] + "…"
+    shown = _HIDDEN.sub(lambda hidden: "\\u%04x" % ord(hidden.group()), shown)
+    return f"“{shown}” in {field} isn’t a valid address."
+
+
+def recipients(field: str, raw: str | list[str] | None, draft: bool) -> tuple[list[tuple[str, str]], list[str]]:
+    """What was typed in `field` (a string of addresses, or one for each chip): each address in it as (clean display name,
+    local@IDNA-domain), each once whatever its case, and, for a draft, each chip that isn't one, on one line, each once. A
+    send is refused at the first that isn't, in words naming it. A chip with nothing on it is no recipient."""
+    pairs: list[tuple[str, str]] = []
+    typed: list[str] = []
+    seen: set[str] = set()
+    seen_typed: set[str] = set()
+    for token in raw if isinstance(raw, list) else [raw or ""]:
+        line = one_line(token)
+        if not line:
+            continue
+        try:
+            found = parse_addr_list([token])
+        except ValueError:
+            if not draft:
+                raise ValueError(not_an_address(field, token))
+            if line.lower() not in seen_typed:
+                seen_typed.add(line.lower())
+                typed.append(line)
+            continue
+        for name, spec in found:
+            if spec.lower() not in seen:
+                seen.add(spec.lower())
+                pairs.append((name, spec))
+    return pairs, typed
+
+
 def _kind(att: Attachment) -> tuple[str, str]:
     ct = (att.get("content_type") or "application/octet-stream").split(";")[0].strip()
     maintype, _, subtype = ct.partition("/")
@@ -115,19 +172,22 @@ def build_message(spec: MessageSpec, draft: bool = False) -> Built:
     its mark stays in a draft's text, so it reopens as it was typed, and is the picture's name in the text a send carries.
     Returns {raw: bytes (Bcc-less, CRLF), message_id, envelope: [addr-spec,...],
     to_disp/cc_disp/bcc_disp: [addr-spec,...] for the outbox UI}.
-    draft=True relaxes the require-a-recipient rule (a draft may be half-written) but
-    still validates every typed address.
+    draft=True lifts the rules a draft may be half-written past: it needs no recipient, may have any number, and keeps
+    what was typed that isn't an address in TYPED's headers, where a send is refused it.
     """
-    from_name, from_spec = validate_pair(spec.get("account_name") or "", spec["account"])
+    try:
+        from_name, from_spec = validate_pair(spec.get("account_name") or "", spec["account"])
+    except ValueError:
+        raise ValueError(not_an_address("From", spec["account"]))
     from_domain = from_spec.rpartition("@")[2]
 
-    to = parse_addr_list(spec.get("to") or [])
-    cc = parse_addr_list(spec.get("cc") or [])
-    bcc = parse_addr_list(spec.get("bcc") or [])
+    to, typed_to = recipients("To", spec.get("to"), draft)
+    cc, typed_cc = recipients("Cc", spec.get("cc"), draft)
+    bcc, _ = recipients("Bcc", spec.get("bcc"), draft)        # a draft's save records what was typed in Bcc
     if not (to or cc or bcc) and not draft:
-        raise ValueError("at least one recipient is required")
-    if len(to) + len(cc) + len(bcc) > MAX_RECIPIENTS:
-        raise ValueError(f"too many recipients (max {MAX_RECIPIENTS})")
+        raise ValueError(NO_RECIPIENT)
+    if len(to) + len(cc) + len(bcc) > MAX_RECIPIENTS and not draft:
+        raise ValueError(TOO_MANY)
 
     m = EmailMessage()
     m["From"] = _addr(from_name, from_spec)           # forced to the authenticated account
@@ -135,6 +195,9 @@ def build_message(spec: MessageSpec, draft: bool = False) -> Built:
         m["To"] = [_addr(n, a) for n, a in to]
     if cc:
         m["Cc"] = [_addr(n, a) for n, a in cc]
+    for field, typed in (("To", typed_to), ("Cc", typed_cc)):
+        for line in typed:                            # on one line, so no break reaches the header
+            m[TYPED[field]] = line
     # NOTE: deliberately NO Bcc header — blind recipients live only in the envelope.
     m["Subject"] = clean(spec.get("subject") or "")
     m["Date"] = email.utils.format_datetime(datetime.now(timezone.utc))

@@ -4,10 +4,9 @@ it, or that the copy is to go."""
 import json
 from typing import Any, TypedDict, TypeGuard
 
-from mailmind.compose.domain.builder import Built, Composed
+from mailmind.compose.domain.builder import Built, Composed, recipients
 from mailmind.compose.domain.resume import lf, sha_of
 from mailmind.content.headers import addr_chip
-from mailmind.kernel import addresses
 from mailmind.kernel.row import Row
 
 PUSH_EVERY = 60
@@ -29,8 +28,10 @@ class Record(TypedDict):
 
 
 def record_of(spec: Composed, built: Built) -> Record:
-    """Bcc is written nowhere in the bytes, so this is all that keeps it. `spec` has been built, so its addresses parse."""
-    bcc = [addr_chip(n, a) for n, a in addresses.parse_addr_list(spec["bcc"])]
+    """Bcc is written nowhere in the bytes, so this is all that keeps it: each address as a chip, and after them what was
+    typed that isn't one yet, on one line, as a draft keeps it (`builder.recipients`)."""
+    pairs, typed = recipients("Bcc", spec["bcc"], draft=True)
+    bcc = [addr_chip(n, a) for n, a in pairs] + typed
     return {"raw_sha": sha_of(built["raw"]), "own_text": lf(spec["own"]),
             "tail_text": lf(spec["tail"]["text"]) if spec["tail"]["text"] else None, "tail_html": spec["tail"]["html"],
             "bcc": json.dumps(bcc) if bcc else None}

@@ -11,8 +11,9 @@ import re
 from typing import Literal, NotRequired, TypedDict, get_args
 
 from mailmind.compose.domain import limits, markdown
+from mailmind.compose.domain.builder import TYPED, one_line
 from mailmind.kernel.errors import Unreadable
-from mailmind.content.headers import header_chips, header_text
+from mailmind.content.headers import header_chips, header_text, raw_header, unsurrogate
 from mailmind.content.mime import Parsed, decoded, parse, part_bytes, walk
 from mailmind.kernel import addresses
 from mailmind.kernel.row import Row
@@ -148,13 +149,35 @@ def _address_of(chip: str) -> str:
         return ""
 
 
+def _who(chip: str) -> str:
+    """Whom a chip names, to tell two apart: its address, lowercase, or for one that isn't an address, it on one line."""
+    return _address_of(chip) or one_line(chip).lower()
+
+
+def recipients(msg: EmailMessage, field: str) -> list[str]:
+    """To or Cc as composer chips: the header's addresses (header_chips), then what a draft MailMind saved kept there that
+    isn't an address yet (builder.TYPED), as it was typed, each once."""
+    out = header_chips(msg, field)
+    had = {_who(x) for x in out}
+    try:
+        typed = [unsurrogate(str(v)) for v in msg.get_all(TYPED[field]) or []]
+    except Exception:                                    # a header the parser raises on, as header_text reads one
+        typed = raw_header(msg, TYPED[field])
+    for chip in map(one_line, typed):
+        if chip and chip.lower() not in had:
+            had.add(chip.lower())
+            out.append(chip)
+    return out
+
+
 def bcc_of(msg: EmailMessage, recorded: str | None, exact: bool) -> tuple[list[str], int]:
     """(the draft's Bcc as chips, how many were dropped). Another app may keep Bcc in the draft itself. What MailMind recorded
-    joins it only where the record is this copy's, and is otherwise counted, so the composer can say some went."""
+    joins it only where the record is this copy's, and is otherwise counted, so the composer can say some went. What was
+    typed that isn't an address yet goes as it was recorded, as an address does."""
     hdr = header_chips(msg, "Bcc")
-    had = {_address_of(x) for x in hdr}
+    had = {_who(x) for x in hdr}
     kept: list[str] = json.loads(recorded) if recorded else []
-    missing = [x for x in kept if _address_of(x) and _address_of(x) not in had]
+    missing = [x for x in kept if _who(x) and _who(x) not in had]
     return (hdr + missing, 0) if exact else (hdr, len(missing))
 
 

@@ -25,7 +25,7 @@ class Sending:
             send_after = schedule.send_after(body.get("send_after"), time.time())
             spec, in_reply_to_pk, acct = self._composing.spec(body)
             built = build_message(spec)       # validates addresses/headers; raises ValueError
-        except ValueError as e:               # our own words: they hold nothing secret
+        except ValueError as e:               # our own words, naming at most what the person typed
             raise Refused(str(e)) from e
         draft_id = required_int(body["draft_id"]) if body.get("draft_id") else None
         key = draft.composer_key(body)
