@@ -206,6 +206,27 @@ final class DeskWordsTests: XCTestCase {
         XCTAssertEqual(AttentionModel.couldnt("Couldn’t mute", "why"), "Couldn’t mute: why")
     }
 
+    /// Later today says what it does once three hours on runs past midnight, from 21:00, when the server snoozes to
+    /// the next morning, as the page's menu says it: the presets keep their order, so each digit picks the same one.
+    func testLaterTodaySaysTomorrowMorningOnceItMeansIt() {
+        XCTAssertEqual(Snoozing.words(.laterToday, at: Self.at(20, 59), calendar: Self.utc), "Later today")
+        XCTAssertEqual(Snoozing.words(.laterToday, at: Self.at(0, 30), calendar: Self.utc), "Later today")
+        XCTAssertEqual(Snoozing.words(.laterToday, at: Self.at(21), calendar: Self.utc), "Tomorrow morning")
+        XCTAssertEqual(Snoozing.words(.laterToday, at: Self.at(23, 30), calendar: Self.utc), "Tomorrow morning")
+        XCTAssertEqual(Snoozing.words(.tomorrow, at: Self.at(22), calendar: Self.utc), "Tomorrow 8am")
+    }
+
+    /// A calendar on UTC, and 20 November 2026 at `hour`:`minute` in it.
+    private static var utc: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }
+
+    private static func at(_ hour: Int, _ minute: Int = 0) -> Date {
+        utc.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: hour, minute: minute))!
+    }
+
     func testTheVerbsWordsAndWhichTakeASecondPress() {
         XCTAssertEqual(PlanModel.label(.trash), "Delete")
         XCTAssertEqual(PlanModel.done(.star), "Updated")
@@ -213,7 +234,7 @@ final class DeskWordsTests: XCTestCase {
         XCTAssertTrue(PlanModel.destructive(.junk))
         XCTAssertFalse(PlanModel.destructive(.archive))
         // The page's words, all in its sentence case.
-        XCTAssertEqual(API.SnoozePreset.allCases.map(Snoozing.words),
+        XCTAssertEqual(API.SnoozePreset.allCases.map { Snoozing.words($0, at: Self.at(12), calendar: Self.utc) },
                        ["Later today", "Tomorrow 8am", "This weekend", "Next week"])
         XCTAssertEqual(AttentionStack(folder: "__replylater__"), .replyLater)
         XCTAssertNil(AttentionStack(folder: "INBOX"))
