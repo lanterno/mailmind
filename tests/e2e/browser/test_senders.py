@@ -93,6 +93,56 @@ def test_screening_out_blocks_the_sender(page, app, world):
     clean(page)
 
 
+CONFIRM = "ada-inbox-02-lunch-confirm.eml"
+
+
+def judge(app, world, *verdicts):
+    """What triage said of just these messages. They are stored while the server is stopped, since a triage pass would
+    say something of every message."""
+    from mailmind.bootstrap.assistant import answers
+    from mailmind.bootstrap.mailbox import store
+    with app.stopped():
+        c = store.conn()
+        try:
+            for name, importance, category, action in verdicts:
+                answers.save_summary(c, world.pk(name), "A summary.", importance, category, action, "claude-opus-5-5",
+                                     "2026-11-02T11:00:00+00:00")
+            c.commit()
+        finally:
+            c.close()
+
+
+def test_screening_out_takes_their_mail_out_of_needs_you_as_out_of_the_brief_until_the_rule_goes(page, app, world):
+    judge(app, world, (RECEIPT, 4, "finance", "Check the total"), (CONFIRM, 5, "action-needed", "Reply"))
+    page.goto(f"/m/{w.ADA}/INBOX")
+    needs = page.get_by_role("tab", name=re.compile("^Needs you")).locator(".n")
+    brief = page.locator("[data-brief-row] small")
+    receipt = page.locator(f'#rows .row[data-key="{world.key(RECEIPT)}"]')
+    expect(needs).to_have_text("2")
+    expect(brief).to_have_text("2 need you")
+    expect(receipt).to_have_count(1)
+    page.locator('a.frow[data-folder="__screener__"]').click()
+    page.locator(f'.scr-row[data-scr="{THIMBLE}"]').get_by_role("button", name="Screen out").click()
+    expect(page.locator("#toast")).to_contain_text("Screened out orders")
+    page.locator('#folderrail .frow[data-folder="INBOX"]').click()
+    expect(needs).to_have_text("1")
+    expect(brief).to_have_text("1 needs you")
+    expect(receipt).to_have_count(0)
+    # Still in the Inbox, read as blocked as their next message will be, for a sweep to file.
+    page.get_by_role("tab", name=re.compile("^Everything")).click()
+    expect(receipt.locator(".jb")).to_have_text("blocked")
+    # The rule taken back in Curate, it needs you again.
+    page.locator("#statusBtn").click()
+    page.get_by_role("button", name=re.compile("^Curate")).click()
+    page.locator(f'#blockList [data-token="{THIMBLE}"]').click()
+    expect(page.locator(f'#blockList [data-token="{THIMBLE}"]')).to_have_count(0)
+    page.keyboard.press("Escape")
+    expect(needs).to_have_text("2")
+    expect(brief).to_have_text("2 need you")
+    expect(receipt.locator(".jb")).to_have_count(0)
+    clean(page)
+
+
 def test_a_refused_decision_brings_the_sender_back(page, world):
     screener(page)
     page.pw.route("**/api/rules", lambda route: route.fulfill(status=500, body="{}") if route.request.method == "POST" else route.continue_())
