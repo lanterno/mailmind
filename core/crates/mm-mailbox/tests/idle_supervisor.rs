@@ -619,6 +619,63 @@ fn a_renewal_before_begin_or_after_stop_does_nothing() {
     assert_eq!(b.w.count("a"), 1);
 }
 
+/// Rests that grow from an hour, so one left resting is still resting when the test gives up on it.
+const FROM_AN_HOUR: Rests = Rests {
+    first: Duration::from_secs(3600),
+    longest: Duration::from_secs(4 * 3600),
+    at_once_after: Duration::from_secs(3600),
+};
+
+#[test]
+fn a_hurry_wakes_a_worker_resting_and_it_connects_at_once_its_rests_started_over() {
+    let b = build(&["a"]);
+    *b.w.refuse_connect.lock().unwrap() = 2;
+    started(&b, FROM_AN_HOUR);
+    until(|| b.w.said().len() == 1);
+    b.sup.hurry("a");
+    // Its next connect fails too: it rests from the first again, not twice as long.
+    until(|| b.w.said().len() == 2);
+    assert_eq!(b.w.rests.lock().unwrap().as_slice(), [FROM_AN_HOUR.first, FROM_AN_HOUR.first]);
+    assert_eq!(b.sup.next_rest("a"), Some(FROM_AN_HOUR.first));
+    b.sup.hurry("a");
+    until(|| b.w.serving("a"));
+    assert_eq!(b.w.said(), ["failed a ConnectionRefusedError", "failed a ConnectionRefusedError"]);
+}
+
+#[test]
+fn a_hurry_leaves_a_worker_serving_be_and_ends_no_rest_to_come() {
+    let b = build(&["a"]);
+    started(&b, AN_HOUR);
+    until(|| b.w.serving("a"));
+    let line = b.w.line_of("a", 0);
+    b.sup.hurry("a");
+    std::thread::sleep(Duration::from_millis(20));
+    assert!(line.interrupted_by().is_empty());
+    assert_eq!(b.w.count("a"), 1);
+    // Lost before it served a while: it rests, and the hurry it was given while it served doesn't end the rest.
+    line.drop_it();
+    until(|| b.w.rests.lock().unwrap().len() == 1);
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(b.w.count("a"), 1, "resting, it opens no other");
+}
+
+#[test]
+fn a_hurry_for_a_key_with_no_worker_before_begin_or_after_stop_does_nothing() {
+    let b = build(&["a"]);
+    *b.w.refuse_connect.lock().unwrap() = 1;
+    b.sup.hurry("a");
+    started(&b, AN_HOUR);
+    until(|| b.w.said().len() == 1);
+    b.sup.hurry("b");
+    std::thread::sleep(Duration::from_millis(200));
+    // The hurry asked before the workers began, and the one for a key with none, left it resting.
+    assert_eq!(b.w.count("a"), 0);
+    b.sup.stop();
+    running(&b, 0);
+    b.sup.hurry("a");
+    assert_eq!(b.w.count("a"), 0);
+}
+
 #[test]
 fn a_worker_that_finds_itself_unwanted_says_so_and_hands_over() {
     // Changed with no one to say so: it notices for itself, and asks for a reconcile on its way out.

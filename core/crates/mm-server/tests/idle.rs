@@ -518,7 +518,7 @@ fn an_idle_whose_server_went_away_says_so_at_once_and_clears_once_it_answers() {
 }
 
 #[test]
-fn an_idle_lost_after_serving_finds_its_server_gone_at_once_and_a_try_finds_it_back_before_idle_does() {
+fn an_idle_lost_after_serving_finds_its_server_gone_at_once_and_a_try_that_finds_it_back_has_idle_connect_now() {
     let w = world(&[ADA], "full");
     let runtime = tokio::runtime::Builder::new_current_thread().enable_time().build().unwrap();
     let _entered = runtime.enter();
@@ -544,7 +544,7 @@ fn an_idle_lost_after_serving_finds_its_server_gone_at_once_and_a_try_finds_it_b
     assert_eq!(w.app.syncing.status().unwrap()[ADA], before);
     heard(&mut tab, &mut frames);
     let troubles = frames.matches("event: sync-trouble").count();
-    // The server answers again: the next try ends the trouble, an hour before IDLE would have.
+    // The server answers again: the next try ends the trouble, an hour before IDLE's rest would have.
     w.imap.back(ADA);
     w.app.syncing.try_unreached();
     let synced = w.app.syncing.status().unwrap()[ADA].clone();
@@ -554,7 +554,46 @@ fn an_idle_lost_after_serving_finds_its_server_gone_at_once_and_a_try_finds_it_b
         frames.contains("event: sync-done\ndata: {\"account\": \"ada@example.test\"")
     });
     assert_eq!(frames.matches("event: sync-trouble").count(), troubles, "a try says no trouble");
-    assert!(!w.imap.idling(ADA, 2), "IDLE rests on");
+    // And IDLE leaves its rest and connects now, so mail that comes is heard without a Get New Mail.
+    until(|| w.imap.idling(ADA, 2));
+    delivered_is_heard(&w);
+}
+
+/// Mail delivered to Ada's INBOX now is heard in IDLE, which syncs it: no one asks.
+fn delivered_is_heard(w: &World) {
+    let examined = w.imap.count(ADA, "EXAMINE");
+    w.imap.deliver(ADA);
+    until(|| w.imap.count(ADA, "EXAMINE") > examined);
+}
+
+#[test]
+fn a_retry_has_an_idle_resting_after_its_server_went_away_connect_now() {
+    let w = world(&[ADA], "full");
+    let an_hour = Duration::from_secs(3600);
+    w.start(Pace {
+        rests: Rests { first: an_hour, longest: an_hour, at_once_after: Duration::ZERO },
+        ..Pace::default()
+    });
+    w.all_idling(&[ADA]);
+    w.imap.drop_idle(ADA, true);
+    until(|| w.app.syncing.status().unwrap().get(ADA).is_some_and(|s| s.trying_again));
+    std::thread::sleep(Duration::from_millis(100));
+    assert!(!w.imap.idling(ADA, 2), "IDLE rests its hour");
+    w.imap.back(ADA);
+    w.app.syncing.retry(Some(ADA)).unwrap();
+    until(|| w.imap.idling(ADA, 2));
+    delivered_is_heard(&w);
+}
+
+#[test]
+fn an_idle_serving_is_left_be_when_its_server_is_found_back() {
+    let w = world(&[ADA], "full");
+    w.start(quick());
+    w.all_idling(&[ADA]);
+    let logins = w.imap.count(ADA, "LOGIN");
+    w.app.syncing.retry(Some(ADA)).unwrap();
+    std::thread::sleep(Duration::from_millis(100));
+    assert_eq!((w.imap.count(ADA, "LOGIN"), w.imap.count(ADA, "IDLE")), (logins, 1), "no second connection");
 }
 
 #[test]
