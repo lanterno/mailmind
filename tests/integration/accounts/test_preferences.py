@@ -45,7 +45,7 @@ def test_a_value_none_can_be_refuses_the_whole_change_and_writes_nothing(app, wo
     with_file(world)
     before = path_of(world).read_bytes()
     r = app.post("/api/preferences", {"density": "compact", "undo_send_seconds": 2})
-    assert (r.status, r.json) == (400, problems.refused("the Undo Send window must be 5 to 60 seconds"))
+    assert (r.status, r.json) == (400, problems.refused("The Undo Send window must be 5 to 60 seconds."))
     assert path_of(world).read_bytes() == before
 
 

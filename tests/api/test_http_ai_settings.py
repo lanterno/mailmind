@@ -13,9 +13,9 @@ import problems
 from fakes import anthropic_api as fa
 from fakes import openai_api as fo
 
-MODEL_REFUSED = "the AI model must be up to 200 letters, digits and . _ : / @ + -"
-URL_REFUSED = ("the AI service's URL must be https, or http on this Mac, in at most 500 characters, with no user, password, "
-               "query or fragment")
+MODEL_REFUSED = "The AI model’s name must be up to 200 letters, digits and . _ : / @ + - characters."
+URL_REFUSED = ("The AI service’s URL must be https, or http on this Mac, in at most 500 characters, with no user, password, "
+               "query or fragment.")
 
 
 def prefs(app):

@@ -94,9 +94,11 @@ def test_each_end_of_the_undo_send_window_can_be_set(config, seconds):
 
 
 @pytest.mark.parametrize("change, said", [
-    *(({"undo_send_seconds": s}, "the Undo Send window must be") for s in (send_window.SHORTEST - 1, send_window.LONGEST + 1, 0, 86400)),
-    *(({"quiet_from": t}, "quiet hours need a time such as 22:00") for t in ("25:00", "7:00", "22:60", "22:00:00", "soon")),
-    ({"quiet_until": "soon"}, "quiet hours need a time such as 07:00"),
+    *(({"undo_send_seconds": s}, r"The Undo Send window must be 5 to 60 seconds\.$")
+      for s in (send_window.SHORTEST - 1, send_window.LONGEST + 1, 0, 86400)),
+    *(({"quiet_from": t}, r"Quiet hours need a time such as 22:00\.$") for t in ("25:00", "7:00", "22:60", "22:00:00", "soon")),
+    ({"quiet_until": "soon"}, r"Quiet hours need a time such as 07:00\.$"),
+    ({"density": "huge"}, r"That can’t be the density setting\.$"),
 ], ids=repr)
 def test_a_value_no_preference_can_be_is_refused_and_nothing_is_written(config, data_dir, change, said):
     before = path_of(data_dir).read_bytes()
@@ -201,7 +203,7 @@ def test_a_model_is_up_to_two_hundred_of_its_characters_or_none(config, model):
 @pytest.mark.parametrize("model", ["a" * 201, "gpt 6", "gpt-6\n", "ünï", "gpt;6", "gpt-6?", 7, None, ["gpt-6"]])
 def test_a_model_of_anything_else_is_refused_in_words(config, data_dir, model):
     before = path_of(data_dir).read_bytes()
-    with pytest.raises(Refused, match=r"^the AI model must be up to 200 letters, digits and \. _ : / @ \+ -$"):
+    with pytest.raises(Refused, match=r"^The AI model’s name must be up to 200 letters, digits and \. _ : / @ \+ - characters\.$"):
         config.set_preferences({"ai_model": model})
     assert path_of(data_dir).read_bytes() == before
 
@@ -256,8 +258,8 @@ def test_a_service_url_is_https_or_http_on_this_mac_kept_without_its_trailing_sl
 ])
 def test_a_service_url_of_anything_else_is_refused_in_words(config, data_dir, url):
     before = path_of(data_dir).read_bytes()
-    with pytest.raises(Refused, match="^the AI service's URL must be https, or http on this Mac, in at most 500 characters, "
-                                      "with no user, password, query or fragment$"):
+    with pytest.raises(Refused, match="^The AI service’s URL must be https, or http on this Mac, in at most 500 characters, "
+                                      r"with no user, password, query or fragment\.$"):
         config.set_preferences({"ai_base_url": url})
     assert path_of(data_dir).read_bytes() == before
 
@@ -331,7 +333,7 @@ def test_a_model_on_this_mac_at_a_url_elsewhere_is_refused_whichever_the_change_
 
 
 def test_a_url_that_cant_be_any_services_is_refused_in_its_own_words_first(config):
-    with pytest.raises(Refused, match="^the AI service's URL must be"):
+    with pytest.raises(Refused, match="^The AI service’s URL must be"):
         config.set_preferences({"ai_provider": "local", "ai_base_url": "http://10.0.0.7:11434/v1"})
 
 
