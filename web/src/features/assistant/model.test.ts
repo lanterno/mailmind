@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DigestItem } from "../mailbox";
-import { clock, commitments, eventWhen, meetingWhen, greeting, nameIn, needsNote, ofWhole, reviewRange, waitAge } from "./model";
+import { clock, commitments, eventSpan, eventWhen, inviteWhen, meetingWhen, greeting, nameIn, needsNote, nextOf, ofWhole, reviewRange, waitAge, type Upcoming } from "./model";
 
 const item = (key: number, over: Partial<DigestItem> = {}) => ({ key, folder: "INBOX", uid: key, importance: 1, needs_you: false, safe_to_file: false, commitment_worthy: false, ...over }) as DigestItem;
 
@@ -97,6 +97,67 @@ describe("when an event is, across midnight", () => {
     const [big, small] = eventWhen({ start: "2026-11-20T23:30", end: "2026-11-21T00:30", all_day: false }, at(21, 0, 1));
     expect(big).toBe("now");
     expect(small).toMatch(/^until (00:30|12:30\s?am)$/);
+  });
+});
+
+// An invite's card, as the Mac app's `testARecurringInvitesCardSaysItsNextTimeOnTheAppsClock` holds its own.
+describe("when an invite's card says its event is", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+  const at = (iso: string) => clock(new Date(iso));
+  const copy = { key: 7, folder: "INBOX", uid: 3 };
+  // A weekly invite whose series began on Friday 13 November, in the server's words for that first date.
+  const invite = {
+    start_iso: "2026-11-13T23:55:00+01:00", end_iso: "2026-11-14T00:40:00+01:00", all_day: false, rrule: "FREQ=WEEKLY;BYDAY=FR", rdates: [],
+    when: "Fri, Nov 13 · 11:55 PM → Sat, Nov 14 12:40 AM",
+  };
+  const event = (key: number, start: string, end: string): Upcoming => ({
+    account: "ada@example.test", all_day: false, end, folder: "INBOX", invite: true, key, location: "Kiln yard", organizer: "Otto Brand",
+    recurrence: "Every week on Fri", start, summary: "Night kiln firing", thread_id: null, uid: 3,
+  });
+  const next = event(7, "2026-11-20T23:55", "2026-11-21T00:40"), another = event(8, "2026-11-20T09:00", "2026-11-20T10:00");
+
+  it("says a series' next time, the one Today & next lists for its message, on the clock Today & next reads", () => {
+    vi.stubEnv("TZ", "Europe/Paris");
+    expect(nextOf(invite, copy, [another])).toBeNull();
+    expect(nextOf(invite, copy, [another, next])).toBe(next);
+    const said = inviteWhen(invite, next);
+    expect(said).toBe(`${day("2026-11-20T23:55")}, ${at("2026-11-20T23:55")} – ${at("2026-11-21T00:40")}`);
+    expect(said).not.toContain("13");
+    expect(said).toContain(eventWhen(next, new Date(2026, 10, 20, 12, 0))[0]);
+  });
+
+  it("says a series' first time on that clock where Today & next doesn't list it", () => {
+    vi.stubEnv("TZ", "Europe/Paris");
+    expect(inviteWhen(invite, nextOf(invite, copy, [another]))).toBe(`${day("2026-11-13T23:55")}, ${at("2026-11-13T23:55")} – ${at("2026-11-14T00:40")}`);
+  });
+
+  it("says a single event's own time, though Today & next lists it", () => {
+    vi.stubEnv("TZ", "America/Los_Angeles");
+    const single = { ...invite, rrule: "", rdates: null };
+    expect(nextOf(single, copy, [next])).toBeNull();
+    // 23:55 in Paris is 14:55 in Los Angeles, the same day.
+    expect(inviteWhen(single, null)).toBe(`${day("2026-11-13T14:55")}, ${at("2026-11-13T14:55")} – ${at("2026-11-13T15:40")}`);
+  });
+
+  it("says a day's event as its day, and one of several days from its first to its last", () => {
+    vi.stubEnv("TZ", "Pacific/Auckland");
+    expect(eventSpan("2026-11-26", "2026-11-27", true)).toBe(`${day("2026-11-26T00:00")}, all day`);
+    expect(eventSpan("2026-11-26T00:00:00", "2026-11-27T00:00:00", true)).toBe(`${day("2026-11-26T00:00")}, all day`);
+    expect(eventSpan("2026-11-26", "2026-11-29", true)).toBe(`${day("2026-11-26T00:00")} – ${day("2026-11-28T00:00")}`);
+    expect(eventSpan("2026-11-26", "", true)).toBe(`${day("2026-11-26T00:00")}, all day`);
+  });
+
+  it("says the day it ends of one that lasts a day or more, and only its start where its end can't be read", () => {
+    vi.stubEnv("TZ", "Asia/Kolkata");
+    expect(eventSpan("2026-11-20T09:00", "2026-11-23T17:00", false)).toBe(`${day("2026-11-20T09:00")}, ${at("2026-11-20T09:00")} – ${day("2026-11-23T17:00")}, ${at("2026-11-23T17:00")}`);
+    expect(eventSpan("2026-11-20T09:00", "soon", false)).toBe(`${day("2026-11-20T09:00")}, ${at("2026-11-20T09:00")}`);
+    expect(eventSpan("2026-11-20T09:00", "2026-11-20T08:00", false)).toBe(`${day("2026-11-20T09:00")}, ${at("2026-11-20T09:00")}`);
+  });
+
+  it("says the server's words only where no time can be read", () => {
+    expect(inviteWhen({ ...invite, rrule: "", start_iso: "" }, null)).toBe(invite.when);
+    expect(inviteWhen({ ...invite, start_iso: "not a time" }, null)).toBe(invite.when);
   });
 });
 
