@@ -53,15 +53,15 @@ final class MenuKeysTests: XCTestCase {
         XCTAssertEqual(mailbox.toast?.id, before, "with nothing more to say")
     }
 
-    /// Edit, Message, Mailbox, Assistant and Window as the menu bar holds them for the window in front, as AppKit's
-    /// menus, with the mail window open or closed as `door` says, and the window AppKit says is key as `keyWindow`
-    /// heard it, where a test says.
+    /// File, Edit, Message, Mailbox, Assistant and Window as the menu bar holds them for the window in front, as
+    /// AppKit's menus, with the mail window open or closed as `door` says, and the window AppKit says is key as
+    /// `keyWindow` heard it, where a test says.
     private func bar(mailbox: Mailbox?, window: MessageWindowVerbs?, writing: MailWriting?,
                      door: MailWindowDoor = .alwaysOpen, keyWindow: KeyWindow? = nil) -> NSMenu {
         let tools = ReaderTools(print: {}, find: { [weak self] in self?.found += 1 })
         let status = AppStatus(newMail: NewMailAlerts(notifier: SystemNotifier.Silent(), isActive: { true },
                                                       badge: { _ in }, announce: { _ in }))
-        let menus: [(String, AnyView)] = [
+        let menus: [(String, AnyView)] = (keyWindow.map { [("File", AnyView(CloseItem(keyWindow: $0)))] } ?? []) + [
             ("Edit", AnyView(FindInMessageItem(tools: tools, messageWindow: window != nil, window: window, door: door))),
             ("Message", AnyView(MessageMenuItems(mailbox: mailbox, window: window, writing: writing,
                                                  keyWindow: keyWindow, door: door))),
@@ -139,20 +139,26 @@ final class MenuKeysTests: XCTestCase {
         XCTAssertEqual(app.place, .desk(.brief))
         XCTAssertEqual(door.reopened, 3)
 
-        // A message, search and the palette wait for the window.
+        // What acts on a message waits for the window.
         let waits: [(CGKeyCode, CGEventFlags)] = [(r, .maskCommand), (a, [.maskControl, .maskCommand]),
-                                                  (u, [.maskShift, .maskCommand]), (f, .maskCommand),
-                                                  (f, [.maskAlternate, .maskCommand]), (k, .maskCommand)]
+                                                  (u, [.maskShift, .maskCommand]), (f, [.maskAlternate, .maskCommand])]
         for (code, held) in waits {
             XCTAssertEqual(fired(try Self.press(code, held), in: closed), [], "\(code) with \(held) waits")
         }
-        for title in ["Reply", "Forward", "Archive", "Delete", "Next Unread", "Search", "Command Palette…",
-                      "Find in Message…"] {
+        for title in ["Reply", "Forward", "Archive", "Delete", "Next Unread", "Find in Message…"] {
             XCTAssertFalse(try enabled(title, in: closed()), "\(title) waits for the mail window")
         }
-        XCTAssertFalse(mailbox.searchFocus)
-        XCTAssertFalse(mailbox.paletteOpen)
         XCTAssertEqual(door.reopened, 3, "none of them opened the window")
+
+        // Search and the palette open it again, as a place does, and go there.
+        XCTAssertEqual(fired(try Self.press(f, .maskCommand), in: closed), ["Search"])
+        XCTAssertTrue(mailbox.searchFocus, "the search box takes the keys as the window shows")
+        XCTAssertEqual(door.reopened, 4)
+        XCTAssertEqual(fired(try Self.press(k, .maskCommand), in: closed), ["Command Palette…"])
+        XCTAssertTrue(mailbox.paletteOpen)
+        XCTAssertEqual(door.reopened, 5)
+        mailbox.searchFocus = false
+        mailbox.paletteOpen = false
 
         // A message's own window, still open, acts on its message as before; once closed, it acts on nothing.
         let verbs = MessageWindowVerbs(copy: copy, mailbox: mailbox, reader: ReaderModel(), routes: nil)
@@ -174,7 +180,7 @@ final class MenuKeysTests: XCTestCase {
         XCTAssertTrue(try enabled("Reply", in: open()))
         XCTAssertEqual(fired(commandZero, in: open), ["All Inboxes"])
         XCTAssertEqual(app.place, .allInboxes)
-        XCTAssertEqual(door.reopened, 3, "an open window isn't opened again")
+        XCTAssertEqual(door.reopened, 5, "an open window isn't opened again")
     }
 
     /// The items `event` fires in a menu bar `make` draws afresh, by their titles.
@@ -393,6 +399,74 @@ final class MenuKeysTests: XCTestCase {
         center.post(name: NSWindow.didBecomeKeyNotification, object: mail)
         XCTAssertNil(tracker.messageWindow(focused: verbs))
         XCTAssertEqual(tracker.writing(focused: stale), stale)
+    }
+
+    /// File › Close closes the window in front, and waits with none open; a popover's panel closes the window it
+    /// hangs from.
+    func testCloseClosesTheKeyWindowAndWaitsWithNone() async throws {
+        let center = NotificationCenter()
+        let tracker = KeyWindow(center: center)
+        let (window, _) = tagged(nil, tracker)
+        defer { window.close() }
+        let w: CGKeyCode = 13
+        let commandW = try Self.press(w, .maskCommand)
+        try XCTSkipUnless(commandW.charactersIgnoringModifiers == "w", "this Mac's keyboard has no W where a US one has")
+        let menus = { self.bar(mailbox: nil, window: nil, writing: nil, keyWindow: tracker) }
+
+        XCTAssertFalse(try enabled("Close", in: menus()), "no window has said it is key")
+        XCTAssertEqual(fired(commandW, in: menus), [])
+
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 80, height: 40), styleMask: [.borderless],
+                            backing: .buffered, defer: false)
+        panel.isReleasedWhenClosed = false
+        window.addChildWindow(panel, ordered: .above)
+        defer { panel.close() }
+        center.post(name: NSWindow.didBecomeKeyNotification, object: panel)
+        XCTAssertTrue(try enabled("Close", in: menus()), "a popover's panel stands for its window")
+        XCTAssertTrue(tracker.closes === window)
+        window.removeChildWindow(panel)
+
+        center.post(name: NSWindow.didBecomeKeyNotification, object: window)
+        window.orderFront(nil)
+        XCTAssertTrue(window.isVisible)
+        XCTAssertEqual(fired(commandW, in: menus), ["Close"])
+        XCTAssertFalse(window.isVisible, "the window in front closed")
+        center.post(name: NSWindow.willCloseNotification, object: window)
+        XCTAssertFalse(try enabled("Close", in: menus()), "with none in front, Close waits")
+        XCTAssertEqual(fired(commandW, in: menus), [])
+    }
+
+    /// With the mail window closed, a panel of the Assistant menu opens it again with the panel over it, as Today's
+    /// Brief opens it on the brief, rather than waiting.
+    func testWithTheMailWindowClosedAPanelOpensItAgainOverIt() async throws {
+        let app = MailApp()
+        self.app = app
+        let mailbox = app.mailbox
+        mailbox.wire = Fixture.server().wire
+        await mailbox.refresh()
+        let door = Door()
+        let doors = MailWindowDoor(isOpen: { door.open }, mailbox: { mailbox }, reopen: { door.reopened += 1 })
+        let closed = { self.bar(mailbox: mailbox, window: nil, writing: nil, door: doors) }
+        defer { Desk.asked = [] }
+        let panels: [(String, String)] = [("Ask Your Mail…", "ask"), ("Commitments and Tasks", "commitments"),
+                                              ("Your Week", "review"), ("Curate — Rules and Senders…", "curate")]
+        for (index, (title, sheet)) in panels.enumerated() {
+            XCTAssertTrue(try enabled(title, in: closed()), "\(title) opens the window again")
+            let menu = try XCTUnwrap(closed().item(withTitle: "Assistant")?.submenu)
+            menu.performActionForItem(at: try XCTUnwrap(menu.items.firstIndex { $0.title == title }))
+            XCTAssertEqual(door.reopened, index + 1)
+            // The window opened again makes its desk, which opens the panel as it joins.
+            let desk = Desk()
+            desk.use(app, routes: DeskRoutes())
+            XCTAssertEqual(desk.sheet?.id, sheet, title)
+            XCTAssertTrue(Desk.asked.isEmpty, "once")
+        }
+        let ask = try Self.press(0, [.maskAlternate, .maskCommand])
+        XCTAssertEqual(fired(ask, in: closed), ["Ask Your Mail…"], "and through its key")
+        XCTAssertEqual(door.reopened, panels.count + 1)
+        let desk = Desk()
+        desk.use(app, routes: DeskRoutes())
+        XCTAssertEqual(desk.sheet?.id, "ask")
     }
 
     /// Message › Send Later… opens the Later menu of the composer whose window is key, as its Send ▾ does; with none
