@@ -1113,9 +1113,50 @@ final class DeskModelTests: XCTestCase {
         XCTAssertEqual(routes.sent("POST", "/api/mute").first?["key"], .number(102))
     }
 
+    /// What the desk says of a refusal or a failure shows a refusal's mark, never the tick, as the mailbox's do: a rule
+    /// the server turned down, said on the desk's own toast and through the window's.
+    func testARefusalShowsTheAlertNotTheTick() async {
+        routes.refuse("POST", "/api/rules", status: 400, detail: "A rule names one address or one domain.")
+        let model = CurateModel(link: link, notices: notices)
+        let kept = await model.rule("not an address", .block)
+        XCTAssertFalse(kept)
+        XCTAssertEqual(said, "A rule names one address or one domain.")
+        XCTAssertEqual(notices.shown?.refused, true)
+        XCTAssertEqual(MailboxToast.icon(said ?? "", refused: true), .alert)
+        XCTAssertEqual(MailboxToast.icon(said ?? ""), .check, "its words alone would have taken the tick")
+
+        let app = MailApp()
+        let mailbox = app.mailbox
+        notices.relay = { text, undo, refused in mailbox.say(text, undo: undo, refused: refused) }
+        routes.refuse("POST", "/api/rules", status: 400, detail: "A rule names one address or one domain.")
+        _ = await model.rule("not an address", .block)
+        XCTAssertEqual(mailbox.toast?.refused, true, "the window's toast says it as a refusal too")
+        XCTAssertEqual(MailboxToast.icon(mailbox.toast?.text ?? "", refused: mailbox.toast?.refused ?? false), .alert)
+        withExtendedLifetime(app) {}
+    }
+
+    /// The status's own refusals (a setting the server turned down, say) show the alert as well.
+    func testTheStatussRefusalsShowTheAlert() {
+        let status = AppStatus(newMail: NewMailAlerts(notifier: SystemNotifier.Silent(), isActive: { true },
+                                                      badge: { _ in }, announce: { _ in }))
+        status.say("The Undo Send window must be 5 to 60 seconds.", refused: true)
+        XCTAssertEqual(status.notice?.refused, true)
+        status.say("Diagnostics copied")
+        XCTAssertEqual(status.notice?.refused, false)
+    }
+
+    /// Curate's sheet says the window's toast on itself while it is up, so the window's foot, under it, doesn't say it
+    /// again; other sheets leave it to the window.
+    func testCuratesToastIsSaidOnceOnItsSheet() {
+        XCTAssertFalse(WindowToasts.saysMailboxToast(under: .curate))
+        XCTAssertTrue(WindowToasts.saysMailboxToast(under: nil))
+        XCTAssertTrue(WindowToasts.saysMailboxToast(under: .review))
+        XCTAssertTrue(WindowToasts.saysMailboxToast(under: .commitments))
+    }
+
     func testNoticesGoWhereTheWindowSaysThem() {
         var heard: [String] = []
-        notices.relay = { text, undo in heard.append("\(text), Undo \(undo ?? "none")") }
+        notices.relay = { text, undo, _ in heard.append("\(text), Undo \(undo ?? "none")") }
 
         notices.say("Snoozed", undo: "Snooze")
         notices.say("Unsnoozed")
