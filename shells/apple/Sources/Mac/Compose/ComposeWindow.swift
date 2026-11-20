@@ -730,6 +730,10 @@ struct ChipField: View {
                 lostFocus: {
                     editing = false
                     close()
+                    // Left by a click, as by Tab: what is typed becomes a chip, rather than stay behind as text. A
+                    // click on a suggestion leaves the field editing, so takes it, not this.
+                    let typed = composer.typed[field] ?? ""
+                    if !typed.trimmingCharacters(in: .whitespaces).isEmpty { composer.commitChip(field, typed) }
                 },
                 ink: NSColor(meadow.ink),
                 quiet: NSColor(meadow.ink3)
