@@ -113,18 +113,22 @@ fn default_of(name: &str) -> Option<Kind> {
 fn refusal(name: &str) -> String {
     match name {
         "undo_send_seconds" => {
-            format!("the Undo Send window must be {} to {} seconds", SEND_WINDOW.1, SEND_WINDOW.2)
+            format!("The Undo Send window must be {} to {} seconds.", SEND_WINDOW.1, SEND_WINDOW.2)
         }
-        AI_DAILY_LIMIT => format!("the AI daily limit must be more than $0 and at most ${AI_DAILY_LIMIT_MAX:.0}"),
-        "quiet_from" => "quiet hours need a time such as 22:00".to_owned(),
-        "quiet_until" => "quiet hours need a time such as 07:00".to_owned(),
-        AI_MODEL => format!("the AI model must be up to {MODEL_MOST} letters, digits and . _ : / @ + -"),
+        AI_DAILY_LIMIT => format!("The AI daily limit must be more than $0 and at most ${AI_DAILY_LIMIT_MAX:.0}."),
+        "quiet_from" => "Quiet hours need a time such as 22:00.".to_owned(),
+        "quiet_until" => "Quiet hours need a time such as 07:00.".to_owned(),
+        AI_MODEL => {
+            format!(
+                "The AI model\u{2019}s name must be up to {MODEL_MOST} letters, digits and . _ : / @ + - characters."
+            )
+        }
         AI_BASE_URL => format!(
-            "the AI service's URL must be https, or http on this Mac, in at most {} characters, with no user, \
-             password, query or fragment",
+            "The AI service\u{2019}s URL must be https, or http on this Mac, in at most {} characters, with no user, \
+             password, query or fragment.",
             ai_provider::BASE_URL_MOST
         ),
-        _ => format!("{name} can't be that"),
+        _ => format!("That can\u{2019}t be the {name} setting."),
     }
 }
 
