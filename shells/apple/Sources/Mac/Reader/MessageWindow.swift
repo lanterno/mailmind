@@ -44,6 +44,9 @@ struct MessageWindow: View {
                 // Filed, deleted, junked, moved or snoozed, the message has left: its window goes with it, and the
                 // mail window says so, with Undo.
                 .onChange(of: verbs?.left == true) { _, left in if left { dismiss() } }
+                // SwiftUI hands the menu bar a closed window's verbs while no window is in front: closed, they act
+                // on nothing.
+                .onDisappear { verbs?.closed = true }
         } else {
             Color.clear
                 .frame(width: 1, height: 1)
@@ -111,7 +114,9 @@ final class MessageWindowVerbs {
     }
 
     /// Whether a verb acts now: not once the message has left, nor while a dialog asks something of the window.
-    var acting: Bool { !left && moving == nil && attention.choosingTime == nil }
+    var acting: Bool { !left && !closed && moving == nil && attention.choosingTime == nil }
+    /// The window has closed.
+    var closed = false
 
     /// The message as a verb names it and the menus' words read it: as the server last said it stands, else its copy
     /// and its head.

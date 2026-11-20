@@ -5,7 +5,7 @@ import SwiftUI
 /// its fictional mailbox.
 struct Root: View {
     /// The window's scene.
-    static let scene = "mail"
+    static let scene = MailApp.windowScene
     let demo: Demo
 
     var body: some View {
@@ -23,6 +23,11 @@ struct Root: View {
     private var stepZeroList: some View {
         InboxView(demo: demo)
             .task { await demo.start() }
+            #if os(macOS)
+            // Counted as the mail window, so the menu bar's places never open another over step 0's.
+            .onAppear { AppStatus.shared.mailWindows += 1 }
+            .onDisappear { AppStatus.shared.mailWindows -= 1 }
+            #endif
     }
 
     /// Step 0's measure modes measure its list; `home` measures the window on a demo home.

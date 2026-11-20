@@ -587,8 +587,13 @@ extension Desk {
 /// The attention verbs and the AI's on the messages chosen, in the mailbox's Message menu; in a message's own window,
 /// attention's on its message alone.
 struct DeskMessageItems: View {
-    @FocusedValue(\.mailDesk) private var desk: Desk?
-    @FocusedValue(\.messageWindow) private var window: MessageWindowVerbs?
+    /// Whether a mail window is open: with none, its desk handed on is a closed window's (`MailWindowDoor`).
+    var open = true
+    @FocusedValue(\.mailDesk) private var focusedDesk: Desk?
+    @FocusedValue(\.messageWindow) private var focusedWindow: MessageWindowVerbs?
+
+    private var desk: Desk? { open ? focusedDesk : nil }
+    private var window: MessageWindowVerbs? { MailWindowDoor.live(focusedWindow) }
 
     /// What attention's items act on in the window in front, and through which model: a message window's message,
     /// in no stack, through its own; else the mail window's choice, in the stack its list is, through its desk's.
@@ -622,9 +627,11 @@ struct DeskMessageItems: View {
 /// The menu bar's Assistant menu: the assistant's and curation's panels; Ask, a bulk action and your week only while
 /// AI isn't turned off.
 struct DeskCommands: Commands {
+    @Environment(\.openWindow) private var openWindow
+
     var body: some Commands {
         CommandMenu("Assistant") {
-            AssistantMenuItems(status: .shared)
+            AssistantMenuItems(status: .shared, door: .ofThisApp(openWindow))
         }
     }
 
@@ -636,16 +643,21 @@ struct DeskCommands: Commands {
     }
 }
 
-/// The Assistant menu's items: a view, so they follow how AI stands as it changes, whatever window is in front.
-private struct AssistantMenuItems: View {
+/// The Assistant menu's items: a view, so they follow how AI stands as it changes, whatever window is in front. With
+/// the mail window closed, Today's Brief opens it again on the brief, and the panels, which hang on the window, wait.
+struct AssistantMenuItems: View {
     let status: AppStatus
-    @FocusedValue(\.mailDesk) private var desk: Desk?
+    var door = MailWindowDoor.alwaysOpen
+    @FocusedValue(\.mailDesk) private var focusedDesk: Desk?
 
     var body: some View {
+        let open = door.isOpen()
+        let desk = open ? focusedDesk : nil
         let ai = DeskCommands.offersAI(desk, status.digest?.ai)
-        Button("Today’s Brief", systemImage: "sun.max") { desk?.go(.desk(.brief)) }
+        let brief = briefGoing(desk, open: open)
+        Button("Today’s Brief", systemImage: "sun.max") { brief?() }
             .keyboardShortcut("b", modifiers: [.option, .command])
-            .disabled(desk == nil)
+            .disabled(brief == nil)
         if ai {
             Button("Ask Your Mail…", systemImage: "sparkles") { desk?.sheet = .ask }
                 .keyboardShortcut("a", modifiers: [.option, .command])
@@ -667,6 +679,18 @@ private struct AssistantMenuItems: View {
             .disabled(desk == nil)
         Button("New Filter…", systemImage: "line.3.horizontal.decrease.circle") { desk?.newFilter() }
             .disabled(desk == nil)
+    }
+
+    /// What Today's Brief does: the window's desk goes to it; with no mail window, the window opens again on it.
+    private func briefGoing(_ desk: Desk?, open: Bool) -> (@MainActor () -> Void)? {
+        if open {
+            guard let desk else { return nil }
+            return { desk.go(.desk(.brief)) }
+        }
+        guard let going = door.going(from: nil) else { return nil }
+        return {
+            going.go { mailbox in mailbox.app?.place = .desk(.brief) }
+        }
     }
 }
 #else

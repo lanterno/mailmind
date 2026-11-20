@@ -29,6 +29,9 @@ final class MailApp {
     /// from the Dock finds the core already open: one core over the data folder, never a second with its own sync.
     static let shared = MailApp()
 
+    /// The mail window's scene, which the menu bar opens again once the window has closed.
+    static let windowScene = "mail"
+
     /// Opens a home's core: the host's, or a test's in its place.
     typealias Opener = @Sendable (CoreHome) async throws -> Core
 

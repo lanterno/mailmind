@@ -6,30 +6,103 @@ extension FocusedValues {
     @Entry var mailbox: Mailbox?
 }
 
+/// The mail window as the menu bar sees it, open or closed. SwiftUI keeps handing the commands the last window's
+/// values (its mailbox, its desk, its message) once no window is in front, so with the mail window closed their
+/// items would act on a window that isn't there. With none open, a place opens it again and goes there, and what acts
+/// on a message, or on what only the window shows, waits for one.
+@MainActor
+struct MailWindowDoor {
+    /// Whether a mail window is open: read in a menu item's body, so the menu follows it.
+    let isOpen: @MainActor () -> Bool
+    /// The process's mailbox, which the window opened again shows.
+    let mailbox: @MainActor () -> Mailbox?
+    /// Opens the mail window again.
+    let reopen: @MainActor () -> Void
+
+    /// A mail window that is always open, as a test drawing the menus over its own mailbox has one.
+    static let alwaysOpen = MailWindowDoor(isOpen: { true }, mailbox: { nil }, reopen: {})
+
+    /// This app's: the mail windows `AppStatus` counts, `MailApp.shared`'s mailbox, and its scene opened again.
+    static func ofThisApp(_ openWindow: OpenWindowAction) -> MailWindowDoor {
+        MailWindowDoor(isOpen: { AppStatus.shared.mailWindows > 0 }, mailbox: { MailApp.shared.mailbox },
+                       reopen: { openWindow(id: MailApp.windowScene) })
+    }
+
+    /// What a place is gone to through: the window's mailbox, `focused`, while a mail window is open; with none, the
+    /// process's, the window opened again once the place is chosen. Nil while there is nothing to go through.
+    func going(from focused: Mailbox?) -> Going? {
+        if isOpen() { return focused.map { Going(mailbox: $0, then: {}) } }
+        return mailbox().map { Going(mailbox: $0, then: reopen) }
+    }
+
+    /// The mailbox to go somewhere through, and what follows: nothing, or the window opened again.
+    @MainActor
+    struct Going {
+        let mailbox: Mailbox
+        let then: @MainActor () -> Void
+
+        func go(_ there: (Mailbox) -> Void) {
+            there(mailbox)
+            then()
+        }
+    }
+
+    /// A message window the menus may act on: one that is still open.
+    static func live(_ window: MessageWindowVerbs?) -> MessageWindowVerbs? {
+        window?.closed == true ? nil : window
+    }
+
+    /// Whether what the window in front handed the menus is still there: a mail window is open, or the message's own
+    /// window is. Else it is a closed window's, and acts on nothing.
+    func trusts(_ window: MessageWindowVerbs?) -> Bool {
+        isOpen() || Self.live(window) != nil
+    }
+}
+
 /// The page's commands (app/commands.ts) in the menu bar, with a Mac's keys: the Message menu acts on what is chosen
 /// or open, the Mailbox menu goes places and searches, and View holds how the list is shown (`MailboxViewItems`, in
 /// Meadow's View group). Each runs as its key, its button in the pane's bar and its palette entry do. Edit ▸ Undo
-/// undoes what the mailbox did last.
+/// undoes what the mailbox did last. With the mail window closed, Window offers it again (`MailWindowItem`).
 struct MailboxCommands: Commands {
     @FocusedValue(\.mailbox) private var mailbox
     @FocusedValue(\.messageWindow) private var window
     @FocusedValue(\.mailWriting) private var writing
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
-        CommandMenu("Message") { MessageMenuItems(mailbox: mailbox, window: window, writing: writing) }
-        CommandMenu("Mailbox") { MailboxMenuItems(mailbox: mailbox) }
+        let door = MailWindowDoor.ofThisApp(openWindow)
+        CommandMenu("Message") { MessageMenuItems(mailbox: mailbox, window: window, writing: writing, door: door) }
+        CommandMenu("Mailbox") { MailboxMenuItems(mailbox: mailbox, door: door) }
+        CommandGroup(before: .singleWindowList) { MailWindowItem(door: door) }
+    }
+}
+
+/// Window ▸ MailMind while the mail window is closed, which opens it again, as Mail's Message Viewer does. While it
+/// is open, the Window menu lists it as it lists every window.
+struct MailWindowItem: View {
+    let door: MailWindowDoor
+
+    var body: some View {
+        if !door.isOpen() {
+            Button("MailMind") { door.reopen() }
+        }
     }
 }
 
 /// The Message menu's items for the window in front: the mail window's mailbox or a message's own window, and what
-/// it can write. A view of its own, so a test draws it as AppKit's menu and presses its keys.
+/// it can write. A view of its own, so a test draws it as AppKit's menu and presses its keys. With the mail window
+/// closed, only a message's own window still open is acted on (`door`).
 struct MessageMenuItems: View {
     let mailbox: Mailbox?
     let window: MessageWindowVerbs?
     let writing: MailWriting?
+    var door = MailWindowDoor.alwaysOpen
 
     var body: some View {
-        ComposeMessageItems(writing: writing)
+        let open = door.isOpen()
+        let mailbox = open ? self.mailbox : nil
+        let window = MailWindowDoor.live(self.window)
+        ComposeMessageItems(writing: door.trusts(window) ? writing : nil)
         Divider()
         let verbs = MessageMenuVerbs(window: window, mailbox: mailbox)
         Button("Archive") { verbs.file(.archive) }
@@ -55,7 +128,7 @@ struct MessageMenuItems: View {
             .keyboardShortcut("l", modifiers: [.shift, .command])
             .disabled(!verbs.acting)
         Divider()
-        DeskMessageItems()
+        DeskMessageItems(open: open)
         Divider()
         Button("Next Unread") { mailbox?.moveUnread(by: 1) }
             .keyboardShortcut(.downArrow, modifiers: [.option, .command])
@@ -75,24 +148,35 @@ struct MessageMenuItems: View {
     }
 }
 
-/// The Mailbox menu's items: the places to go and search, on the mail window's mailbox.
+/// The Mailbox menu's items: the places to go and search, on the mail window's mailbox. With the mail window closed,
+/// a place opens it again and goes there; search and the palette wait for it (`door`).
 struct MailboxMenuItems: View {
     let mailbox: Mailbox?
+    var door = MailWindowDoor.alwaysOpen
 
     var body: some View {
+        let going = door.going(from: mailbox)
         Group {
-            Button("All Inboxes") { mailbox?.app?.place = .allInboxes }
+            Button("All Inboxes") { going?.go { $0.app?.place = .allInboxes } }
                 .keyboardShortcut("0", modifiers: .command)
             ForEach(Array(Self.roles.enumerated()), id: \.offset) { index, role in
-                Button(role.title) { mailbox?.go(role: role.role) }
+                Button(role.title) { going?.go { $0.go(role: role.role) } }
                     .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
             }
             Divider()
             ForEach([VirtualFolder.snoozed, .waiting, .replyLater], id: \.self) { virtual in
-                Button(virtual.title) { mailbox?.go(virtual) }
+                Button(virtual.title) { going?.go { $0.go(virtual) } }
             }
-            Button("Documents") { mailbox?.app?.place = .documents }
-            Divider()
+            Button("Documents") { going?.go { $0.app?.place = .documents } }
+        }
+        .disabled(going == nil)
+        Divider()
+        searching(door.isOpen() ? mailbox : nil)
+    }
+
+    /// Search, a search kept as a view, and the palette: on the mail window, while it is open.
+    private func searching(_ mailbox: Mailbox?) -> some View {
+        Group {
             Button("Search") { mailbox?.searchFocus = true }
                 .keyboardShortcut("f", modifiers: .command)
             Button("Save Search as View…") {

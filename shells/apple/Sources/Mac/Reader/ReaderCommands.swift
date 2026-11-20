@@ -15,14 +15,28 @@ extension FocusedValues {
 struct ReaderCommands: Commands {
     @FocusedValue(\.readerTools) private var tools
     @FocusedValue(\.messageWindow) private var messageWindow
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
-        CommandGroup(replacing: .printItem) {
-            Button("Print…") { tools?.print() }
-                .keyboardShortcut("p", modifiers: .command)
-                .disabled(tools == nil)
+        let door = MailWindowDoor.ofThisApp(openWindow)
+        CommandGroup(replacing: .printItem) { PrintItem(tools: tools, messageWindow: messageWindow, door: door) }
+        CommandGroup(after: .textEditing) {
+            FindInMessageItem(tools: tools, messageWindow: messageWindow != nil, window: messageWindow, door: door)
         }
-        CommandGroup(after: .textEditing) { FindInMessageItem(tools: tools, messageWindow: messageWindow != nil) }
+    }
+}
+
+/// File › Print… for the reader in front, while its window is open (`MailWindowDoor`).
+private struct PrintItem: View {
+    let tools: ReaderTools?
+    let messageWindow: MessageWindowVerbs?
+    let door: MailWindowDoor
+
+    var body: some View {
+        let tools = door.trusts(messageWindow) ? tools : nil
+        Button("Print…") { tools?.print() }
+            .keyboardShortcut("p", modifiers: .command)
+            .disabled(tools == nil)
     }
 }
 
@@ -33,8 +47,13 @@ struct ReaderCommands: Commands {
 struct FindInMessageItem: View {
     let tools: ReaderTools?
     var messageWindow = false
+    /// The message window that handed the tools, if one did, and whether a mail window is open: a closed window's
+    /// tools find nothing.
+    var window: MessageWindowVerbs?
+    var door = MailWindowDoor.alwaysOpen
 
     var body: some View {
+        let tools = door.trusts(window) ? tools : nil
         Button("Find in Message…") { tools?.find() }
             .keyboardShortcut("f", modifiers: messageWindow ? .command : [.option, .command])
             .disabled(tools == nil)

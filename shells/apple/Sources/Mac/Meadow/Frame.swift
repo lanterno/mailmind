@@ -319,21 +319,32 @@ private struct MeadowAccountAlert: View {
 struct MeadowCommands: Commands {
     @FocusedValue(\.meadowShell) private var shell
     @FocusedValue(\.mailbox) private var mailbox
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
         CommandGroup(replacing: .sidebar) {
-            MeadowViewMenu(shell: shell, mailbox: mailbox)
+            MeadowViewMenu(shell: shell, mailbox: mailbox, door: .ofThisApp(openWindow))
         }
     }
 }
 
 /// View's own group, in place of the sidebar's: how the list is shown (`MailboxViewItems`), then the rail, focus
-/// reading and the light.
+/// reading and the light. The window's own, while it is open (`MailWindowDoor`).
 struct MeadowViewMenu: View {
-    let shell: MeadowShell?
-    let mailbox: Mailbox?
+    private let focusedShell: MeadowShell?
+    private let focusedMailbox: Mailbox?
+    private let door: MailWindowDoor
+
+    init(shell: MeadowShell?, mailbox: Mailbox?, door: MailWindowDoor = .alwaysOpen) {
+        focusedShell = shell
+        focusedMailbox = mailbox
+        self.door = door
+    }
 
     var body: some View {
+        let open = door.isOpen()
+        let shell = open ? focusedShell : nil
+        let mailbox = open ? focusedMailbox : nil
         MailboxViewItems(mailbox: mailbox)
         Divider()
         Button(shell?.docked == false ? "Show Mailboxes" : shell?.railOpen == true ? "Hide Mailbox Names"

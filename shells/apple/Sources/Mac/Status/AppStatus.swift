@@ -59,8 +59,9 @@ final class AppStatus {
     let newMail: NewMailAlerts
     /// The message a notification's click opens, until the mail window has opened it (`NotificationOpener`).
     var opening: MailCopy?
-    /// How many mail windows are open, and what opens one again when none is.
-    @ObservationIgnored var mailWindows = 0
+    /// How many mail windows are open, and what opens one again when none is. Watched: the menu bar's places open
+    /// the window again while none is (`MailWindowDoor`).
+    var mailWindows = 0
     @ObservationIgnored var reopenWindow: (@MainActor () -> Void)?
     /// What opens Curate from the status menu, when the window offers it.
     @ObservationIgnored var curate: (@MainActor () -> Void)?
