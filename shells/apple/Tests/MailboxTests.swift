@@ -1005,6 +1005,41 @@ final class MailboxSummariesTests: XCTestCase {
         withExtendedLifetime(desk) {}
     }
 
+    /// The brief's line over one account's Inbox counts that account's mail alone, as the rail's Inbox does there: what
+    /// needs you, waits and can wait in it. Over every Inbox it counts every account's.
+    func testTheBriefsLineInOneAccountsInboxCountsThatAccountsMail() async throws {
+        let server = server()
+        server.on("GET", API.Get.Digest.path, DeskFixture.digest(items: [
+            DeskFixture.item(101, from: "grace@example.test", name: "Grace Hopper", subject: "Figures"),
+            DeskFixture.item(102, from: "lin@example.test", name: "Lin Mori", subject: "Plans"),
+            DeskFixture.item(103, from: "otto@example.test", name: "Otto Brand", subject: "Invoice",
+                             account: Fixture.work),
+            DeskFixture.item(104, from: "news@example.test", name: "News", subject: "Weekly", needs: false,
+                             importance: 1, safe: true, account: Fixture.work),
+        ]))
+        let app = MailApp()
+        app.mailbox.wire = server.wire
+        await app.mailbox.refresh()
+        let desk = Desk()
+        desk.use(app, routes: server.wire)
+        await desk.brief.keepTallied()?.value
+        await until { desk.brief.needs.count == 3 }
+        app.place = .allInboxes
+        let every = try XCTUnwrap(MailboxTable.briefLine(desk.brief, mailbox: app.mailbox))
+        XCTAssertEqual(every.tally, "3 need you · 3 waiting · 1 can wait", "every account's")
+        app.place = .folder(account: Fixture.ada, folder: "INBOX")
+        let ada = try XCTUnwrap(MailboxTable.briefLine(desk.brief, mailbox: app.mailbox))
+        XCTAssertEqual(ada.tally, "2 need you · 0 waiting · 0 can wait", "Ada's alone, as the rail counts there")
+        XCTAssertEqual(ada.gist, "Lin and Grace need you.", "and names who, in Ada's Inbox alone")
+        XCTAssertEqual(desk.rail.needs(in: Fixture.ada, grouped: false), 2)
+        app.place = .folder(account: Fixture.work, folder: "INBOX")
+        let work = try XCTUnwrap(MailboxTable.briefLine(desk.brief, mailbox: app.mailbox))
+        XCTAssertEqual(work.tally, "1 need you · 0 waiting · 1 can wait")
+        app.place = .folder(account: Fixture.ada, folder: "Archive")
+        XCTAssertNil(MailboxTable.briefLine(desk.brief, mailbox: app.mailbox), "no line over a folder")
+        withExtendedLifetime(desk) {}
+    }
+
     /// The round's word was missed (the stream reconnecting, say): Everything and back reads the brief's line with
     /// the list, rather than leave it saying nothing needs you over a list that says otherwise.
     func testAChangeOfTabReadsTheBriefsLineWithTheList() async {
