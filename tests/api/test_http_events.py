@@ -155,6 +155,43 @@ def test_a_queued_move_that_lands_tells_the_open_tabs(app, world):
     s.close()
 
 
+def test_a_conversation_filed_within_the_request_tells_the_open_tabs_once(app, world):
+    # Its moves landed before the answer, so no worker tells of them: the request does, once for the conversation, and a
+    # client that reads its counts again on the stream doesn't keep them stale.
+    s = Stream(app)
+    s.frame()
+    said = app.post("/api/thread/archive", world.copy("ada-inbox-02-lunch-confirm.eml")).json
+    assert (said["msg"], said["count"], said["queued"]) == ("filed", 2, 0)
+    assert s.event().split("\n")[1:] == ["event: commands-changed", "data: {}"]
+    app.post("/api/mute", world.copy(READ_THREAD))       # what is told next: nothing came between
+    assert s.event().split("\n")[1] == "event: mute"
+    s.close()
+
+
+def test_a_message_filed_within_the_request_tells_the_open_tabs(app, world):
+    s = Stream(app)
+    s.frame()
+    assert app.post("/api/archive", world.copy("ada-inbox-05-receipt.eml")).json["msg"] == "archived"
+    assert s.event().split("\n")[1:] == ["event: commands-changed", "data: {}"]
+    app.post("/api/mute", world.copy(READ_THREAD))
+    assert s.event().split("\n")[1] == "event: mute"
+    s.close()
+
+
+def test_a_senders_cleanup_that_sweeps_within_the_request_tells_the_open_tabs_once(app, world):
+    # It trashes their mail a message at a time, as a click on each would, and tells of them all once.
+    for n in (1, 2):
+        world.deliver(w.ADA, "INBOX", w.variant("ada-inbox-03-newsletter.eml", Message_ID=f"<issue-{300 + n}@loom.example.test>"))
+    s = Stream(app)
+    s.frame()
+    said = app.post("/api/cleanup/execute", {"from_addr": "news@loom.example.test", "do_unsubscribe": False}).json
+    assert (said["swept"], said["sweep_queued"]) == (3, 0)
+    assert s.event().split("\n")[1:] == ["event: commands-changed", "data: {}"]
+    app.post("/api/mute", world.copy(READ_THREAD))
+    assert s.event().split("\n")[1] == "event: mute"
+    s.close()
+
+
 def test_the_end_of_a_folders_first_scan_tells_the_open_tabs(app, world):
     s = Stream(app)
     s.frame()
