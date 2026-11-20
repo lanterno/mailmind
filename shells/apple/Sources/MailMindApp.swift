@@ -14,6 +14,8 @@ struct MailMindApp: App {
         #if os(macOS)
         // Quick Look's copies of attachments, decrypted: what a crash left, now, and what is still open, at quit.
         PreviewFiles.sweepNowAndAtQuit()
+        // Which window is key, heard from the first: the menus act on it.
+        _ = KeyWindow.shared
         #endif
     }
 

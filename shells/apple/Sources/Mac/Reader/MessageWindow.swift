@@ -276,6 +276,8 @@ struct MessageWindowContent: View {
             MailWriting(replyTo: opened.isDraft == true ? nil : copy, draft: opened.isDraft == true ? copy : nil)
         })
         .focusedSceneValue(\.messageWindow, verbs)
+        // And as AppKit says this window is key, which the menus go by: its focused values can be stale or missing.
+        .keyWindowShows(verbs.map { .message($0) })
     }
 
     /// h's chooser, hung near the middle of the window, as the mail window hangs one with no Snooze button to hang

@@ -596,11 +596,11 @@ extension Desk {
 struct DeskMessageItems: View {
     /// Whether a mail window is open: with none, its desk handed on is a closed window's (`MailWindowDoor`).
     var open = true
+    /// The message window in front, as the Message menu found it (`KeyWindow`).
+    var window: MessageWindowVerbs?
     @FocusedValue(\.mailDesk) private var focusedDesk: Desk?
-    @FocusedValue(\.messageWindow) private var focusedWindow: MessageWindowVerbs?
 
     private var desk: Desk? { open ? focusedDesk : nil }
-    private var window: MessageWindowVerbs? { MailWindowDoor.live(focusedWindow) }
 
     /// What attention's items act on in the window in front, and through which model: a message window's message,
     /// in no stack, through its own; else the mail window's choice, in the stack its list is, through its desk's.

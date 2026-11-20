@@ -71,7 +71,9 @@ struct MailboxCommands: Commands {
 
     var body: some Commands {
         let door = MailWindowDoor.ofThisApp(openWindow)
-        CommandMenu("Message") { MessageMenuItems(mailbox: mailbox, window: window, writing: writing, door: door) }
+        CommandMenu("Message") {
+            MessageMenuItems(mailbox: mailbox, window: window, writing: writing, keyWindow: .shared, door: door)
+        }
         CommandMenu("Mailbox") { MailboxMenuItems(mailbox: mailbox, door: door) }
         CommandGroup(before: .singleWindowList) { MailWindowItem(door: door) }
     }
@@ -90,18 +92,24 @@ struct MailWindowItem: View {
 }
 
 /// The Message menu's items for the window in front: the mail window's mailbox or a message's own window, and what
-/// it can write. A view of its own, so a test draws it as AppKit's menu and presses its keys. With the mail window
-/// closed, only a message's own window still open is acted on (`door`).
+/// it can write. A view of its own, so a test draws it as AppKit's menu and presses its keys, and so it follows which
+/// window AppKit says is key (`keyWindow`) as that changes. With the mail window closed, only a message's own window
+/// still open is acted on (`door`).
 struct MessageMenuItems: View {
     let mailbox: Mailbox?
+    /// The message window and what can be written, as SwiftUI handed them to the menus.
     let window: MessageWindowVerbs?
     let writing: MailWriting?
+    /// Which window is key, as AppKit says: a message's own window is acted on while it is, whatever SwiftUI handed
+    /// on, which was stale or missing there.
+    var keyWindow: KeyWindow?
     var door = MailWindowDoor.alwaysOpen
 
     var body: some View {
         let open = door.isOpen()
         let mailbox = open ? self.mailbox : nil
-        let window = MailWindowDoor.live(self.window)
+        let window = keyWindow.map { $0.messageWindow(focused: self.window) } ?? MailWindowDoor.live(self.window)
+        let writing = keyWindow.map { $0.writing(focused: self.writing) } ?? self.writing
         ComposeMessageItems(writing: door.trusts(window) ? writing : nil)
         Divider()
         let verbs = MessageMenuVerbs(window: window, mailbox: mailbox)
@@ -128,7 +136,7 @@ struct MessageMenuItems: View {
             .keyboardShortcut("l", modifiers: [.shift, .command])
             .disabled(!verbs.acting)
         Divider()
-        DeskMessageItems(open: open)
+        DeskMessageItems(open: open, window: window)
         Divider()
         Button("Next Unread") { mailbox?.moveUnread(by: 1) }
             .keyboardShortcut(.downArrow, modifiers: [.option, .command])
