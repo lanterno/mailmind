@@ -316,7 +316,7 @@ final class BriefModel {
             let filed = verb == .trash
                 ? try await routes.post(API.Post.Trash.self, body)
                 : try await routes.post(API.Post.Archive.self, body)
-            notices.say(Self.filedWords(verb, filed), undoable: filed.undoable)
+            notices.say(Self.filedWords(verb, filed), undo: filed.undoable ? Mailbox.words(verb).undo : nil)
         } catch {
             filing.remove(copy)
             notices.say(ReadOnlyWords.said(error, else: verb == .trash ? String(localized: "Couldn’t delete")
@@ -350,7 +350,8 @@ final class BriefModel {
                 undoGroup: newUndoGroup(), verb: .archive))
             notices.say(filed.rowsFailed > 0
                 ? String(localized: "Archived \(copies.count - filed.rowsFailed), \(filed.rowsFailed) failed")
-                : String(localized: "Archived \(copies.count)"), undoable: filed.undoable)
+                : String(localized: "Archived \(copies.count)"),
+                undo: filed.undoable ? Mailbox.words(.archive).undo : nil)
         } catch {
             filing.subtract(copies)
             notices.say(ReadOnlyWords.said(error, else: String(localized: "Couldn’t archive")))

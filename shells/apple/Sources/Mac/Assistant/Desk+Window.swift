@@ -169,8 +169,11 @@ final class Desk {
                     Item(command.label, command.symbol, run: command.run)
                 }
             }
-            self?.notices.relay = { [weak mailbox] text, undoable in
-                mailbox?.say(text, undo: undoable ? String(localized: "Undo") : nil)
+            // What can be taken back is on Edit ▸ Undo too, as the mailbox's own verbs are, so ⌘Z, z and the toast's
+            // Undo are one undo.
+            self?.notices.relay = { [weak mailbox] text, undo in
+                mailbox?.say(text, undo: undo)
+                if let undo { mailbox?.offerUndo(undo) }
             }
         }
         showSearch = { [weak app] q in app?.place = .search(Search(q: q)) }

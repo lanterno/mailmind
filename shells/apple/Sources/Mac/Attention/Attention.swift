@@ -79,7 +79,8 @@ final class AttentionModel {
         await act(copies, left: leaving(copies),
                   fail: { Self.couldnt(String(localized: "Couldn’t snooze"), $0) }) { routes in
             let snoozed = try await routes.post(API.Post.Snooze.self, body)
-            return (SnoozeWords.said(until: snoozed.until, count: copies.count, subject: subject), true)
+            return (SnoozeWords.said(until: snoozed.until, count: copies.count, subject: subject),
+                    String(localized: "Snooze"))
         }
     }
 
@@ -90,7 +91,7 @@ final class AttentionModel {
             : API.NamesThreadOrMessages(copies: copies.map(\.aCopy))
         await act(copies, left: leaving(copies), fail: { _ in String(localized: "Couldn’t unsnooze") }) { routes in
             _ = try await routes.post(API.Post.Unsnooze.self, body)
-            return (String(localized: "Unsnoozed"), false)
+            return (String(localized: "Unsnoozed"), nil)
         }
     }
 
@@ -103,7 +104,7 @@ final class AttentionModel {
                       fail: { Self.couldnt(String(localized: "Couldn’t mute"), $0) }) { routes in
                 _ = try await routes.post(API.Post.Mute.self, API.MuteBody(folder: copies[0].folder, key: copies[0].key,
                                                                            uid: copies[0].uid))
-                return (String(localized: "Muted"), true)
+                return (String(localized: "Muted"), String(localized: "Mute"))
             }
             return
         }
@@ -119,7 +120,7 @@ final class AttentionModel {
                     throw refusal
                 } catch {}
             }
-            return ("Muted " + countNoun(done, "thread", "threads"), done > 0)
+            return ("Muted " + countNoun(done, "thread", "threads"), done > 0 ? String(localized: "Mute") : nil)
         }
     }
 
@@ -168,20 +169,20 @@ final class AttentionModel {
             for copy in copies {
                 try await send(routes, copy)
             }
-            return (said, false)
+            return (said, nil)
         }
     }
 
-    /// Ask, then say how it went: the words and whether Undo can take it back, or the failure in the page's words.
-    /// Once done, the window goes where `left` says, as mail that left the place it shows.
+    /// Ask, then say how it went: the words and what Undo takes back, if it can (Edit ▸ Undo's name for it), or the
+    /// failure in the page's words. Once done, the window goes where `left` says, as mail that left the place it shows.
     private func act(_ copies: [MailCopy], left: (@MainActor () -> Void)? = nil, fail: (String) -> String,
-                     _ call: (any RouteCaller) async throws -> (String, Bool)) async {
+                     _ call: (any RouteCaller) async throws -> (String, String?)) async {
         guard let routes = link.routes, !copies.isEmpty, !acting else { return }
         acting = true
         defer { acting = false }
         do {
-            let (said, undoable) = try await call(routes)
-            notices.say(said, undoable: undoable)
+            let (said, undo) = try await call(routes)
+            notices.say(said, undo: undo)
             left?()
         } catch {
             notices.say(ReadOnlyWords.said(error, else: fail(DeskRefusal.message(error))))

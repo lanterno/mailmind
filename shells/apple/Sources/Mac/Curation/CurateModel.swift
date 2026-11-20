@@ -151,7 +151,8 @@ final class CurateModel {
             openPage(page)
         }
         let extra = Self.cleaned(done.status)
-        notices.say(String(localized: "Blocked · swept \(done.swept)") + (extra.isEmpty ? "" : " · \(extra)"), undoable: true)
+        notices.say(String(localized: "Blocked · swept \(done.swept)") + (extra.isEmpty ? "" : " · \(extra)"),
+                    undo: String(localized: "Clean Up"))
         await again()
     }
 
@@ -211,7 +212,8 @@ final class CurateModel {
             let done = try await routes.post(API.Post.CleanupBatch.self, API.BatchCleanupBody(
                 senders: senders, undoGroup: newUndoGroup()))
             let failed = done.sweepFailed > 0 ? String(localized: " · \(done.sweepFailed) failed") : ""
-            notices.say(String(localized: "Blocked \(done.blocked.count) · swept \(done.swept)") + failed, undoable: true)
+            notices.say(String(localized: "Blocked \(done.blocked.count) · swept \(done.swept)") + failed,
+                        undo: String(localized: "Clean Up"))
         } catch {
             notices.say(ReadOnlyWords.said(error, else: String(localized: "Cleanup failed")))
             return
@@ -267,7 +269,8 @@ final class CurateModel {
                     + (unverified > 0 ? String(localized: " · \(unverified) unverified") : "")
                 // Whatever went, or may have, one Undo brings it back from the Trash: a sweep stopped where the server
                 // couldn't be asked again keeps a way back for all of it. One that moved nothing offers none.
-                notices.say(words, undoable: swept.undoGroup != nil && ((result.moved ?? 0) > 0 || result.error != nil))
+                let undoable = swept.undoGroup != nil && ((result.moved ?? 0) > 0 || result.error != nil)
+                notices.say(words, undo: undoable ? String(localized: "Sweep") : nil)
             }
         } catch {
             notices.say(Self.sweepFailed(error, planning: false))

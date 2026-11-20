@@ -158,7 +158,7 @@ final class PlanModel {
             var said = ["\(Self.done(verb)) \(done.count)"]
             if done.failed > 0 { said.append(String(localized: "\(done.failed) failed")) }
             if done.gone > 0 { said.append(String(localized: "\(done.gone) had moved")) }
-            notices.say(said.joined(separator: ", "), undoable: done.undoable)
+            notices.say(said.joined(separator: ", "), undo: done.undoable ? Self.label(verb) : nil)
         } catch {
             notices.say(ReadOnlyWords.said(error, else: (error as? Problem)?.status == 410
                 ? String(localized: "That preview has expired. Run the command again.")

@@ -394,7 +394,9 @@ extension Mailbox {
     }
 
     /// Put the server's undo on the window's Edit ▸ Undo, named for what it reverses.
-    private func offerUndo(_ name: String) {
+    /// Put what was just done on Edit ▸ Undo, as "Undo `name`": ⌘Z there and the toast's Undo (`undo`) take it back
+    /// once between them.
+    func offerUndo(_ name: String) {
         guard let undoManager else { return }
         undoManager.registerUndo(withTarget: self) { mailbox in
             Task { await mailbox.undoNow() }
