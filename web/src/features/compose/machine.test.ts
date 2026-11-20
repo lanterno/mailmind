@@ -404,6 +404,28 @@ describe("the send-time check", () => {
     expect(focused.at(-1)).toEqual({ field: "to" });
   });
 
+  it("marks a reopened draft's chip that isn't an address as a typed one is, and holds Send on it", async () => {
+    const { m, answer, posted } = setup();
+    answer("/api/draft/resume", () => ({ ok: true, mode: "new", account: FROM, draft_id: 4, subject: "Plans", to: [person, "bob@example"], cc: ["Cy <cy@example.test>"], bcc: ["nobody"], text: "hi", tail_text: "", participants: [], files: [] }));
+    await m.editDraft(null, 4);
+    const c = m.view.get()!;
+    expect(c.to).toEqual([{ v: person, bad: false }, { v: "bob@example", bad: true }]);
+    expect(c.cc).toEqual([{ v: "Cy <cy@example.test>", bad: false }]);
+    expect(c.bcc).toEqual([{ v: "nobody", bad: true }]);
+    m.send();
+    const guard = m.view.get()!.guard!;
+    expect(guard.hard).toBe(true);
+    expect(guard.lines[0]!.key).toBe("bad");
+    expect(guard.lines[0]!.text).toContain("“bob@example” isn’t a valid address. 1 more needs fixing too.");
+    expect(posted("/api/send")).toEqual([]);
+  });
+
+  it("takes the addresses a reply's original names as they are", async () => {
+    const { m } = setup();
+    m.open({ mode: "reply", to: ["root@localhost"], subject: "Re: x" });
+    expect(m.view.get()!.to).toEqual([{ v: "root@localhost", bad: false }]);
+  });
+
   it("asks about an empty subject, won't confirm before it arms, and sends after", async () => {
     const { m, posted, tick } = setup();
     m.open({ to: [person] });
