@@ -350,11 +350,11 @@ fn the_ai_preferences_change_through_the_route_and_another_provider_clears_its_m
     assert_eq!(ai(&r), json!([false, "local", "", ""]));
 
     let model = r.post("/api/preferences", &json!({"ai_model": "gpt 6"}));
-    let words = "the AI model must be up to 200 letters, digits and . _ : / @ + -";
+    let words = "The AI model\u{2019}s name must be up to 200 letters, digits and . _ : / @ + - characters.";
     assert_eq!((model.status, model.json()), (400, refused(words)));
     let url = r.post("/api/preferences", &json!({"ai_base_url": "http://llm.example.test/v1"}));
     assert_eq!(url.status, 400);
-    assert!(url.json()["detail"].as_str().unwrap().starts_with("the AI service's URL must be https"));
+    assert!(url.json()["detail"].as_str().unwrap().starts_with("The AI service\u{2019}s URL must be https"));
     assert_eq!(r.post("/api/preferences", &json!({"ai_provider": "claude"})).status, 400);
     let elsewhere = r.post("/api/preferences", &json!({"ai_base_url": "https://llm.example.test/v1"}));
     assert_eq!(

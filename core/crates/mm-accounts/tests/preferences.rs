@@ -54,12 +54,16 @@ fn a_fresh_install_follows_the_system_and_the_clock_and_a_theme_the_file_holds_s
 fn one_value_that_cant_be_refuses_the_whole_change() {
     let asked = object(json!({"theme": "night", "undo_send_seconds": 61}));
     let refused = changes(&asked).err().map(|p| p.said);
-    assert_eq!(refused.as_deref(), Some("the Undo Send window must be 5 to 60 seconds"));
+    assert_eq!(refused.as_deref(), Some("The Undo Send window must be 5 to 60 seconds."));
     let asked = object(json!({"ai_daily_limit_usd": 0.0}));
     let refused = changes(&asked).err().map(|p| p.said);
-    assert_eq!(refused.as_deref(), Some("the AI daily limit must be more than $0 and at most $1000"));
+    assert_eq!(refused.as_deref(), Some("The AI daily limit must be more than $0 and at most $1000."));
     let asked = object(json!({"density": null}));
-    assert_eq!(changes(&asked).err().map(|p| p.said).as_deref(), Some("density can't be that"));
+    assert_eq!(changes(&asked).err().map(|p| p.said).as_deref(), Some("That can\u{2019}t be the density setting."));
+    let asked = object(json!({"quiet_from": "soon"}));
+    assert_eq!(changes(&asked).err().map(|p| p.said).as_deref(), Some("Quiet hours need a time such as 22:00."));
+    let asked = object(json!({"quiet_until": "soon"}));
+    assert_eq!(changes(&asked).err().map(|p| p.said).as_deref(), Some("Quiet hours need a time such as 07:00."));
 }
 
 #[test]
@@ -198,13 +202,13 @@ fn a_change_keeps_a_model_as_given_and_an_address_without_its_trailing_slash() {
 
 #[test]
 fn an_ai_setting_that_cant_be_one_refuses_the_change_in_words() {
-    const MODEL: &str = "the AI model must be up to 200 letters, digits and . _ : / @ + -";
-    const URL: &str = "the AI service's URL must be https, or http on this Mac, in at most 500 characters, with no \
-                       user, password, query or fragment";
+    const MODEL: &str = "The AI model\u{2019}s name must be up to 200 letters, digits and . _ : / @ + - characters.";
+    const URL: &str = "The AI service\u{2019}s URL must be https, or http on this Mac, in at most 500 characters, with \
+                       no user, password, query or fragment.";
     for (asked, said) in [
-        (json!({"ai_enabled": "yes"}), "ai_enabled can't be that"),
-        (json!({"ai_enabled": null}), "ai_enabled can't be that"),
-        (json!({"ai_provider": "claude"}), "ai_provider can't be that"),
+        (json!({"ai_enabled": "yes"}), "That can\u{2019}t be the ai_enabled setting."),
+        (json!({"ai_enabled": null}), "That can\u{2019}t be the ai_enabled setting."),
+        (json!({"ai_provider": "claude"}), "That can\u{2019}t be the ai_provider setting."),
         (json!({"ai_model": "gpt 6"}), MODEL),
         (json!({"ai_model": "m".repeat(201)}), MODEL),
         (json!({"ai_model": "modèle"}), MODEL),
@@ -325,8 +329,8 @@ fn a_model_on_this_mac_is_at_an_address_on_this_mac_or_refused_in_words() {
     let said = set(json!({"ai_provider": "local"})).expect("kept");
     assert_eq!((&said["ai_provider"], &said["ai_base_url"]), (&json!("local"), &json!("")));
     assert_eq!(set(json!({"ai_base_url": "https://10.0.0.5/v1"})), refused(elsewhere));
-    let plain = "the AI service's URL must be https, or http on this Mac, in at most 500 characters, with no user, \
-                 password, query or fragment";
+    let plain = "The AI service\u{2019}s URL must be https, or http on this Mac, in at most 500 characters, with no \
+                 user, password, query or fragment.";
     assert_eq!(
         set(json!({"ai_base_url": "http://192.168.1.20:11434/v1"})),
         refused(plain),
