@@ -605,6 +605,46 @@ final class SettingsCoreTests: XCTestCase {
         await close(core, status)
     }
 
+    /// A signature edited in Settings signs a new message and a reply written right after Save, not only once the next
+    /// sync reads who you are again: Save hands writing what was kept.
+    @MainActor
+    func testASignatureSavedSignsANewMessageAndAReplyRightAway() async throws {
+        let (core, status) = try await opened()
+        var draft = AccountDraft()
+        draft.email = "ada@example.test"
+        draft.signature = "Ada, at the example"
+        draft.pick(.imap)
+        draft.host = "127.0.0.1"
+        draft.port = "9"
+        draft.password = Self.password
+        _ = try await SecretPost.post(core, API.Post.AccountsAdd.self, draft.body)
+        await status.readAccounts()
+        let composing = Composing()
+        composing.use(core, digest: try await core.get(API.Get.Digest.self))
+        composing.openWindow = { _ in }
+        XCTAssertEqual(composing.signature("ada@example.test"), "Ada, at the example")
+
+        var edit = AccountDraft(editing: try XCTUnwrap(status.accounts.first))
+        edit.signature = "Ada Lovelace, engines"
+        let saved = await AccountSave(routes: .over(core, status: status, composing: composing))
+            .run(edit, firstRun: false) { _ in }
+        XCTAssertEqual(saved, .kept)
+
+        let new = try XCTUnwrap(composing.open(ComposeSeed()))
+        XCTAssertEqual(new.body, "\n\n-- \nAda Lovelace, engines", "a new message signs with what was just kept")
+        // A reply as `Composing.reply` opens one, once it has read the message it answers.
+        let original = API.MessageOpened(account: "ada@example.test", attachments: [], blockedCssUrls: 0,
+                                         blockedImages: 0, cc: "", date: "Mon", folder: "INBOX",
+                                         fromAddr: "bo@example.test", fromName: "Bo Brown", hasHtml: false, key: 7,
+                                         ok: true, replyTo: "", subject: "Plans", text: "Thursday?", threadId: nil,
+                                         to: "ada@example.test", uid: 7)
+        let reply = try XCTUnwrap(composing.open(Seeds.reply(original, all: false, mine: composing.mine)))
+        XCTAssertEqual(reply.body, "\n\n-- \nAda Lovelace, engines", "and so does a reply")
+        new.close(force: true)
+        reply.close(force: true)
+        await close(core, status)
+    }
+
     /// A password typed to fix an account's login is tried as typed and never kept when it doesn't log in, over the
     /// one the account keeps; a server's fix, whose password the sheet never sees, is kept, then tried as kept (#51).
     @MainActor
