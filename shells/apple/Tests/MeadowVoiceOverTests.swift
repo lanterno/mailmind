@@ -159,6 +159,50 @@ final class MeadowVoiceOverTests: XCTestCase {
                       Self.said(Self.read(host)))
     }
 
+    /// Today & next's rows as VoiceOver reads them: each says when, which event, where and who, and its answers name
+    /// the event they answer, so two invites' Accept buttons are told apart. Pressing a row opens its invite.
+    func testTodayAndNextSaysWhichEventEachRowAndAnswerIs() async throws {
+        let events = [
+            API.UpcomingEvent(account: "ada@example.test", allDay: false, end: "2026-11-21T00:30", folder: "INBOX",
+                              invite: true, key: 7, location: "Kiln yard", organizer: "Otto Brand", recurrence: "",
+                              start: "2026-11-20T23:30", summary: "Night kiln firing", uid: 7),
+            API.UpcomingEvent(account: "ada@example.test", allDay: false, end: "2026-11-21T23:30", folder: "INBOX",
+                              invite: true, key: 8, location: "Hall B", organizer: "Otto Brand", recurrence: "",
+                              start: "2026-11-21T23:00", summary: "Stall layout walk-through", uid: 8),
+        ]
+        var here = Calendar(identifier: .gregorian)
+        here.timeZone = .current
+        let now = try XCTUnwrap(here.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 23, minute: 0)))
+        var opened: [MailCopy] = []
+        let replies = InviteReplies(link: CoreLink(nil), notices: DeskNotices())
+        let list = UpcomingList(events: events, now: now, open: { opened.append($0) }, replies: replies)
+        let host = NSHostingView(rootView: list.frame(width: 320).meadowLight(.day))
+        host.sizingOptions = []
+        host.frame = CGRect(x: 0, y: 0, width: 320, height: host.fittingSize.height)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        self.window = window
+        try await Task.sleep(for: .milliseconds(400))
+        let read = Self.read(host)
+
+        let when = EventWhen.short(start: events[0].start, end: events[0].end, allDay: false, now: now)
+        let firing = try XCTUnwrap(read.first { $0.label.contains("Night kiln firing") }, Self.said(read))
+        XCTAssertEqual(firing.label, "\(when.big) \(when.small), Night kiln firing, Kiln yard · Otto Brand · invite",
+                       Self.said(read))
+        XCTAssertTrue(read.contains { $0.label.hasPrefix("Sat") && $0.label.contains("Stall layout walk-through") },
+                      Self.said(read))
+        let accepts = read.filter { $0.role == NSAccessibility.Role.button.rawValue && $0.label.hasPrefix("Accept") }
+        XCTAssertEqual(accepts.map(\.label), ["Accept Night kiln firing", "Accept Stall layout walk-through"],
+                       Self.said(read))
+        let opens = read.filter { $0.role == NSAccessibility.Role.button.rawValue && $0.label.hasPrefix("Open") }
+        XCTAssertEqual(opens.map(\.label), ["Open Night kiln firing", "Open Stall layout walk-through"], Self.said(read))
+        XCTAssertFalse(read.contains { $0.label == "Accept" }, "no Accept that says nothing of its event")
+
+        XCTAssertTrue(firing.element.accessibilityPerformPress?() ?? false, "the row opens its invite")
+        XCTAssertEqual(opened, [MailCopy.named(key: 7, folder: "INBOX", uid: 7, account: "ada@example.test")])
+    }
+
     private static func fields(in view: NSView) -> [NSTextField] {
         ((view as? NSTextField).map { [$0] } ?? []) + view.subviews.flatMap(fields(in:))
     }
