@@ -454,14 +454,21 @@ final class AppStatus {
         }
     }
 
-    /// Keep the minute, and read what is coming up each one, as the page's reminder does.
+    /// Keep the minute, and read what is coming up each one, as the page's reminder does. The minute is kept as a
+    /// meeting's words change too: a reminder says "in 1 min" until its meeting starts and "now" from then
+    /// (`Soon.wake`), not up to a minute late, as it did when the minute was read once a minute from launch.
     private func tick() {
         ticking = Task { [weak self] in
+            var read = Date()
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(60))
+                let wait = Soon.wake(self?.upcoming ?? [], now: Date())
+                try? await Task.sleep(for: .seconds(wait))
                 guard let self, !Task.isCancelled else { return }
                 self.now = Date()
-                await self.readUpcoming()
+                if self.now.timeIntervalSince(read) >= 55 {
+                    read = self.now
+                    await self.readUpcoming()
+                }
                 self.newMail.meetingSoon(self.soon)
             }
         }

@@ -311,6 +311,25 @@ enum Soon {
         }
         return nil
     }
+
+    /// How long until a reminder's words next change, a minute at most: a meeting's "in N min" falls a minute at each
+    /// whole minute before its start (where one ten minutes off also comes into reach), says "now" from its start, and
+    /// goes five minutes after it.
+    static func wake(_ upcoming: [API.UpcomingEvent], now: Date, calendar: Calendar = .current) -> TimeInterval {
+        var wait: TimeInterval = 60
+        for event in upcoming where !event.allDay {
+            guard let start = EventWhen.moment(event.start, calendar: calendar) else { continue }
+            let left = start.timeIntervalSince(now)
+            if left > 0 {
+                let step = left.truncatingRemainder(dividingBy: 60)
+                wait = min(wait, step > 0 ? step : 60)
+            } else if left > -after {
+                wait = min(wait, left + after)
+            }
+        }
+        // A hair past the change, so the minute read then is the new one.
+        return max(wait, 0) + 0.05
+    }
 }
 
 /// What VoiceOver hears of what happened, as the page's `announce` tells a screen reader.
