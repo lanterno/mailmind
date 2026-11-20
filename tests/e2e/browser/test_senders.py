@@ -77,7 +77,7 @@ def test_allowing_a_sender_keeps_them_and_takes_them_off_the_list(page, app, wor
     n = page.locator(".scr-row").count()
     page.locator(f'.scr-row[data-scr="{THIMBLE}"]').get_by_role("button", name="Allow").click()
     expect(page.locator(f'.scr-row[data-scr="{THIMBLE}"]')).to_have_count(0)
-    expect(page.locator("#toast")).to_contain_text("Allowed orders")
+    expect(page.locator("#toast")).to_contain_text("Allowed Thimble & Co")
     assert THIMBLE in rules_now(app)["keep_senders"]
     expect(page.locator("#count")).to_have_text(f"{n - 1} to screen")
     expect(page.locator('a.frow[data-folder="__screener__"] .unread')).to_have_text(str(n - 1))
@@ -88,7 +88,7 @@ def test_screening_out_blocks_the_sender(page, app, world):
     screener(page)
     page.locator(f'.scr-row[data-scr="{THIMBLE}"]').get_by_role("button", name="Screen out").click()
     expect(page.locator(f'.scr-row[data-scr="{THIMBLE}"]')).to_have_count(0)
-    expect(page.locator("#toast")).to_contain_text("Screened out orders")
+    expect(page.locator("#toast")).to_contain_text("Screened out Thimble & Co")
     assert THIMBLE in rules_now(app)["block_senders"]
     clean(page)
 
@@ -123,7 +123,7 @@ def test_screening_out_takes_their_mail_out_of_needs_you_as_out_of_the_brief_unt
     expect(receipt).to_have_count(1)
     page.locator('a.frow[data-folder="__screener__"]').click()
     page.locator(f'.scr-row[data-scr="{THIMBLE}"]').get_by_role("button", name="Screen out").click()
-    expect(page.locator("#toast")).to_contain_text("Screened out orders")
+    expect(page.locator("#toast")).to_contain_text("Screened out Thimble & Co")
     page.locator('#folderrail .frow[data-folder="INBOX"]').click()
     expect(needs).to_have_text("1")
     expect(brief).to_have_text("1 needs you")
