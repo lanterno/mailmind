@@ -1586,6 +1586,72 @@ final class AccountCardTests: XCTestCase {
         XCTAssertEqual(closed, ["ada@example.test"], "closed on what was kept")
     }
 
+    /// The add-account sheet's fields, as VoiceOver reads them: each by its row's name, where they said only their
+    /// prompt, or nothing once they held text. Tab goes from each to the next down the form, and Esc closes the sheet.
+    func testTheAccountSheetsFieldsSayTheirNamesTabDownTheFormAndEscCloses() throws {
+        MeadowVoiceOverTests.assistive(true)
+        defer { MeadowVoiceOverTests.assistive(false) }
+        var draft = AccountDraft()
+        draft.email = "dee@example.test"
+        draft.take(API.PresetFound(domain: "example.test", ok: true, supported: true, sure: false))
+        draft.host = "imap.example.test"
+        draft.port = "993"
+        draft.smtpHost = "smtp.example.test"
+        draft.smtpPort = "587"
+        draft.alias = "Dee"
+        var closed: [String?] = []
+        let status = AppStatus(newMail: NewMailAlerts(notifier: SystemNotifier.Silent(), isActive: { true },
+                                                      badge: { _ in }, announce: { _ in }))
+        let shown = Shown(AccountForm(status: status, draft: draft, done: { closed.append($0) }),
+                          size: CGSize(width: 560, height: 860))
+        defer { shown.close() }
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+
+        let named = ["Email", "Incoming server", "Incoming port", "Outgoing server", "Outgoing port", "Password",
+                     "Alias", "Signature"]
+        let read = MeadowVoiceOverTests.read(shown.host)
+        let fields = read.filter { [NSAccessibility.Role.textField.rawValue, NSAccessibility.Role.textArea.rawValue]
+            .contains($0.role) }
+        XCTAssertEqual(Set(fields.map(\.label)), Set(named), MeadowVoiceOverTests.said(read))
+        XCTAssertFalse(fields.contains { $0.label.isEmpty }, MeadowVoiceOverTests.said(read))
+
+        // Tab, from the address, through each field down the form (and whatever else the Mac's keyboard settings
+        // let Tab reach), back round to the address.
+        func key(_ characters: String, _ code: UInt16) throws -> NSEvent {
+            try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                           windowNumber: shown.window.windowNumber, context: nil,
+                                           characters: characters, charactersIgnoringModifiers: characters,
+                                           isARepeat: false, keyCode: code))
+        }
+        func says(_ view: NSView?) -> String? {
+            if view is NSSecureTextField { return "password" }
+            if let field = view as? NSTextField { return field.stringValue }
+            if let text = view as? NSTextView { return text.string }
+            return nil
+        }
+        func textFields(in view: NSView) -> [NSTextField] {
+            ((view as? NSTextField).map { [$0] } ?? []) + view.subviews.flatMap(textFields(in:))
+        }
+        let email = try XCTUnwrap(textFields(in: shown.host).first { $0.stringValue == draft.email })
+        shown.window.makeFirstResponder(email)
+        var visited: [String] = []
+        for _ in 0..<40 {
+            shown.window.sendEvent(try key("\t", 48))
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+            guard let said = says(shown.focusedField) else { continue }
+            if said == draft.email { break }
+            if visited.last != said { visited.append(said) }
+        }
+        XCTAssertEqual(Array(visited.prefix(7)), ["imap.example.test", "993", "smtp.example.test", "587", "password",
+                                                  "Dee", ""], "Tab down the form")
+
+        // Esc is Cancel.
+        let escape = try key("\u{1b}", 53)
+        if !shown.window.performKeyEquivalent(with: escape) { shown.window.sendEvent(escape) }
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        XCTAssertEqual(closed, [nil], "Esc closes the sheet, as Cancel")
+    }
+
     /// A view in a window of its own, off the screen and see-through, as a sheet or a card shows it. A view that is
     /// read is drawn into a PDF too, whose text is what it says and where: SwiftUI builds no accessibility to read
     /// with no assistive app attached.
