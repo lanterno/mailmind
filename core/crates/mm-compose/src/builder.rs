@@ -1,8 +1,11 @@
 //! Building an outgoing message (`mailmind.compose.domain.builder`), byte for byte as the Python app builds it with
 //! `email.message.EmailMessage` and writes it with `as_bytes(policy=email.policy.SMTP)`: its headers in Python's order
 //! and folded as Python folds them, its parts and their encodings, its MIME boundaries and its Message-ID drawn as
-//! Python draws them. Every address is validated and IDNA-normalized first, with Python's words for what it refuses,
-//! and Bcc is never written into the bytes: it rides only in the envelope.
+//! Python draws them. Every address is validated and IDNA-normalized first, and Bcc is never written into the bytes:
+//! it rides only in the envelope. A send is refused at the first recipient that isn't an address, in words naming it
+//! as it was typed. A draft keeps whatever was typed, as Mail does: what isn't an address goes on one line
+//! (`one_line`) into a header of MailMind's own for To and for Cc (`TYPED_TO`, `TYPED_CC`), one a chip, which
+//! reopening reads back after the addresses, and into nothing for Bcc, which a save records beside the bytes.
 //!
 //! Where it stops matching Python: an RFC 2047 encoded word a person typed into a subject or a name is decoded only
 //! when its charset is UTF-8, ASCII or Latin-1, as Python decodes any it knows; a MIME type that isn't two tokens
@@ -20,93 +23,94 @@ pub use plain::{Header, plain_message};
 
 use std::collections::{BTreeSet, HashSet};
 
-use mm_kernel::addresses::{MAX_RECIPIENTS, clean, getaddresses, idna_domain};
-use mm_kernel::text::{is_printable, is_space, strip};
+use mm_kernel::addresses::{MAX_RECIPIENTS, clean, parse_addr_list, validate_pair};
+use mm_kernel::text::{is_space, strip};
 
 use crate::markdown::{content_id, plain_pictures};
 use crate::spec::{Attachment, Built, MessageSpec, Minting};
 use mime::{Body, Part, Value};
 
-/// `repr(text)` of a `str`, as Python's error words echo an address.
-fn py_repr(text: &str) -> String {
-    let quote = if text.contains('\'') && !text.contains('"') { '"' } else { '\'' };
-    let mut out = String::from(quote);
-    for c in text.chars() {
-        match c {
-            '\\' => out.push_str("\\\\"),
-            '\t' => out.push_str("\\t"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            c if c == quote => {
-                out.push('\\');
-                out.push(c);
+/// Where a draft keeps what was typed in To and in Cc that isn't an address yet (`builder.TYPED`). Another app shows
+/// none of it.
+pub const TYPED_TO: &str = "X-MailMind-Draft-To";
+pub const TYPED_CC: &str = "X-MailMind-Draft-Cc";
+/// Characters of what was typed that a refusal names, past which it is cut short.
+pub const SHOWN_MOST: usize = 80;
+pub const NO_RECIPIENT: &str = "Add at least one recipient.";
+
+/// `builder.TOO_MANY`.
+fn too_many() -> String {
+    format!("A message may have at most {MAX_RECIPIENTS} recipients.")
+}
+
+/// What `one_line` leaves of `addresses._DANGER`, the characters that show as nothing (`builder._HIDDEN`).
+fn is_hidden(c: char) -> bool {
+    matches!(c, '\u{200b}'..='\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2060}' | '\u{2066}'..='\u{2069}' | '\u{feff}')
+}
+
+/// `builder.one_line`: what was typed, on one line, as the Mac's `Addresses.oneLine` makes a name: each control
+/// character and each line or paragraph separator a space, a run of spaces one, and the ends trimmed. Nothing left in
+/// it can break a header.
+pub fn one_line(typed: &str) -> String {
+    let spaced: String =
+        typed.chars().map(|c| if c.is_control() || matches!(c, '\u{2028}' | '\u{2029}') { ' ' } else { c }).collect();
+    let joined = spaced.split(' ').filter(|p| !p.is_empty()).collect::<Vec<_>>().join(" ");
+    strip(&joined).to_owned()
+}
+
+/// `builder.not_an_address`: what a send is told of what was typed in `field` that isn't an address: it named as
+/// typed, on one line, cut short past `SHOWN_MOST` characters, a character that shows as nothing written as its
+/// escape.
+pub fn not_an_address(field: &str, typed: &str) -> String {
+    let line = one_line(typed);
+    let cut: String = if line.chars().count() <= SHOWN_MOST {
+        line
+    } else {
+        line.chars().take(SHOWN_MOST - 1).chain(['\u{2026}']).collect()
+    };
+    let mut shown = String::new();
+    for c in cut.chars() {
+        if is_hidden(c) {
+            shown.push_str(&format!("\\u{:04x}", u32::from(c)));
+        } else {
+            shown.push(c);
+        }
+    }
+    format!("\u{201c}{shown}\u{201d} in {field} isn\u{2019}t a valid address.")
+}
+
+/// What `recipients` makes of one field: its addresses, each (clean display name, local@IDNA-domain), and what was
+/// typed in it that isn't one, each on one line.
+pub type Typed = (Vec<(String, String)>, Vec<String>);
+
+/// `builder.recipients`: what was typed in `field`, a token for each chip: each address in it, once whatever its case,
+/// and, for a draft, each chip that isn't one, on one line, each once. A send is refused at the first that isn't, in
+/// words naming it. A chip with nothing on it is no recipient.
+pub fn recipients(field: &str, tokens: &[String], draft: bool) -> Result<Typed, String> {
+    let mut pairs: Vec<(String, String)> = Vec::new();
+    let mut typed: Vec<String> = Vec::new();
+    let (mut seen, mut seen_typed) = (HashSet::new(), HashSet::new());
+    for token in tokens {
+        let line = one_line(token);
+        if line.is_empty() {
+            continue;
+        }
+        let Some(found) = parse_addr_list(&[token.as_str()]) else {
+            if !draft {
+                return Err(not_an_address(field, token));
             }
-            c if c.is_ascii() && !(' '..='~').contains(&c) => out.push_str(&format!("\\x{:02x}", u32::from(c))),
-            c if c.is_ascii() || is_printable(c) => out.push(c),
-            c if u32::from(c) < 0x100 => out.push_str(&format!("\\x{:02x}", u32::from(c))),
-            c if u32::from(c) < 0x10000 => out.push_str(&format!("\\u{:04x}", u32::from(c))),
-            c => out.push_str(&format!("\\U{:08x}", u32::from(c))),
+            if seen_typed.insert(line.to_lowercase()) {
+                typed.push(line);
+            }
+            continue;
+        };
+        for (name, spec) in found {
+            if seen.insert(spec.to_lowercase()) {
+                pairs.push((name, spec));
+            }
         }
     }
-    out.push(quote);
-    out
-}
-
-/// `addresses._DANGER`: never in a header.
-fn is_danger(c: char) -> bool {
-    matches!(c,
-        '\u{0}'..='\u{1f}' | '\u{7f}'..='\u{9f}' | '\u{200b}'..='\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2060}'
-        | '\u{2066}'..='\u{2069}' | '\u{2028}' | '\u{2029}' | '\u{feff}')
-}
-
-/// `addresses._ADDR_BAD`: never in an addr-spec.
-fn is_addr_bad(c: char) -> bool {
-    is_space(c) || ",;:<>()[]\\\"".contains(c) || c <= '\u{1f}' || c == '\u{7f}'
-}
-
-/// `addresses.idna_domain`, with its words.
-fn worded_idna_domain(domain: &str) -> Result<String, String> {
-    let trimmed = strip(domain).trim_end_matches('.');
-    if trimmed.is_empty() || (!trimmed.contains('.') && trimmed.to_lowercase() != "localhost") {
-        return Err("invalid domain".to_owned());
-    }
-    idna_domain(Some(domain)).ok_or_else(|| format!("invalid domain: {}", py_repr(trimmed)))
-}
-
-/// `addresses.validate_pair`, with its words: (the display name made clean, local@IDNA-domain).
-fn validate_pair(name: &str, addr: &str) -> Result<(String, String), String> {
-    let addr = strip(addr);
-    let not_valid = || format!("not a valid address: {}", py_repr(addr));
-    if addr.is_empty() || addr.matches('@').count() != 1 {
-        return Err(not_valid());
-    }
-    if addr.chars().any(is_danger) {
-        return Err(format!("unsafe characters in address: {}", py_repr(addr)));
-    }
-    let (local, domain) = addr.rsplit_once('@').ok_or_else(not_valid)?;
-    if local.is_empty() || local.chars().any(is_addr_bad) || domain.chars().any(is_addr_bad) {
-        return Err(not_valid());
-    }
-    let ascii = worded_idna_domain(domain)?;
-    if ascii.contains('@') || ascii.chars().any(is_addr_bad) {
-        return Err(not_valid());
-    }
-    Ok((clean(Some(name)), format!("{local}@{ascii}")))
-}
-
-/// `addresses.parse_addr_list` of a list of tokens, with its words: each (name, addr-spec), the first of each
-/// addr-spec whatever its case.
-fn parse_addr_list(tokens: &[String]) -> Result<Vec<(String, String)>, String> {
-    let given: Vec<&str> = tokens.iter().map(String::as_str).filter(|t| !t.is_empty()).collect();
-    let mut out: Vec<(String, String)> = Vec::new();
-    let mut seen = HashSet::new();
-    for (name, addr) in getaddresses(&given) {
-        let (name, spec) = validate_pair(&name, &addr)?;
-        if seen.insert(spec.to_lowercase()) {
-            out.push((name, spec));
-        }
-    }
-    Ok(out)
+    Ok((pairs, typed))
 }
 
 /// `_MSGID.match(token)`: `<`, an id-left and an id-right around an `@`, `>`, nothing blank or angled inside.
@@ -279,18 +283,22 @@ fn param_breaks(key: &str, value: &str) -> bool {
 }
 
 /// `build_message(spec, draft)`: the message's bytes, its Message-ID, its envelope and who it is to, or the words
-/// of the ValueError Python raises. `draft` lifts the need for a recipient and keeps each picture's mark in the text.
+/// of the ValueError Python raises. `draft` lifts the rules a draft may be half-written past: it needs no recipient,
+/// may have any number, and keeps what was typed that isn't an address in `TYPED_TO` and `TYPED_CC`, one header a
+/// chip, where a send is refused it; and it keeps each picture's mark in the text.
 pub fn build_message(spec: &MessageSpec, draft: bool, minting: Minting<'_>) -> Result<Built, String> {
-    let (from_name, from_spec) = validate_pair(&spec.account_name, &spec.account)?;
+    let (from_name, from_spec) =
+        validate_pair(&spec.account_name, &spec.account).ok_or_else(|| not_an_address("From", &spec.account))?;
     let from_domain = from_spec.rsplit_once('@').map_or("", |(_, d)| d).to_owned();
-    let to = parse_addr_list(&spec.to)?;
-    let cc = parse_addr_list(&spec.cc)?;
-    let bcc = parse_addr_list(&spec.bcc)?;
+    let (to, typed_to) = recipients("To", &spec.to, draft)?;
+    let (cc, typed_cc) = recipients("Cc", &spec.cc, draft)?;
+    // A draft's save records what was typed in Bcc.
+    let (bcc, _) = recipients("Bcc", &spec.bcc, draft)?;
     if to.is_empty() && cc.is_empty() && bcc.is_empty() && !draft {
-        return Err("at least one recipient is required".to_owned());
+        return Err(NO_RECIPIENT.to_owned());
     }
-    if to.len() + cc.len() + bcc.len() > MAX_RECIPIENTS {
-        return Err(format!("too many recipients (max {MAX_RECIPIENTS})"));
+    if to.len() + cc.len() + bcc.len() > MAX_RECIPIENTS && !draft {
+        return Err(too_many());
     }
 
     let mut headers: Vec<(&'static str, Value)> = vec![("From", Value::Addresses(vec![(from_name, from_spec)]))];
@@ -299,6 +307,10 @@ pub fn build_message(spec: &MessageSpec, draft: bool, minting: Minting<'_>) -> R
     }
     if !cc.is_empty() {
         headers.push(("Cc", Value::Addresses(cc.clone())));
+    }
+    // On one line, so no break reaches the header.
+    for (name, typed) in [(TYPED_TO, typed_to), (TYPED_CC, typed_cc)] {
+        headers.extend(typed.into_iter().map(|line| (name, Value::Text(line))));
     }
     headers.push(("Subject", Value::Text(clean(Some(&spec.subject)))));
     headers.push(("Date", Value::Text(format_datetime(&minting))));

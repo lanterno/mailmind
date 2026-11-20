@@ -19,6 +19,7 @@ use mm_kernel::text::strip;
 use regex::Regex;
 use sha2::{Digest, Sha256};
 
+use crate::builder::{TYPED_CC, TYPED_TO, one_line};
 use crate::markdown;
 use crate::spec::{MAX_ATTACH_BYTES, MAX_SEND_POST, RESUME_HEADROOM};
 
@@ -120,6 +121,7 @@ pub fn copy_is_there(uidvalidity: Option<i64>, known: Option<i64>, there: bool) 
 pub struct Draft {
     /// The Subject, its encoded words decoded, its folds unfolded; None where there is none.
     pub subject: Option<String>,
+    /// To and Cc as composer chips, what was typed that isn't an address yet after the addresses (`recipients`).
     pub to: Vec<String>,
     pub cc: Vec<String>,
     /// The Bcc another app kept in the draft itself.
@@ -140,8 +142,8 @@ pub fn read(raw: &[u8]) -> Result<Draft, Problem> {
     let parsed = mime::parse(raw);
     Ok(Draft {
         subject: headers::header_text(headers, "Subject"),
-        to: headers::header_chips(headers, "To"),
-        cc: headers::header_chips(headers, "Cc"),
+        to: recipients(headers, "To", TYPED_TO),
+        cc: recipients(headers, "Cc", TYPED_CC),
         bcc: headers::header_chips(headers, "Bcc"),
         in_reply_to: headers::header_ids(headers, "In-Reply-To"),
         references: headers::header_ids(headers, "References"),
@@ -337,12 +339,35 @@ fn address_of(chip: &str) -> String {
         .unwrap_or_default()
 }
 
+/// `resume._who`: whom a chip names, to tell two apart: its address, lowercase, or for one that isn't an address, it
+/// on one line.
+fn who(chip: &str) -> String {
+    let addr = address_of(chip);
+    if addr.is_empty() { one_line(chip).to_lowercase() } else { addr }
+}
+
+/// `resume.recipients`: To or Cc as composer chips: the header's addresses (`header_chips`), then what a draft
+/// MailMind saved kept there that isn't an address yet (`typed`, the header `builder::TYPED_TO` or `TYPED_CC`), as it
+/// was typed, each once.
+fn recipients(headers: &[parts::Header], field: &str, typed: &str) -> Vec<String> {
+    let mut out = headers::header_chips(headers, field);
+    let mut had: HashSet<String> = out.iter().map(|chip| who(chip)).collect();
+    for raw in headers::raw_values(headers, typed) {
+        let chip = one_line(&headers::unstructured(&headers::fetched(raw)));
+        if !chip.is_empty() && had.insert(chip.to_lowercase()) {
+            out.push(chip);
+        }
+    }
+    out
+}
+
 /// `resume.bcc_of`: (the draft's Bcc as chips, how many were dropped). `header_bcc` is the Bcc another app may keep in
 /// the draft itself, and `recorded` what MailMind recorded (a JSON list of chips). That joins it only where the record
-/// is this copy's, and is otherwise counted, so the composer can say some went. A record that isn't a JSON list of
-/// text counts as none, where Python raised.
+/// is this copy's, and is otherwise counted, so the composer can say some went. What was typed that isn't an address
+/// yet goes as it was recorded, as an address does. A record that isn't a JSON list of text counts as none, where
+/// Python raised.
 pub fn bcc_of(header_bcc: &[String], recorded: Option<&str>, exact: bool) -> (Vec<String>, usize) {
-    let had: HashSet<String> = header_bcc.iter().map(|chip| address_of(chip)).collect();
+    let had: HashSet<String> = header_bcc.iter().map(|chip| who(chip)).collect();
     let kept: Vec<String> = recorded
         .filter(|recorded| !recorded.is_empty())
         .and_then(|recorded| serde_json::from_str(recorded).ok())
@@ -350,8 +375,8 @@ pub fn bcc_of(header_bcc: &[String], recorded: Option<&str>, exact: bool) -> (Ve
     let missing: Vec<String> = kept
         .into_iter()
         .filter(|chip| {
-            let addr = address_of(chip);
-            !addr.is_empty() && !had.contains(&addr)
+            let whom = who(chip);
+            !whom.is_empty() && !had.contains(&whom)
         })
         .collect();
     if exact {

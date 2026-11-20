@@ -12,7 +12,7 @@ use mm_kernel::seams::Clock;
 use mm_kernel::when::iso;
 use serde_json::{Map, Value, json};
 
-use crate::builder::{build_message, thread_ids};
+use crate::builder::{build_message, recipients, thread_ids};
 use crate::composing::{Composing, Composition, REPLIES};
 use crate::composition::Composed;
 use crate::delivery::Delivery;
@@ -88,14 +88,11 @@ fn scope_of(row: &DraftRow, waiting: &Waiting) -> String {
 }
 
 /// What a save records of what the composer held (`draft_journal.record_of`): Bcc is written nowhere in the bytes,
-/// so this is all that keeps it.
+/// so this is all that keeps it: each address as a chip, and after them what was typed that isn't one yet, on one
+/// line, as a draft keeps it (`builder::recipients`).
 pub fn record_of(composed: &Composed, built: &Built) -> Record {
-    let tokens: Vec<&str> = composed.spec.bcc.iter().map(String::as_str).collect();
-    let bcc: Vec<String> = mm_kernel::addresses::parse_addr_list(&tokens)
-        .unwrap_or_default()
-        .iter()
-        .map(|(name, addr)| reopening::addr_chip(name, addr))
-        .collect();
+    let (pairs, typed) = recipients("Bcc", &composed.spec.bcc, true).unwrap_or_default();
+    let bcc: Vec<String> = pairs.iter().map(|(name, addr)| reopening::addr_chip(name, addr)).chain(typed).collect();
     Record {
         raw_sha: reopening::sha_of(&built.raw),
         own_text: reopening::lf(&composed.own),
