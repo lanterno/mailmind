@@ -238,9 +238,12 @@ final class Composer: Identifiable {
         }
         self.body = body
         self.sigBlock = sigBlock
-        to = seed.to.map { edited ? Recipient($0) : Recipient(trusted: $0) }
-        cc = seed.cc.map { edited ? Recipient($0) : Recipient(trusted: $0) }
-        bcc = seed.bcc.map { edited ? Recipient($0) : Recipient(trusted: $0) }
+        // A person's own words come back checked as they were typed: a closed composer's, or a draft saved and
+        // reopened, whose chips may hold what no server would take. What the original named is taken as it is.
+        let typed = edited || seed.draftId != nil
+        to = seed.to.map { typed ? Recipient($0) : Recipient(trusted: $0) }
+        cc = seed.cc.map { typed ? Recipient($0) : Recipient(trusted: $0) }
+        bcc = seed.bcc.map { typed ? Recipient($0) : Recipient(trusted: $0) }
         showCc = !seed.cc.isEmpty || !seed.bcc.isEmpty
         subject = seed.subject
         subject0 = seed.subject0 ?? seed.subject
