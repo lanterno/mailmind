@@ -200,6 +200,33 @@ final class SoonTests: XCTestCase {
         XCTAssertEqual(Soon.next(started, now: now, closed: [])?.message(now: now), "(no title) starts now")
         XCTAssertNil(Soon.next([F.meeting("Old", start: now.addingTimeInterval(-6 * 60))], now: now, closed: []))
     }
+
+    /// The pill said "starts in 1 min" 16 seconds after its meeting began: the minute was read once a minute from
+    /// whenever the app opened. The clock now wakes as the words change: at each whole minute before the start, at
+    /// the start, where it says now, and as the reminder goes five minutes in.
+    func testTheClockWakesAsTheRemindersWordsChange() {
+        let start = now
+        let upcoming = [F.meeting("Stand-up", start: start), F.meeting("All day", start: start, allDay: true, key: 2)]
+        // Read at 14:59:44, sixteen seconds short of the start: it wakes at the start, and says now.
+        var at = start.addingTimeInterval(-16)
+        XCTAssertEqual(Soon.next(upcoming, now: at, closed: [])?.when(now: at), "in 1 min")
+        let wait = Soon.wake(upcoming, now: at)
+        XCTAssertEqual(wait, 16, accuracy: 0.1)
+        at = at.addingTimeInterval(wait)
+        XCTAssertEqual(Soon.next(upcoming, now: at, closed: [])?.when(now: at), "now", "said at the start, not later")
+        // Each minute before: from 4 min 30 s out it wakes at 4 min, when it says "in 4 min".
+        at = start.addingTimeInterval(-270)
+        XCTAssertEqual(Soon.next(upcoming, now: at, closed: [])?.when(now: at), "in 5 min")
+        let step = Soon.wake(upcoming, now: at)
+        XCTAssertEqual(step, 30, accuracy: 0.1)
+        XCTAssertEqual(Soon.next(upcoming, now: at + step, closed: [])?.when(now: at + step), "in 4 min")
+        // Under way, it wakes as the reminder goes; with nothing near, once a minute.
+        XCTAssertEqual(Soon.wake(upcoming, now: start.addingTimeInterval(4 * 60 + 20)), 40, accuracy: 0.1)
+        XCTAssertNil(Soon.next(upcoming, now: start.addingTimeInterval(5 * 60 + 0.1), closed: []))
+        XCTAssertEqual(Soon.wake([], now: start), 60, accuracy: 0.1)
+        XCTAssertEqual(Soon.wake([upcoming[1]], now: start.addingTimeInterval(-16)), 60, accuracy: 0.1,
+                       "a day's event has no minute")
+    }
 }
 
 /// New mail counts on the Dock and notifies only while nobody is at the app, and only as the preferences allow.
