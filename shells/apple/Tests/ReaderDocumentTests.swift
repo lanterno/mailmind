@@ -380,6 +380,33 @@ final class ReaderDocumentTests: XCTestCase {
         XCTAssertGreaterThan(narrow.row, wide.row + 10, "the rewrites wrap under it")
     }
 
+    /// The reply box offers the rewrites the composer's window does, in its words and order, as the page's composer
+    /// (`REWRITES`), the page's only rewrite row, names them.
+    func testTheReplyBoxOffersTheComposersRewritesInItsWords() async throws {
+        MeadowVoiceOverTests.assistive(true)
+        defer { MeadowVoiceOverTests.assistive(false) }
+        let fake = FakeHost()
+        defer { withExtendedLifetime(fake) {} }
+        let composer = Composer(ComposeSeed(), host: fake)
+        defer { composer.close(force: true) }
+        let host = NSHostingView(rootView: ReplyRewrites(composer: composer).frame(width: 760).meadowLight(.day))
+        host.frame = CGRect(origin: .zero, size: CGSize(width: 760, height: host.fittingSize.height))
+        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        defer {
+            window.contentView = nil
+            window.close()
+        }
+        window.layoutIfNeeded()
+        try await Task.sleep(for: .milliseconds(300))
+        let read = MeadowVoiceOverTests.read(host)
+        let buttons = read.filter { $0.role == NSAccessibility.Role.button.rawValue }.map(\.label)
+        let page = ["Shorten", "Elaborate", "Formal", "Friendly", "Fix grammar", "Translate…"]
+        XCTAssertEqual(buttons, page, MeadowVoiceOverTests.said(read))
+        XCTAssertEqual(API.RewriteOp.offered.map(\.label), page, "the composer's window's row")
+    }
+
     /// A box taller than what shows brings its foot into sight, where Send is.
     func testATallBoxBringsItsFootIntoSight() {
         let box = NSRect(x: 0, y: 0, width: 400, height: 600)
