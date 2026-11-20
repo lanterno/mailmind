@@ -1376,13 +1376,44 @@ final class OpenedMessageVerbsTests: XCTestCase {
             (0, "just now"), (2.5 * 3600, "2h ago"), (26 * 3600, "yesterday"), (3 * day, "3d ago"), (10 * day, "1w ago"),
             (40 * day, "Nov 14"),
         ]
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
         for (after, said) in times {
-            XCTAssertEqual(MessageWhen.said(header, now: sent.addingTimeInterval(after)), said, "\(after)")
+            XCTAssertEqual(MessageWhen.said(header, now: sent.addingTimeInterval(after), calendar: utc), said, "\(after)")
         }
         XCTAssertEqual(MessageWhen.said("2 Nov 2026 09:00 +0100 (CET)", now: sent.addingTimeInterval(86_400 * 60)),
                        "Nov 02", "no weekday, no seconds, a comment after the zone")
         XCTAssertNotNil(MessageWhen.date("Mon, 2 Nov 2026 09:00:00 GMT"), "a zone by its name")
         XCTAssertEqual(MessageWhen.said("sometime"), "sometime", "a date that won't read is said as written")
+    }
+
+    /// The words count the person's calendar days, as the day heads over the list's rows do and the core's words for a
+    /// row do: twenty minutes either side of midnight is yesterday's where midnight fell between, and twenty minutes
+    /// ago where it didn't.
+    func testAHeadersDateCountsThePersonsCalendarDaysAsTheDayHeadsDo() throws {
+        let header = "Thu, 19 Nov 2026 23:50:00 +0000"
+        let sent = try XCTUnwrap(MessageWhen.date(header))
+        func calendar(_ zone: String) -> Calendar {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = TimeZone(identifier: zone)!
+            return calendar
+        }
+        let later = sent.addingTimeInterval(20 * 60)
+        XCTAssertEqual(MessageWhen.said(header, now: later, calendar: calendar("UTC")), "yesterday", "midnight between")
+        XCTAssertEqual(MessageWhen.said(header, now: later, calendar: calendar("Europe/London")), "yesterday")
+        XCTAssertEqual(MessageWhen.said(header, now: later, calendar: calendar("Europe/Paris")), "20m ago",
+                       "both just past midnight there")
+        XCTAssertEqual(MessageWhen.said(header, now: later, calendar: calendar("Pacific/Auckland")), "20m ago",
+                       "both in the afternoon of the 20th there")
+        XCTAssertEqual(MessageWhen.said(header, now: later, calendar: calendar("America/Los_Angeles")), "20m ago",
+                       "both in the afternoon of the 19th there")
+        XCTAssertEqual(MessageWhen.said(header, now: sent.addingTimeInterval(60), calendar: calendar("UTC")), "just now")
+        XCTAssertEqual(MessageWhen.said(header, now: sent.addingTimeInterval(100), calendar: calendar("Asia/Kolkata")),
+                       "1m ago", "past a minute and a half")
+        XCTAssertEqual(MessageWhen.said(header, now: sent.addingTimeInterval(2 * 86_400 + 600), calendar: calendar("UTC")),
+                       "3d ago", "two days and ten minutes, three calendar days")
+        XCTAssertEqual(MessageWhen.said("Sat, 21 Nov 2026 09:00:00 +0000", now: sent, calendar: calendar("UTC")),
+                       "Nov 21", "a later day is its date")
     }
 
     // MARK: Read for its moment
