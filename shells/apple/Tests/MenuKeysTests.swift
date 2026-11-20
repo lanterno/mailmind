@@ -394,4 +394,29 @@ final class MenuKeysTests: XCTestCase {
         XCTAssertNil(tracker.messageWindow(focused: verbs))
         XCTAssertEqual(tracker.writing(focused: stale), stale)
     }
+
+    /// Message › Send Later… opens the Later menu of the composer whose window is key, as its Send ▾ does; with none
+    /// in front it waits. The page gives it no key, so it has none.
+    func testSendLaterOpensTheKeyComposersLaterMenu() async throws {
+        let center = NotificationCenter()
+        let tracker = KeyWindow(center: center)
+        let composer = Composer(ComposeSeed(), host: FakeHost())
+        let (window, _) = tagged(.composer(composer), tracker)
+        defer { window.close() }
+        let menus = { self.bar(mailbox: nil, window: nil, writing: nil, keyWindow: tracker) }
+        XCTAssertFalse(try enabled("Send Later…", in: menus()), "no composer in front")
+
+        center.post(name: NSWindow.didBecomeKeyNotification, object: window)
+        await until { tracker.composer === composer }
+        XCTAssertTrue(try enabled("Send Later…", in: menus()))
+        let bar = menus()
+        let menu = try XCTUnwrap(bar.item(withTitle: "Message")?.submenu)
+        let at = try XCTUnwrap(menu.items.firstIndex { $0.title == "Send Later…" })
+        XCTAssertEqual(menu.items[at].keyEquivalent, "", "the page has no key for it")
+        menu.performActionForItem(at: at)
+        XCTAssertTrue(composer.laterOpen, "its Later menu opens")
+
+        center.post(name: NSWindow.didResignKeyNotification, object: window)
+        XCTAssertFalse(try enabled("Send Later…", in: menus()), "its window no longer in front")
+    }
 }
