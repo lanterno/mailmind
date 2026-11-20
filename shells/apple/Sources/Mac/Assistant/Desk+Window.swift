@@ -118,6 +118,7 @@ final class Desk {
             Task { await readScreeners() }
         }
         join(app.mailbox)
+        doAsked()
     }
 
     /// A test's window and routes, with no core: the desk reads the window it is given, speaks those routes, and hangs
@@ -126,6 +127,17 @@ final class Desk {
         self.app = app
         connect(routes)
         join(app.mailbox)
+        doAsked()
+    }
+
+    /// What the menus asked of the mail window while none was open (Ask, Your Week, Curate…), which opened it again:
+    /// the next desk to join a window does it, once. A window's desk is its own, made as the window opens.
+    static var asked: [@MainActor (Desk) -> Void] = []
+
+    private func doAsked() {
+        let asked = Self.asked
+        Self.asked = []
+        for act in asked { act(self) }
     }
 
     /// Reach the core's routes, and read what was asked for before they were there.
@@ -651,7 +663,8 @@ struct DeskCommands: Commands {
 }
 
 /// The Assistant menu's items: a view, so they follow how AI stands as it changes, whatever window is in front. With
-/// the mail window closed, Today's Brief opens it again on the brief, and the panels, which hang on the window, wait.
+/// the mail window closed, Today's Brief opens it again on the brief, and a panel, which hangs on the window, opens
+/// it again with the panel over it.
 struct AssistantMenuItems: View {
     let status: AppStatus
     var door = MailWindowDoor.alwaysOpen
@@ -666,26 +679,45 @@ struct AssistantMenuItems: View {
             .keyboardShortcut("b", modifiers: [.option, .command])
             .disabled(brief == nil)
         if ai {
-            Button("Ask Your Mail…", systemImage: "sparkles") { desk?.sheet = .ask }
+            let ask = doing(desk, open: open) { $0.sheet = .ask }
+            Button("Ask Your Mail…", systemImage: "sparkles") { ask?() }
                 .keyboardShortcut("a", modifiers: [.option, .command])
-                .disabled(desk == nil)
+                .disabled(ask == nil)
             // ⌥⌘D hides the Dock everywhere, so Bulk Action takes ⌥⌘K, beside the palette's ⌘K.
-            Button("Bulk Action…", systemImage: "wand.and.stars") { desk?.startPlan() }
+            let plan = doing(desk, open: open) { $0.startPlan() }
+            Button("Bulk Action…", systemImage: "wand.and.stars") { plan?() }
                 .keyboardShortcut("k", modifiers: [.option, .command])
-                .disabled(desk == nil)
+                .disabled(plan == nil)
         }
         Divider()
-        Button("Commitments and Tasks", systemImage: "checklist") { desk?.sheet = .commitments }
-            .disabled(desk == nil)
+        let commitments = doing(desk, open: open) { $0.sheet = .commitments }
+        Button("Commitments and Tasks", systemImage: "checklist") { commitments?() }
+            .disabled(commitments == nil)
         if ai {
-            Button("Your Week", systemImage: "calendar") { desk?.sheet = .review }
-                .disabled(desk == nil)
+            let week = doing(desk, open: open) { $0.sheet = .review }
+            Button("Your Week", systemImage: "calendar") { week?() }
+                .disabled(week == nil)
         }
         Divider()
-        Button("Curate — Rules and Senders…", systemImage: "slider.horizontal.3") { desk?.sheet = .curate }
-            .disabled(desk == nil)
-        Button("New Filter…", systemImage: "line.3.horizontal.decrease.circle") { desk?.newFilter() }
-            .disabled(desk == nil)
+        let curate = doing(desk, open: open) { $0.sheet = .curate }
+        Button("Curate — Rules and Senders…", systemImage: "slider.horizontal.3") { curate?() }
+            .disabled(curate == nil)
+        let filter = doing(desk, open: open) { $0.newFilter() }
+        Button("New Filter…", systemImage: "line.3.horizontal.decrease.circle") { filter?() }
+            .disabled(filter == nil)
+    }
+
+    /// What a panel's item does: the window's desk opens it; with no mail window, the window opens again and its desk
+    /// opens it there (`Desk.asked`).
+    private func doing(_ desk: Desk?, open: Bool, _ act: @escaping @MainActor (Desk) -> Void)
+        -> (@MainActor () -> Void)?
+    {
+        if open {
+            guard let desk else { return nil }
+            return { act(desk) }
+        }
+        guard let going = door.going(from: nil) else { return nil }
+        return { going.go { _ in Desk.asked.append(act) } }
     }
 
     /// What Today's Brief does: the window's desk goes to it; with no mail window, the window opens again on it.

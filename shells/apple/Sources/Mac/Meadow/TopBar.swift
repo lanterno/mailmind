@@ -176,9 +176,13 @@ struct MeadowSearchBox: View {
             let search = place?.search
             text = search.map { $0.asked ?? $0.q } ?? ""
         }
-        .onChange(of: mailbox.searchFocus) { _, wanted in
-            if wanted { focused = true }
+        // Asked for while the mail window was closed (Mailbox › Search), it is taken as the window opens again, once
+        // the window can hold the keyboard.
+        .onChange(of: mailbox.searchFocus, initial: true) { _, wanted in
+            guard wanted else { return }
+            focused = true
             mailbox.searchFocus = false
+            Task { focused = true }
         }
         // Return leaves the keyboard here, as the page's does: the empty pane says ↓, which goes on to the list.
         .onChange(of: focused, initial: true) { _, now in mailbox.inSearchField = now }

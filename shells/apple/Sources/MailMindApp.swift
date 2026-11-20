@@ -39,6 +39,8 @@ struct MailMindApp: App {
         .defaultSize(width: Root.stepZero ? 560 : 1180, height: Root.stepZero ? 820 : 760)
         // The menu bar's writing, and each composer in a window of its own: Mac/Compose.
         .commands { ComposeCommands() }
+        // File › Close, for the window AppKit says is key: Mac/Shared/KeyWindow.swift.
+        .commands { CloseCommands() }
         // The View menu's rail, focus reading and light: Mac/Meadow.
         .commands { MeadowCommands() }
         #endif

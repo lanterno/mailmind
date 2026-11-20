@@ -157,7 +157,7 @@ struct MessageMenuItems: View {
 }
 
 /// The Mailbox menu's items: the places to go and search, on the mail window's mailbox. With the mail window closed,
-/// a place opens it again and goes there; search and the palette wait for it (`door`).
+/// a place, search or the palette opens it again and goes there (`door`).
 struct MailboxMenuItems: View {
     let mailbox: Mailbox?
     var door = MailWindowDoor.alwaysOpen
@@ -179,23 +179,25 @@ struct MailboxMenuItems: View {
         }
         .disabled(going == nil)
         Divider()
-        searching(door.isOpen() ? mailbox : nil)
+        searching(door.isOpen() ? mailbox : nil, going: going)
     }
 
-    /// Search, a search kept as a view, and the palette: on the mail window, while it is open.
-    private func searching(_ mailbox: Mailbox?) -> some View {
+    /// Search and the palette, on the mail window, which opens again for them while it is closed; and a search kept as
+    /// a view, which needs the search on screen.
+    private func searching(_ mailbox: Mailbox?, going: MailWindowDoor.Going?) -> some View {
         Group {
-            Button("Search") { mailbox?.searchFocus = true }
+            Button("Search") { going?.go { $0.searchFocus = true } }
                 .keyboardShortcut("f", modifiers: .command)
+                .disabled(going == nil)
             Button("Save Search as View…") {
                 if let q = mailbox?.app?.place?.search?.q { mailbox?.savingView = q }
             }
-            .disabled(mailbox?.app?.place?.search == nil || mailbox?.app?.place?.search?.lane != nil
+            .disabled(mailbox == nil || mailbox?.app?.place?.search == nil || mailbox?.app?.place?.search?.lane != nil
                 || mailbox?.onSavedView == true)
-            Button("Command Palette…") { mailbox?.paletteOpen = true }
+            Button("Command Palette…") { going?.go { $0.paletteOpen = true } }
                 .keyboardShortcut("k", modifiers: .command)
+                .disabled(going == nil)
         }
-        .disabled(mailbox == nil)
     }
 
     /// The folders the Mailbox menu goes to on the account in front, as g then a letter does.

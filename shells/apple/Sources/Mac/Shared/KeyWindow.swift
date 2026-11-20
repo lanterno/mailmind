@@ -30,6 +30,10 @@ final class KeyWindow {
     private(set) var message: MessageWindowVerbs?
     /// The composer whose window is key.
     private(set) var composer: Composer?
+    /// The window File › Close closes: the key one, or the window a popover's panel hangs from; nil with none open.
+    @ObservationIgnored private(set) weak var closes: NSWindow?
+    /// Whether there is a window to close, which File › Close follows.
+    private(set) var canClose = false
     @ObservationIgnored private weak var key: NSWindow?
     @ObservationIgnored private var watching: [any NSObjectProtocol] = []
 
@@ -71,10 +75,21 @@ final class KeyWindow {
         case .composer(let made)?: composer = made
         case nil: break
         }
+        // A popover's panel closes the window it hangs from; a sheet, which waits for an answer, nothing.
+        var closing = window
+        while let one = closing, !one.styleMask.contains(.closable), !one.isSheet { closing = one.parent }
+        if closing?.styleMask.contains(.closable) != true { closing = nil }
+        closes = closing
         // Only what changed is said again: a window says what it shows at each of its updates.
         if !heard { heard = true }
         if self.message !== message { self.message = message }
         if self.composer !== composer { self.composer = composer }
+        if canClose != (closing != nil) { canClose = closing != nil }
+    }
+
+    /// File › Close: the window in front closes, as its close button closes it.
+    func close() {
+        closes?.performClose(nil)
     }
 
     /// The message window the Message menu acts on: the key one, as AppKit says; before AppKit has said, what SwiftUI
@@ -105,6 +120,25 @@ final class KeyWindow {
         tags = tags.filter { $0.value.window != nil }
         tags[ObjectIdentifier(window)] = shows.map { Tag(window: window, shows: $0) }
         if key === window || (!heard && window.isKeyWindow) { read(window) }
+    }
+}
+
+/// File › Close (⌘W), in place of SwiftUI's, which stayed on with no window to close: the window in front closes, as
+/// its close button closes it, and with none open the item waits.
+struct CloseCommands: Commands {
+    var body: some Commands {
+        CommandGroup(replacing: .saveItem) { CloseItem(keyWindow: .shared) }
+    }
+}
+
+/// The item itself, a view of its own so a test draws it as AppKit's menu.
+struct CloseItem: View {
+    let keyWindow: KeyWindow
+
+    var body: some View {
+        Button("Close") { keyWindow.close() }
+            .keyboardShortcut("w")
+            .disabled(!keyWindow.canClose)
     }
 }
 
