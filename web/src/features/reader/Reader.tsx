@@ -1,11 +1,11 @@
 // The reader pane: one message, or a whole conversation with its latest open.
 import { useEffect, useEffectEvent, useState, type ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { aiOffered } from "../../lib/ai";
 import { EMPTY } from "../../lib/emptyWords";
 import { ApiError, post, refusalOf } from "../../lib/api/client";
 import type { GetAnswers, RsvpDecision } from "../../lib/api/types";
-import { BriefPane, findSuggestions, SuggestionCard } from "../assistant";
+import { BriefPane, findSuggestions, inviteWhen, nextOf, repeats, SuggestionCard, upcomingQuery } from "../assistant";
 import { composing, guardLine, isMine, myAddresses, redirectOf, answer, forget, useDraftAhead, useDraftChip, canQuickReply, QUICK } from "../compose";
 import { createStore } from "../../lib/store";
 import { copyId, copyOf, copyQuery, eachCopyOnce, type Copy } from "../../lib/copy";
@@ -177,6 +177,13 @@ function ReplyGoesElsewhere({ d, mine }: { d: Body; mine: ReadonlySet<string> })
   return <div className="rd-replyto" role="note"><Icon name="alert" /> {guardLine({ key: "redirect", ...r }).text}</div>;
 }
 
+// When the event is, on the clock Today & next reads: a series says its next time, as Today & next lists it for this
+// message, rather than its first.
+function InviteWhen({ invite, copy }: { invite: NonNullable<Body["invite"]>; copy: Copy }) {
+  const upcoming = useQuery({ ...upcomingQuery, enabled: repeats(invite) }).data?.items ?? [];
+  return inviteWhen(invite, nextOf(invite, copy, upcoming));
+}
+
 function Invite({ d }: { d: Body }) {
   const v = d.invite;
   if (!v) return null;
@@ -187,7 +194,7 @@ function Invite({ d }: { d: Body }) {
     <div className="invite-card">
       <div className="inv-hd"><Icon name="cal" /> {kinds[v.method] ?? "Event"}{v.status && v.status !== "CONFIRMED" ? ` · ${v.status.toLowerCase()}` : ""}</div>
       <div className="inv-title">{v.summary}</div>
-      <div className="inv-line"><Icon name="clock" /> {v.when}{v.recurrence ? ` · ${v.recurrence}` : ""}</div>
+      <div className="inv-line"><Icon name="clock" /> <InviteWhen invite={v} copy={copyOf(d)} />{v.recurrence ? ` · ${v.recurrence}` : ""}</div>
       {v.location && <div className="inv-line"><Icon name="pin" /> {v.location}</div>}
       {v.organizer?.email && <div className="inv-line inv-sub">organizer: {v.organizer.name || v.organizer.email}</div>}
       {names && <div className="inv-line inv-sub">{attendees.length} attendee{attendees.length === 1 ? "" : "s"}: {names}{attendees.length > 8 ? ` +${attendees.length - 8}` : ""}</div>}

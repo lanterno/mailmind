@@ -1,6 +1,7 @@
 // What the brief works out from the digest and the clock, with no DOM. The digest's rows say what the AI's verdict asks
 // of you; this only sorts and words them.
 import type { GetAnswers } from "../../lib/api/types";
+import { sameCopy, type Copy } from "../../lib/copy";
 import type { DigestItem } from "../mailbox";
 
 export type Upcoming = GetAnswers["/api/upcoming"]["items"][number];
@@ -44,11 +45,56 @@ export function eventWhen(e: Pick<Upcoming, "start" | "all_day"> & { end?: strin
   return [d.toLocaleDateString(undefined, days >= 7 || days < 0 ? { weekday: "short", day: "numeric" } : { weekday: "short" }), time];
 }
 
+// "Thu, Nov 26": a day on this browser's calendar.
+const dayWords = (d: Date) => d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+
 // A week's meeting or deadline, whichever side of now it falls on.
 export function meetingWhen(e: Pick<Upcoming, "start" | "all_day">): string {
   const d = new Date(e.start);
-  const day = d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
-  return e.all_day ? `${day}, all day` : `${day}, ${clock(d)}`;
+  return e.all_day ? `${dayWords(d)}, all day` : `${dayWords(d)}, ${clock(d)}`;
+}
+
+// The moment a time names: an instant where it names its zone, a time on this clock where it names none (as the server
+// writes an event's), and a bare date's first moment here, which `new Date` alone would put at midnight in UTC.
+function moment(text: string): Date | null {
+  const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  const d = day ? new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3])) : new Date(text);
+  return text && !Number.isNaN(d.getTime()) ? d : null;
+}
+
+// When an event runs, as an invite's card says it, on the clock Today & next reads: "Sat, Nov 21, 11:55 pm – 12:40 am",
+// "Thu, Nov 26, all day", "Thu, Nov 26 – Sat, Nov 28". Its end's day is said where it lasts a day or more. Null where
+// the start can't be read. As the Mac app's `EventWhen.span` says it.
+export function eventSpan(start: string, end: string, allDay: boolean): string | null {
+  const from = moment(start);
+  if (!from) return null;
+  const ends = moment(end), to = ends && ends > from ? ends : null;
+  if (allDay) {
+    const last = to && new Date(to);   // a day's event ends as the day after its last begins
+    last?.setDate(last.getDate() - 1);
+    return last && last > from && last.toDateString() !== from.toDateString() ? `${dayWords(from)} – ${dayWords(last)}` : `${dayWords(from)}, all day`;
+  }
+  const begins = `${dayWords(from)}, ${clock(from)}`;
+  if (!to) return begins;
+  return to.getTime() - from.getTime() < 864e5 ? `${begins} – ${clock(to)}` : `${begins} – ${dayWords(to)}, ${clock(to)}`;
+}
+
+// What an invite's card reads of it: the event as the invite says it, and the server's own words for it.
+export interface InviteTimes { start_iso: string; end_iso: string; all_day: boolean; when: string; rrule: string; rdates?: string[] | null }
+
+export const repeats = (invite: Pick<InviteTimes, "rrule" | "rdates">) => Boolean(invite.rrule || invite.rdates?.length);
+
+// A series' next time, where Today & next lists this message's: the server works out when a series falls next, past
+// what other messages moved or cancelled, and lists the soonest few. A single event's is its own.
+export function nextOf(invite: Pick<InviteTimes, "rrule" | "rdates">, copy: Copy, upcoming: readonly Upcoming[]): Upcoming | null {
+  return repeats(invite) ? upcoming.find((e) => sameCopy(e, copy)) ?? null : null;
+}
+
+// When an invite's event is, on the clock the rest of the page reads, and a series' next time where Today & next has
+// it, rather than the series' first: the server's words only where the times can't be read. As the Mac app's
+// `InviteCard.when` says it.
+export function inviteWhen(invite: InviteTimes, next: Pick<Upcoming, "start" | "end" | "all_day"> | null): string {
+  return (next && eventSpan(next.start, next.end, next.all_day)) || eventSpan(invite.start_iso, invite.end_iso, invite.all_day) || invite.when;
 }
 
 // What a weekly review looked back on, beside its title: the last seven days when it was written today, and else the seven days

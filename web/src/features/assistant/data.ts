@@ -1,6 +1,6 @@
 // The brief's reads. A GET reads only what is stored; a POST writes one. Opening the Inbox writes the day's brief if there
 // is none, and never asks at the daily limit: only a click does.
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, get, post } from "../../lib/api/client";
 import type { GetAnswers } from "../../lib/api/types";
 import { askOverLimit } from "../../lib/overLimit";
@@ -45,6 +45,9 @@ export function useBrief(ai: boolean | undefined) {
     write: (again: boolean) => write.mutate(again),
   };
 }
+
+// Today & next as the meeting reminder reads it each minute, which an invite's card reads too for a series' next time.
+export const upcomingQuery = queryOptions({ queryKey: ["upcoming"], queryFn: () => get("/api/upcoming"), staleTime: 60_000 });
 
 export function useSide() {
   return useQuery({

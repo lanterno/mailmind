@@ -15,7 +15,7 @@ import { announce, toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import { useFocusFirst } from "../../lib/ui/menuKeys";
 import { SetUpAi } from "../../lib/ui/SetUpAi";
-import { eventWhen } from "../assistant";
+import { eventWhen, upcomingQuery } from "../assistant";
 import { readAgain, useDigest } from "../mailbox";
 import type { Mailbox } from "../mailbox";
 import { badAccounts, healthOf, nameOf, pillLabel, syncOf, type Digest } from "./model";
@@ -174,7 +174,7 @@ const soonGone = createStore<ReadonlySet<string>>(new Set());
 const told = new Set<string>();
 
 export function SoonPill({ m }: { m: Mailbox }) {
-  const { data } = useQuery({ queryKey: ["upcoming"], queryFn: () => get("/api/upcoming"), staleTime: 60_000, refetchInterval: 60_000, refetchIntervalInBackground: true });
+  const { data } = useQuery({ ...upcomingQuery, refetchInterval: 60_000, refetchIntervalInBackground: true });
   const now = minute.useValue();
   const gone = soonGone.useValue();
   const event = (data?.items ?? []).find((x) => {
