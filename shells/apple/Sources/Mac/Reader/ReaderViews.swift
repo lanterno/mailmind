@@ -98,7 +98,7 @@ struct MessageContent: View {
         let shown = height.map { $0 > 0 ? $0 + pad : minHeight + pad } ?? minHeight
         return Group {
             if let url {
-                MailFrame(core: core, url: url, look: look, html: opened.hasHtml,
+                MailFrame(source: .core(core), url: url, look: look, html: opened.hasHtml,
                           title: "Email body — from \(opened.fromName ?? opened.fromAddr ?? "sender"): \(opened.subject ?? "(no subject)")",
                           open: { link in
                               LinkOpener.open(link, senderDomain: senderDomain, in: NSApp.keyWindow)

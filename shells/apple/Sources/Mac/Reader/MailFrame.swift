@@ -10,6 +10,16 @@ struct FrameLink: Equatable, Sendable {
     let text: String
 }
 
+/// Where a frame's document comes from: the core's route, or a test's stand-in for it.
+struct FrameSource: Sendable {
+    /// The answer to a GET of the frame's route, `target` being its path and query.
+    let answer: @Sendable (_ target: String) async -> CoreAnswer
+
+    static func core(_ core: Core) -> FrameSource {
+        FrameSource { target in await core.send("GET", target, Data()) }
+    }
+}
+
 /// A mail body in a web view, as the page's MailFrame shows one: the document the route answers, under the policy it
 /// carries (a sandbox, no script, nothing from the network but the images a person asked for), given its look and,
 /// in a plain mail, its quote folded, as tall as its content so the reader scrolls as one.
@@ -28,7 +38,7 @@ struct FrameLink: Equatable, Sendable {
 ///   nowhere, and measures the body; the app treats what it posts as the mail's data, checking a link before anything
 ///   opens it.
 struct MailFrame: NSViewRepresentable {
-    let core: Core
+    let source: FrameSource
     let url: URL
     let look: MailLook
     /// Whether the mail is rich: a plain one's quote is folded.
@@ -41,38 +51,12 @@ struct MailFrame: NSViewRepresentable {
     var hovered: (URL?) -> Void = { _ in }
 
     func makeCoordinator() -> FrameGuard {
-        FrameGuard(core: core, url: url, look: look, html: html)
+        FrameGuard(source: source, url: url, look: look, html: html)
     }
 
     func makeNSView(context: Context) -> WKWebView {
-        let configuration = WKWebViewConfiguration()
-        configuration.setURLSchemeHandler(context.coordinator, forURLScheme: FrameScheme.scheme)
-        configuration.websiteDataStore = .nonPersistent()
-        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
-        configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
-        configuration.mediaTypesRequiringUserActionForPlayback = .all
-        FrameScript.install(in: configuration.userContentController, handler: context.coordinator)
-        let view = FrameWebView(frame: .zero, configuration: configuration)
-        view.navigationDelegate = context.coordinator
-        view.allowsBackForwardNavigationGestures = false
-        view.allowsMagnification = true
-        view.allowsLinkPreview = false
-        view.setAccessibilityLabel(title)
-        // Clear, so a mail that lies on the pane's paper has the paper's grain under it too. Where it can't be, the
-        // document paints the paper itself (`MailLook.dress`), set before the load below asks for it.
-        context.coordinator.clear = view.clearBackground()
-        // Hidden until the script first measures it: the web view's own white never flashes in the dark.
-        view.isHidden = true
-        context.coordinator.view = view
-        context.coordinator.told = { message in
-            switch message {
-            case .link(let link): open(link)
-            case .height(let height): measured(height)
-            case .hover(let url): hovered(url)
-            }
-        }
-        view.load(URLRequest(url: url))
-        context.coordinator.showSoon()
+        let view = Self.webView(context.coordinator, title: title)
+        context.coordinator.told = told
         // Find in Message looks in each frame the reader shows.
         context.coordinator.find = context.environment.readerFind
         context.coordinator.find?.add(view)
@@ -80,13 +64,41 @@ struct MailFrame: NSViewRepresentable {
     }
 
     func updateNSView(_ view: WKWebView, context: Context) {
-        context.coordinator.told = { message in
-            switch message {
-            case .link(let link): open(link)
-            case .height(let height): measured(height)
-            case .hover(let url): hovered(url)
-            }
+        context.coordinator.told = told
+    }
+
+    private func told(_ message: FrameMessage) {
+        switch message {
+        case .link(let link): open(link)
+        case .height(let height): measured(height)
+        case .hover(let url): hovered(url)
         }
+    }
+
+    /// A frame's web view over `walls`, with the frame's walls, its document asked for.
+    static func webView(_ walls: FrameGuard, title: String) -> FrameWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.setURLSchemeHandler(walls, forURLScheme: FrameScheme.scheme)
+        configuration.websiteDataStore = .nonPersistent()
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+        configuration.mediaTypesRequiringUserActionForPlayback = .all
+        FrameScript.install(in: configuration.userContentController, handler: walls)
+        let view = FrameWebView(frame: .zero, configuration: configuration)
+        view.navigationDelegate = walls
+        view.allowsBackForwardNavigationGestures = false
+        view.allowsMagnification = true
+        view.allowsLinkPreview = false
+        view.setAccessibilityLabel(title)
+        // Clear, so a mail that lies on the pane's paper has the paper's grain under it too. Where it can't be, the
+        // document paints the paper itself (`MailLook.dress`), set before the load below asks for it.
+        walls.clear = view.clearBackground()
+        // Hidden until the script first measures it: the web view's own white never flashes in the dark.
+        view.isHidden = true
+        walls.view = view
+        view.load(URLRequest(url: walls.url))
+        walls.showSoon()
+        return view
     }
 
     static func dismantleNSView(_ view: WKWebView, coordinator: FrameGuard) {
@@ -271,8 +283,8 @@ final class FrameWebView: WKWebView {
 /// Answers the frame's document through the core, dressed in its look, and lets the frame go nowhere else.
 @MainActor
 final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate, WKScriptMessageHandler {
-    private let core: Core
-    private let url: URL
+    private let source: FrameSource
+    let url: URL
     private let look: MailLook
     private let html: Bool
     weak var view: WKWebView?
@@ -288,11 +300,15 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate, WKSc
     /// The loads still going: one the web view stopped gets nothing more.
     private var going: Set<ObjectIdentifier> = []
 
-    init(core: Core, url: URL, look: MailLook, html: Bool) {
-        self.core = core
+    init(source: FrameSource, url: URL, look: MailLook, html: Bool) {
+        self.source = source
         self.url = url
         self.look = look
         self.html = html
+    }
+
+    convenience init(core: Core, url: URL, look: MailLook, html: Bool) {
+        self.init(source: .core(core), url: url, look: look, html: html)
     }
 
     /// Show the frame if the script hasn't measured it soon: an empty document says nothing.
@@ -311,9 +327,9 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate, WKSc
             task.didFailWithError(URLError(.unsupportedURL))
             return
         }
-        let (core, look, html, clear, head) = (core, look, html, clear, printHead)
+        let (source, look, html, clear, head) = (source, look, html, clear, printHead)
         Task { @MainActor in
-            let answer = await core.send("GET", target, Data())
+            let answer = await source.answer(target)
             guard going.remove(id) != nil else { return }
             var fields: [String: String] = [:]
             for header in answer.headers where header.name.lowercased() != "content-length" {
