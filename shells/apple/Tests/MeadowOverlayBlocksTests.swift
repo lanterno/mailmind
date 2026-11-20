@@ -248,6 +248,51 @@ final class MeadowOverlayBlocksTests: XCTestCase {
         whole.hide()
     }
 
+    /// What a popover holds may want another size once it has shown, as a menu's scroll does once it has measured its
+    /// items (the rail's accounts menu, the first time it opened): the panel is placed again round it, so nothing of
+    /// it is cut at its first measure.
+    func testAPopoverFollowsItsContentAsItGrowsAfterItShowed() async throws {
+        let parent = window()
+        let anchor = MeadowPopoverAnchorView(frame: NSRect(x: 40, y: 200, width: 30, height: 20))
+        parent.contentView?.addSubview(anchor)
+        let grows = Grows()
+        let popover = MeadowPopoverAnchor<AnyView>.Coordinator()
+        popover.show(AnyView(GrowingPop(grows: grows)), under: anchor)
+        let panel = try XCTUnwrap(parent.childWindows?.first)
+        let room = MeadowPopoverAnchor<AnyView>.Coordinator.room
+        XCTAssertEqual(paper(of: panel).height, 40)
+        grows.tall = true
+        await until { self.paper(of: panel).height == 160 }
+        XCTAssertEqual(paper(of: panel).width, 260, "drawn whole")
+        let host = try XCTUnwrap(panel.contentView?.subviews.first)
+        XCTAssertEqual(host.frame.height, 160 + 2 * room, "nothing of it cut")
+        popover.hide()
+    }
+
+    /// A popover with more to hold than the room by the window's edge is moved and kept whole, its paper standing
+    /// past the edge, never cut there: only its shadow's room is.
+    func testAPopoverLargerThanTheRoomIsKeptWhole() throws {
+        let parent = window()
+        let low = MeadowPopoverAnchorView(frame: NSRect(x: 40, y: 40, width: 30, height: 20))
+        parent.contentView?.addSubview(low)
+        let popover = MeadowPopoverAnchor<AnyView>.Coordinator()
+        popover.show(AnyView(Color.white.frame(width: 260, height: 420)), under: low)
+        let panel = try XCTUnwrap(parent.childWindows?.first)
+        let drawn = paper(of: panel)
+        XCTAssertEqual(drawn.size, CGSize(width: 260, height: 420), "the paper whole")
+        XCTAssertTrue(panel.frame.contains(drawn), "\(drawn) inside the panel \(panel.frame)")
+        XCTAssertEqual(drawn.maxY, parent.frame.maxY - 12, "moved to stand 12 under the window's top")
+        popover.hide()
+    }
+
+    /// Where a popover's paper is on screen: its content less the shadow's room round it.
+    private func paper(of panel: NSWindow) -> NSRect {
+        let room = MeadowPopoverAnchor<AnyView>.Coordinator.room
+        guard let host = panel.contentView?.subviews.first else { return .zero }
+        return NSRect(x: panel.frame.minX + host.frame.minX + room, y: panel.frame.minY + host.frame.minY + room,
+                      width: host.frame.width - 2 * room, height: host.frame.height - 2 * room)
+    }
+
     func testAnOpenPopoverKeepsTheListsKeysFromTheListBehindIt() {
         let parent = window()
         let list = Keyed(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
@@ -275,5 +320,21 @@ final class MeadowOverlayBlocksTests: XCTestCase {
         XCTAssertNil(typed(53, "\u{1b}"))
         XCTAssertEqual(closed, 1, "Esc closes it")
         popover.hide()
+    }
+}
+
+/// Whether the test's popover has grown.
+@MainActor
+@Observable
+private final class Grows {
+    var tall = false
+}
+
+/// A popover whose content grows once it has shown.
+private struct GrowingPop: View {
+    let grows: Grows
+
+    var body: some View {
+        Color.white.frame(width: 260, height: grows.tall ? 160 : 40)
     }
 }
