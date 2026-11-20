@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 
 use crate::command::truthy;
 use crate::command_ports::Tokens;
-use crate::filing::Filing;
+use crate::filing::{Filing, went};
 
 const TAG: &str = "do";
 
@@ -27,19 +27,25 @@ pub trait PlanCopies: Send + Sync + fmt::Debug {
 
 /// What a plan's messages go through, one at a time, as a click on each would: the Mailbox's filing.
 pub trait OneByOne: Send + Sync + fmt::Debug {
-    /// A move of `kind`, its reversal kept under `group`.
+    /// A move of `kind`, its reversal kept under `group`, telling no client: the plan tells once (`landed`).
     fn file(&self, kind: &str, pk: i64, group: &str) -> Result<Value, Failure>;
     /// A flag change, which Undo has nothing to take back of.
     fn set_flags(&self, pk: i64, flags: &[(&str, bool)]) -> Result<Value, Failure>;
+    /// The plan's moves that landed within the request, told once for them all. Nothing listens to a stand-in's.
+    fn landed(&self) {}
 }
 
 impl OneByOne for Filing {
     fn file(&self, kind: &str, pk: i64, group: &str) -> Result<Value, Failure> {
-        Filing::file(self, kind, pk, Some(group), None, None)
+        Filing::file_untold(self, kind, pk, Some(group), None, None).map(|(said, _)| said)
     }
 
     fn set_flags(&self, pk: i64, flags: &[(&str, bool)]) -> Result<Value, Failure> {
         Filing::set_flags(self, pk, flags, None)
+    }
+
+    fn landed(&self) {
+        Filing::landed(self);
     }
 }
 
@@ -122,6 +128,7 @@ impl Plans {
                 undoable = said_ok(&res);
             }
         } else {
+            let mut landed = false;
             for pk in &pks {
                 let res = match self.one(verb, *pk, &group) {
                     Ok(res) => res,
@@ -144,9 +151,13 @@ impl Plans {
                     count += 1;
                     queued += i64::from(res.get("status").and_then(Value::as_str) == Some("queued"));
                     undoable = undoable || res.get("undoable").is_some_and(truthy);
+                    landed = landed || went(&res);
                 } else {
                     failed += 1;
                 }
+            }
+            if landed {
+                self.filing.landed();
             }
         }
         Ok(json!({"ok": true, "verb": verb, "count": count, "failed": failed, "gone": gone, "queued": queued,

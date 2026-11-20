@@ -46,6 +46,13 @@ fn filed(kind: &str) -> &'static str {
     }
 }
 
+/// Whether an answer `file_untold` gave says its move landed within the request, as it does in its verb's word.
+pub fn went(said: &Value) -> bool {
+    said.get("msg")
+        .and_then(Value::as_str)
+        .is_some_and(|m| ["trash", "archive", "junk", "move"].map(filed).contains(&m))
+}
+
 /// What a person is told of a move of `kind` that won't happen: the verb's own words, else the plain ones.
 pub fn refusal(kind: &str, outcome: Outcome) -> &'static str {
     match (kind, outcome) {
@@ -146,6 +153,13 @@ impl Filing {
         self.events.publish(MailboxEvent::Page { topic: Topic::CommandsChanged, data: json!({}) });
     }
 
+    /// Changes a person asked for landed on their server within the request, so no worker will say so: a client
+    /// reads its lists and counts again, once for the request however many messages it moved, as it does when a
+    /// queued move lands (`settled`).
+    pub fn landed(&self) {
+        self.events.publish(MailboxEvent::Page { topic: Topic::CommandsChanged, data: json!({}) });
+    }
+
     /// A change landed on its server: the counts, and the rail's badges, move.
     fn invalidate(&self) {
         self.stats.invalidate();
@@ -160,22 +174,25 @@ impl Filing {
         move |tx, entry| undo::push(tx, entry, group.as_deref(), self.clock.now())
     }
 
-    /// A move accepted and committed: a try at it, and what the person hears of it.
-    fn submit_move(&self, kind: &str, accepted: Option<&Accepted>) -> Result<Value, Failure> {
+    /// A move accepted and committed: a try at it, what the person hears of it, and whether it landed on its server
+    /// within the request, which no worker will tell a client of.
+    fn submit_move(&self, kind: &str, accepted: Option<&Accepted>) -> Result<(Value, bool), Failure> {
         let Some(accepted) = accepted else { return Err(Problem::not_found(GONE).into()) };
         if !accepted.created {
-            return Ok(json!({"ok": true, "msg": "queued", "status": "queued", "undoable": false}));
+            return Ok((json!({"ok": true, "msg": "queued", "status": "queued", "undoable": false}), false));
         }
         match self.commands.submit(accepted)? {
             Outcome::Applied => {
                 self.invalidate();
-                Ok(json!({"ok": true, "msg": filed(kind), "undoable": accepted.undoable}))
+                Ok((json!({"ok": true, "msg": filed(kind), "undoable": accepted.undoable}), true))
             }
             outcome @ (Outcome::Queued | Outcome::Waiting) => {
                 self.flags_queued();
-                Ok(json!({"ok": true, "msg": "queued", "status": outcome.name(), "undoable": accepted.undoable}))
+                let said =
+                    json!({"ok": true, "msg": "queued", "status": outcome.name(), "undoable": accepted.undoable});
+                Ok((said, false))
             }
-            Outcome::Cancelled => Ok(json!({"ok": true, "msg": "cancelled", "undoable": false})),
+            Outcome::Cancelled => Ok((json!({"ok": true, "msg": "cancelled", "undoable": false}), false)),
             outcome => {
                 // The message is listed again.
                 self.stats.invalidate();
@@ -184,7 +201,8 @@ impl Filing {
         }
     }
 
-    /// A move of one message, through the command path: what the person hears of it.
+    /// A move of one message, through the command path: what the person hears of it. One that landed within the
+    /// request tells a client (`landed`).
     pub fn file(
         &self,
         kind: &str,
@@ -193,6 +211,23 @@ impl Filing {
         mutation_id: Option<&str>,
         to: Option<&str>,
     ) -> Result<Value, Failure> {
+        let (said, landed) = self.file_untold(kind, pk, undo_group, mutation_id, to)?;
+        if landed {
+            self.landed();
+        }
+        Ok(said)
+    }
+
+    /// A move of one message as `file` makes it, telling no client: what the person hears of it, and whether it
+    /// landed within the request. What files many one at a time (a plan, a sender's cleanup) tells once for all.
+    pub fn file_untold(
+        &self,
+        kind: &str,
+        pk: i64,
+        undo_group: Option<&str>,
+        mutation_id: Option<&str>,
+        to: Option<&str>,
+    ) -> Result<(Value, bool), Failure> {
         let push = self.pushing(undo_group);
         let accepted = self.commands.accept_move(kind, pk, mutation_id, Some(&push), to)?;
         self.submit_move(kind, accepted.as_ref())
@@ -203,7 +238,12 @@ impl Filing {
     pub fn trash_now(&self, pk: i64) -> Result<bool, Fault> {
         let accepted = self.commands.accept_move("trash", pk, None, None, None)?;
         match self.submit_move("trash", accepted.as_ref()) {
-            Ok(_) => Ok(true),
+            Ok((_, landed)) => {
+                if landed {
+                    self.landed();
+                }
+                Ok(true)
+            }
             Err(Failure::Problem(no)) if matches!(no.kind, Kind::NotFound | Kind::Conflict) => Ok(false),
             Err(Failure::Problem(_)) => Err(Fault::new("Problem")),
             Err(Failure::Fault(fault)) => Err(fault),
@@ -406,7 +446,7 @@ impl Filing {
         let mut out = HashMap::new();
         let wait = i64::try_from(MailCommands::FILE_WAIT.as_micros()).unwrap_or(i64::MAX);
         let until = Moment::from_micros(self.clock.now().micros().saturating_add(wait));
-        let mut left = false;
+        let (mut left, mut landed) = (false, false);
         for (i, (p, one)) in accepted.iter().enumerate() {
             let undoable = one.as_ref().is_some_and(|a| a.undoable);
             let late = i > 0 && one.as_ref().is_some_and(|a| a.created) && self.clock.now() >= until;
@@ -415,7 +455,10 @@ impl Filing {
                     left = true;
                     json!({"ok": true, "msg": "queued", "status": status.name(), "undoable": undoable})
                 }),
-                _ => self.submit_move(kind, one.as_ref()),
+                _ => self.submit_move(kind, one.as_ref()).map(|(said, went)| {
+                    landed |= went;
+                    said
+                }),
             };
             let said = match said {
                 Ok(value) => Ok(value),
@@ -435,6 +478,10 @@ impl Filing {
         }
         if left {
             self.flags_queued();
+        }
+        // Once for them all; the worker tells of each it was left.
+        if landed {
+            self.landed();
         }
         out
     }

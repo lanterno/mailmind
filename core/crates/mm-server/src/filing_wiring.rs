@@ -54,7 +54,11 @@ impl mm_curation::ports::Filing for CurationFiling {
     }
 
     fn trash(&self, pk: i64, group: &str) -> Result<Value, Failure> {
-        self.filing.file("trash", pk, Some(group), None, None)
+        self.filing.file_untold("trash", pk, Some(group), None, None).map(|(said, _)| said)
+    }
+
+    fn landed(&self) {
+        self.filing.landed();
     }
 
     fn trash_many(&self, rows: &[NamedCopy], group: &str) -> Result<Value, Failure> {

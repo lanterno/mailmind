@@ -289,6 +289,10 @@ impl Cleaning {
         self.block(&block_token, &format!("Cleaned up {from}"), &group)?;
         let (targets, capped) = self.targets(from)?;
         let swept = tally(targets.iter().map(|t| self.filing.trash(t.pk, &group).unwrap_or(Value::Null)));
+        // Once for the sweep, which trashed each telling no one.
+        if swept.moved > 0 {
+            self.filing.landed();
+        }
         // What stays, in other folders, reads as blocked too.
         reclassify(&*self.rules, &*self.classified, &block_token)?;
         self.filing.stats_changed();

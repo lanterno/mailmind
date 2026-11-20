@@ -88,8 +88,12 @@ pub trait Mailboxes: Send + Sync + fmt::Debug {
 pub trait Filing: Send + Sync + fmt::Debug {
     /// Trash the stored copy `pk` now, with nothing for Undo to reverse: whether it went or will go.
     fn trash_now(&self, pk: i64) -> Result<bool, Fault>;
-    /// Trash the stored copy `pk`, as a click on it would, under the undo group: filing's answer.
+    /// Trash the stored copy `pk`, as a click on it would, under the undo group, telling no client: filing's answer.
+    /// The caller tells once (`landed`) for all it trashed.
     fn trash(&self, pk: i64, group: &str) -> Result<Value, Failure>;
+    /// Moves `trash` made landed on their servers within the request: a client reads its lists and counts again.
+    /// Nothing listens to a stand-in's.
+    fn landed(&self) {}
     /// Trash these copies as filing marked rows does, under the undo group: its answer, which names each one filed.
     fn trash_many(&self, rows: &[NamedCopy], group: &str) -> Result<Value, Failure>;
     /// Put `entry` on the undo stack under `group`.
