@@ -18,6 +18,10 @@ export const commitments = (items: DigestItem[]) =>
 
 export const needsNote = (n: number) => (n ? `${n} need${n === 1 ? "s" : ""} you` : "Nothing needs you");
 
+// A Your Week list's count: how many it shows, and of how many the week holds where it shows fewer ("8 of 13"), so
+// its heading never says less than its tile does.
+export const ofWhole = (shown: number, whole: number | null | undefined) => (whole != null && whole > shown ? `${shown} of ${whole}` : `${shown}`);
+
 // [big, small]: "3:00 pm" over "today", "Sat" over "8:10 am", "Thu 6" over "all day" a week out.
 export function eventWhen(e: Pick<Upcoming, "start" | "all_day">, now: Date): [string, string] {
   const d = new Date(e.start), today = new Date(now);

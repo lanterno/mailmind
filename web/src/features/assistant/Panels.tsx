@@ -11,7 +11,7 @@ import { SetUpAi } from "../../lib/ui/SetUpAi";
 import { filing } from "../mailbox";
 import type { Mailbox } from "../mailbox";
 import { useReview, type Review } from "./data";
-import { COMMIT_CAP, commitments, meetingWhen, reviewRange } from "./model";
+import { COMMIT_CAP, commitments, meetingWhen, ofWhole, reviewRange } from "./model";
 import { dueWords, localDay } from "./fields";
 import { useTaskChanges, useTasks, type Task } from "./tasks";
 import { useLayer } from "../../lib/backTrap";
@@ -130,7 +130,7 @@ function ReviewBody({ d, m, again }: { d: Review; m: Mailbox; again: () => void 
       {(d.next?.length ?? 0) > 0 && <div className="rv-sec next"><Icon name="wind" /> Start next week with</div>}
       {d.next?.map((t) => <div className="rv-item" key={t}><span className="ic">→</span><div className="body"><div className="t">{t}</div></div></div>)}
       {(d.needs?.length ?? 0) > 0
-        ? <div className="rv-sec">Still needs you ({d.needs!.length})</div>
+        ? <div className="rv-sec">Still needs you ({ofWhole(d.needs!.length, s?.needs_you)})</div>
         : <><div className="rv-sec">Still needs you</div><div className="rv-empty">{EMPTY.week}</div></>}
       {d.needs?.map((n) => (
         <button className="rv-item need" key={n.key === null || n.uid === null ? `n${n.subject}` : copyId({ key: n.key, folder: n.folder, uid: n.uid })} onClick={() => open(n)}>
@@ -145,7 +145,7 @@ function ReviewBody({ d, m, again }: { d: Review; m: Mailbox; again: () => void 
           <div className="body"><div className="t">{e.summary}</div><div className="m">{meetingWhen(e)}{e.past ? " · past" : ""}</div></div>
         </button>
       ))}
-      {(d.waiting?.length ?? 0) > 0 && <div className="rv-sec">You’re waiting on a reply</div>}
+      {(d.waiting?.length ?? 0) > 0 && <div className="rv-sec">You’re waiting on a reply ({ofWhole(d.waiting!.length, s?.waiting_on)})</div>}
       {d.waiting?.map((w, i) => (
         <button className="rv-item wait" key={w.key === null ? `w${i}` : `${w.key}:${w.uid ?? ""}:${w.folder ?? ""}`} disabled={w.key === null || w.uid === null} onClick={() => open(w)}>
           <span className="ic">◷</span>
