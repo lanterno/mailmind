@@ -237,6 +237,63 @@ final class DeskWordsTests: XCTestCase {
         }
     }
 
+    /// A weekly invite's card says its next time, the one Today & next lists for its message, not the series' first
+    /// (Fri 13 Nov); and on the clock Today & next reads, the person's, where the core's words were twelve-hour. A
+    /// single invite says its own time on the same clock, and the core's words stand only where no time can be read.
+    func testARecurringInvitesCardSaysItsNextTimeOnTheAppsClock() throws {
+        var here = Calendar(identifier: .gregorian)
+        here.timeZone = try XCTUnwrap(TimeZone(identifier: "Europe/Paris"))
+        let british = Locale(identifier: "en_GB"), american = Locale(identifier: "en_US")
+        var invite = DeskFixture.invite
+        invite.startIso = "2026-11-13T23:55:00+01:00"
+        invite.endIso = "2026-11-14T00:40:00+01:00"
+        invite.rrule = "FREQ=WEEKLY;BYDAY=FR"
+        invite.recurrence = "Every week on Fri"
+        invite.when = "Fri, Nov 13 · 11:55 PM → Sat, Nov 14 12:40 AM"
+        let copy = DeskFixture.ada
+        func event(key: Int, start: String, end: String) -> API.UpcomingEvent {
+            API.UpcomingEvent(account: copy.account, allDay: false, end: end, folder: copy.folder, invite: true,
+                              key: key, location: "Kiln yard", organizer: "Otto Brand", recurrence: invite.recurrence,
+                              start: start, summary: "Night kiln firing", uid: copy.uid)
+        }
+        let next = event(key: copy.key, start: "2026-11-20T23:55", end: "2026-11-21T00:40")
+        let another = event(key: copy.key + 1, start: "2026-11-20T09:00", end: "2026-11-20T10:00")
+
+        XCTAssertNil(DeskInviteCard.next(of: invite, in: copy, upcoming: [another]), "another message's event")
+        let found = try XCTUnwrap(DeskInviteCard.next(of: invite, in: copy, upcoming: [another, next]))
+        let said = InviteCard.when(invite, next: found, calendar: here, locale: british)
+        XCTAssertTrue(said.contains("20") && !said.contains("13"), said)
+        XCTAssertTrue(said.hasSuffix(", 23:55 – 00:40"), said)
+        let listed = EventWhen.short(start: next.start, end: next.end, allDay: false,
+                                     now: try XCTUnwrap(EventWhen.moment("2026-11-20T12:00", calendar: here)),
+                                     calendar: here, locale: british)
+        XCTAssertTrue(said.contains(listed.big), "the clock Today & next reads: \(listed.big) in \(said)")
+
+        // On a twelve-hour clock, both read it the same way.
+        let start = try XCTUnwrap(EventWhen.moment(next.start, calendar: here))
+        let end = try XCTUnwrap(EventWhen.moment(next.end, calendar: here))
+        let twelve = InviteCard.when(invite, next: found, calendar: here, locale: american)
+        XCTAssertTrue(twelve.hasSuffix("\(EventWhen.clock(start, calendar: here, locale: american)) – "
+                                       + EventWhen.clock(end, calendar: here, locale: american)), twelve)
+
+        // A single invite: its own time, on the same clock.
+        var single = invite
+        single.rrule = ""
+        single.recurrence = ""
+        XCTAssertNil(DeskInviteCard.next(of: single, in: copy, upcoming: [next]), "a single event's is its own")
+        let own = InviteCard.when(single, next: nil, calendar: here, locale: british)
+        XCTAssertTrue(own.contains("13") && own.hasSuffix(", 23:55 – 00:40"), own)
+        // A day's event, and one whose time can't be read.
+        var day = single
+        day.allDay = true
+        day.startIso = "2026-11-13"
+        day.endIso = "2026-11-14"
+        XCTAssertTrue(InviteCard.when(day, next: nil, calendar: here, locale: british).hasSuffix(", all day"))
+        var unread = single
+        unread.startIso = ""
+        XCTAssertEqual(InviteCard.when(unread, next: nil, calendar: here, locale: british), unread.when)
+    }
+
     func testRefusalsReadAsThePageReadsThem() {
         let off = Problem(CoreAnswer(status: 409, contentType: "application/problem+json", headers: [], body: Data(
             #"{"type": "/problems/ai-off", "title": "AI is off", "status": 409, "detail": "No key.", "ai_off": true}"#.utf8)))
