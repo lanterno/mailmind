@@ -1063,6 +1063,55 @@ final class MailboxSummariesTests: XCTestCase {
     }
 }
 
+/// A long conversation archived from the Inbox: the server takes all twenty of its messages inside the request, its
+/// moves reach the IMAP server there too, and no event follows. The rail's Needs you and the brief's line over the
+/// list drop it once the request is answered, as the Needs you tab does, not when the next mail comes.
+@MainActor
+final class MailboxFilingTalliesTests: XCTestCase {
+    func testArchivingALongConversationDropsItFromTheRailAndTheBriefsLineWithNoEvent() async throws {
+        // The conversation's twenty messages each need you; two other messages do too.
+        let thread = (201...220).map {
+            DeskFixture.item($0, from: "otto@example.test", name: "Otto Brand", subject: "Re: Guild hall roof repair schedule",
+                             thread: "t-roof")
+        }
+        let others = [DeskFixture.item(101, from: "grace@example.test", name: "Grace Hopper", subject: "Figures"),
+                      DeskFixture.item(102, from: "lin@example.test", name: "Lin Mori", subject: "Plans")]
+        let conversation = Fixture.row(220, count: 20, thread: "t-roof", needs: true, from: "Otto Brand",
+                                       subject: "Re: Guild hall roof repair schedule")
+        let server = Fixture.server(rows: [conversation, Fixture.row(101, needs: true), Fixture.row(102, needs: true)])
+        server.on("GET", API.Get.Digest.path, DeskFixture.digest(items: thread + others))
+        server.on("POST", API.Post.ThreadArchive.path) { _ in
+            // Filed inside the request: the digest leaves them out from now on.
+            server.on("GET", API.Get.Digest.path, DeskFixture.digest(items: others))
+            return FakeServer.ok(API.ManyFiled(count: 20, failed: 0, filed: [], msg: "", ok: true, queued: 0,
+                                               undoable: true))
+        }
+        let app = MailApp()
+        app.mailbox.wire = server.wire
+        await app.mailbox.refresh()
+        let desk = Desk()
+        desk.use(app, routes: server.wire)
+        await desk.brief.keepTallied()?.value
+        app.openList()
+        await until { app.list?.copy(at: 0) != nil }
+        XCTAssertEqual(desk.rail.needs(in: nil, grouped: true), 3, "the conversation once, and the two others")
+        XCTAssertEqual(desk.brief.needs.count, 3)
+        let digests = server.asked(API.Get.Digest.path).count
+
+        let row = try XCTUnwrap(app.list?.copy(at: 0))
+        XCTAssertTrue(row.isConversation(grouped: true))
+        let took = await app.mailbox.fileNow(.archive, rows: [row])
+        XCTAssertTrue(took)
+
+        // No event is heard: the request's answer reads the tallies again.
+        await until { desk.rail.needs(in: nil, grouped: true) == 2 && desk.brief.needs.count == 2 }
+        XCTAssertGreaterThan(server.asked(API.Get.Digest.path).count, digests, "the digest read again")
+        XCTAssertEqual(BriefLine(needs: desk.brief.needs, waiting: 0, canWait: 0).tally,
+                       "2 need you · 0 waiting · 0 can wait", "the brief's line over the list")
+        withExtendedLifetime(desk) {}
+    }
+}
+
 /// What a test's route waits on until the test lets it go.
 private actor HeldRoute {
     private var free = false
