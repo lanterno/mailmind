@@ -114,7 +114,7 @@ struct UpcomingList: View {
             }
             .frame(width: 62, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
-                Button(event.summary.isEmpty ? String(localized: "(no title)") : event.summary) {
+                Button(Self.title(event)) {
                     open(.named(key: event.key, folder: event.folder, uid: event.uid, account: event.account))
                 }
                 .deskTitle()
@@ -131,21 +131,39 @@ struct UpcomingList: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .accessibilityElement(children: .combine)
+        // One element, read as its parts show: when, which event (the title, a button's label that combining its
+        // children drops), then where and who. Pressing it opens the invite, as its title does.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Self.spoken(event, when: when))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction {
+            open(.named(key: event.key, folder: event.folder, uid: event.uid, account: event.account))
+        }
     }
 
     /// Accept, and Open for the other answers and the invite itself, under the title's column. The brief can't tell
     /// an invite already answered, but the same answer asked again finds the reply the outbox holds for it rather
-    /// than sending another.
+    /// than sending another. Each names the event it answers, as VoiceOver reads a button alone.
     private func answers(_ event: API.UpcomingEvent, _ replies: InviteReplies) -> some View {
         let copy = MailCopy.named(key: event.key, folder: event.folder, uid: event.uid, account: event.account)
         return HStack(spacing: 6) {
-            InviteAnswers(copy: copy, replies: replies, brief: true)
+            InviteAnswers(copy: copy, replies: replies, brief: true, naming: Self.title(event))
             Button("Open") { open(copy) }
                 .meadowButton(small: true)
                 .help("Open the invite to answer Maybe or Decline, or add it to your calendar")
+                .accessibilityLabel(String(localized: "Open \(Self.title(event))"))
         }
         .padding(.leading, 62 + 12)
+    }
+
+    static func title(_ event: API.UpcomingEvent) -> String {
+        event.summary.isEmpty ? String(localized: "(no title)") : event.summary
+    }
+
+    /// What VoiceOver says of an event's row: "23:30 today, Night kiln firing, Kiln yard · Otto Brand · invite".
+    static func spoken(_ event: API.UpcomingEvent, when: (big: String, small: String)) -> String {
+        let at = [when.big, when.small].filter { !$0.isEmpty }.joined(separator: " ")
+        return [at, title(event), line(event) ?? ""].filter { !$0.isEmpty }.joined(separator: ", ")
     }
 
     /// Where, who asked, the series it repeats in, and whether it's an invite.

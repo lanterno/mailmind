@@ -242,6 +242,9 @@ struct InviteAnswers: View {
     let copy: MailCopy
     let replies: InviteReplies
     var brief = false
+    /// The event the answers are to, where nothing around them names it to VoiceOver (the brief's rows): Accept says
+    /// "Accept" and the title.
+    var naming: String?
     @Environment(\.meadow) private var meadow
 
     var body: some View {
@@ -252,6 +255,7 @@ struct InviteAnswers: View {
                 Text("Accept")
             }
             .meadowButton(.primary, small: true)
+            .accessibilityLabel(naming.map { String(localized: "Accept \($0)") } ?? String(localized: "Accept"))
             if !brief {
                 Button("Maybe") { reply(.tentative) }
                     .meadowButton(small: true)
