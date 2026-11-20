@@ -202,7 +202,8 @@ struct PaneEmptyWords: Equatable {
         }
         let list = app.list
         let loaded = list?.firstRowsAt != nil
-        let hasMail = loaded && (list?.total ?? 0) > 0
+        // Watched, so the words follow the list as it fills or empties, as the page's empty reader does.
+        let hasMail = loaded && (list?.watchedTotal ?? 0) > 0
         var inInbox = false
         switch app.place {
         case .allInboxes?: inInbox = true

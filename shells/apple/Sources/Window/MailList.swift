@@ -112,6 +112,13 @@ final class MailListModel: MessageRows {
         return index < page.count ? page[index] : nil
     }
 
+    /// How many rows the list holds, as `total` says, but watched: what is said beside the list of it as a whole (the
+    /// empty pane's words) is drawn again as a page brings another total, as summaries fill an Inbox's Needs you.
+    var watchedTotal: Int {
+        _ = held
+        return total
+    }
+
     /// Where the chosen copy is among the rows held, if it is there.
     var chosenPosition: Int? {
         _ = held
