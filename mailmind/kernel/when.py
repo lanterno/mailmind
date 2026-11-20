@@ -8,22 +8,30 @@ def now_iso() -> str:
 
 
 def rel_time(iso: str | None) -> str:
+    """How long before now the time `iso` names, in words that agree with the day heads a list puts over its rows (Today,
+    Yesterday, Past week, Earlier): counted in this machine's calendar days, the person's, not in spans of 24 hours. The
+    same day is "just now" within a minute and a half, as the page says it, then minutes or hours; the day before is
+    "yesterday", then "4d ago" within the week and "2w ago" within a month. Further back, or on a day still to come, it
+    is the date as it was written. A time with no zone is UTC's; one that won't read is its first ten characters."""
     if not iso:
         return ""
     try:
         dt = datetime.fromisoformat(iso)
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
-        delta = datetime.now(timezone.utc) - dt
-        if delta.days == 0:
-            h = delta.seconds // 3600
-            return "just now" if h == 0 else f"{h}h ago"
-        if delta.days == 1:
+        now = datetime.now(timezone.utc)
+        seconds = (now - dt) // timedelta(seconds=1)
+        days = (now.astimezone(LOCAL).date() - dt.astimezone(LOCAL).date()).days
+        if days == 0:
+            if seconds < 90:
+                return "just now"
+            return f"{seconds // 60}m ago" if seconds < 3600 else f"{seconds // 3600}h ago"
+        if days == 1:
             return "yesterday"
-        if delta.days < 7:
-            return f"{delta.days}d ago"
-        if delta.days < 30:
-            return f"{delta.days // 7}w ago"
+        if 1 < days < 7:
+            return f"{days}d ago"
+        if 7 <= days < 30:
+            return f"{days // 7}w ago"
         return dt.strftime("%b %d")
     except Exception:
         return iso[:10]
