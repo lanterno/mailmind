@@ -189,6 +189,54 @@ final class DeskWordsTests: XCTestCase {
         }
     }
 
+    /// Today & next just after midnight, as the core lists it (what hasn't ended, in its order): a firing from 23:30 to
+    /// 00:30 and a series' stand-up from 23:55 to 00:40, both begun yesterday and under way, then tonight's walk at
+    /// 23:00. The first two say they are on now and until when, never "today" for yesterday's start, so the column
+    /// reads in the list's order; just before midnight the firing is on and the rest are ahead. In several zones, on a
+    /// twenty-four-hour clock and a twelve-hour one.
+    func testAMeetingUnderWayAcrossMidnightSaysItIsOnUntilItEnds() throws {
+        let events = [("2026-11-20T23:30", "2026-11-21T00:30"), ("2026-11-20T23:55", "2026-11-21T00:40"),
+                      ("2026-11-21T23:00", "2026-11-21T23:30")]
+        let british = Locale(identifier: "en_GB"), american = Locale(identifier: "en_US")
+        func plain(_ text: String) -> String { text.replacingOccurrences(of: "\u{202F}", with: " ") }
+        for zone in ["Pacific/Auckland", "Europe/Paris", "America/Los_Angeles", "Asia/Kolkata"] {
+            var here = Calendar(identifier: .gregorian)
+            here.timeZone = try XCTUnwrap(TimeZone(identifier: zone))
+            let at = { (day: Int, hour: Int, minute: Int) in
+                here.date(from: DateComponents(year: 2026, month: 11, day: day, hour: hour, minute: minute))!
+            }
+            func said(_ now: Date, _ locale: Locale) -> [String] {
+                events.map { start, end in
+                    let when = EventWhen.short(start: start, end: end, allDay: false, now: now, calendar: here,
+                                               locale: locale)
+                    return plain("\(when.big) / \(when.small)")
+                }
+            }
+            XCTAssertEqual(said(at(21, 0, 1), british), ["now / until 00:30", "now / until 00:40", "23:00 / today"],
+                           "Saturday at 00:01 in \(zone)")
+            XCTAssertEqual(said(at(21, 0, 1), american),
+                           ["now / until 12:30 am", "now / until 12:40 am", "11:00 pm / today"], zone)
+            XCTAssertEqual(said(at(20, 23, 50), british), ["now / until 00:30", "23:55 / today", "Sat / 23:00"],
+                           "Friday at 23:50 in \(zone)")
+            XCTAssertEqual(said(at(20, 23, 0), british), ["23:30 / today", "23:55 / today", "Sat / 23:00"],
+                           "Friday at 23:00 in \(zone)")
+            // Ended a moment ago, as a list a minute old can still hold it: said as yesterday's, not today's.
+            XCTAssertEqual(said(at(21, 0, 45), british).first, "23:30 / yesterday", zone)
+            // A start with no end the core sent, begun before today: the day it began.
+            let unended = EventWhen.short(start: "2026-11-20T23:30", allDay: false, now: at(21, 0, 1), calendar: here,
+                                          locale: british)
+            XCTAssertEqual(unended.small, "yesterday", zone)
+            // Under way into another day: the day it ends.
+            let away = EventWhen.short(start: "2026-11-20T09:00", end: "2026-11-23T17:00", allDay: false,
+                                       now: at(21, 0, 1), calendar: here, locale: british)
+            XCTAssertEqual(plain("\(away.big) / \(away.small)"), "now / until Mon", zone)
+            // A day's event that began yesterday and runs today is today's.
+            let fair = EventWhen.short(start: "2026-11-20", end: "2026-11-22", allDay: true, now: at(21, 0, 1),
+                                       calendar: here, locale: british)
+            XCTAssertEqual(plain("\(fair.big) / \(fair.small)"), "Today / all day", zone)
+        }
+    }
+
     func testRefusalsReadAsThePageReadsThem() {
         let off = Problem(CoreAnswer(status: 409, contentType: "application/problem+json", headers: [], body: Data(
             #"{"type": "/problems/ai-off", "title": "AI is off", "status": 409, "detail": "No key.", "ai_off": true}"#.utf8)))
