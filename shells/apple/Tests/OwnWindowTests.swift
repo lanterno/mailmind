@@ -351,7 +351,7 @@ final class OwnWindowTests: XCTestCase {
         let core = try await openCore()
         let server = OpenedMessageVerbsTests.server()
         let mailbox = await mailbox(server)
-        let height: CGFloat = 520
+        let height: CGFloat = 360
         for width in [640, 820] as [CGFloat] {
             let room = ToastRoom()
             let view = window(core, mailbox, opened: OpenedMessageVerbsTests.head(Self.copy, thread: nil),
@@ -369,6 +369,12 @@ final class OwnWindowTests: XCTestCase {
                 }
             }
             try await settle()
+            // The body's frame shows once it has measured its document (here the core's short one for a message it
+            // doesn't hold), and the window is laid out again at that height before it is scrolled.
+            let bodies = Self.frames(host)
+            XCTAssertFalse(bodies.isEmpty, "the message's body")
+            for _ in 0..<400 where bodies.contains(where: \.isHidden) { try await Task.sleep(for: .milliseconds(10)) }
+            try await settle()
             let scroll = try XCTUnwrap(Self.scrolls(host).max { $0.frame.height < $1.frame.height })
             let document = try XCTUnwrap(scroll.documentView)
             XCTAssertGreaterThan(document.bounds.height, scroll.contentView.bounds.height, "the message runs past the foot")
@@ -379,6 +385,11 @@ final class OwnWindowTests: XCTestCase {
                            accuracy: 1, "the pane's margin under it at \(width) points")
             window.contentView = nil
         }
+    }
+
+    /// The message bodies' frames under `view`.
+    private static func frames(_ view: NSView) -> [FrameWebView] {
+        view.subviews.flatMap { sub in (sub as? FrameWebView).map { [$0] } ?? frames(sub) }
     }
 
     private static func scrolls(_ view: NSView) -> [NSScrollView] {
