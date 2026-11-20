@@ -1,4 +1,5 @@
 import AppKit
+import Observation
 import XCTest
 
 /// The rows' shapes and words, the day heads, the brief's row and the table's brief row and heights: what the
@@ -333,6 +334,51 @@ final class MeadowRowsTests: XCTestCase {
         XCTAssertEqual(app.place, .desk(.brief))
         XCTAssertEqual(controller.tableView(table, selectionIndexesForProposedSelection: IndexSet([0, 1, 2])),
                        IndexSet([1, 2]))
+    }
+
+    /// The Inbox kept its TODAY head, and the brief's row its date, past midnight: the heads were worked out only as
+    /// rows changed. A new day (`AppStatus.today`, moved on at midnight, as the clock or zone is set, and on waking)
+    /// works every head out again, and the brief's line says the new date.
+    func testANewDayWorksTheHeadsAndTheBriefsDateOutAgain() async throws {
+        let (_, _, controller) = try await table(brief: BriefLine(needs: [], waiting: 0, canWait: 0))
+        let window = shown(controller)
+        defer { window.close() }
+        let calendar = Calendar.current
+        // The fixture's newest mail came ten minutes before this.
+        var clock = Date(timeIntervalSince1970: 1_790_000_000)
+        controller.clock = { clock }
+        controller.setDay(calendar.startOfDay(for: Date()))
+        controller.setDay(calendar.startOfDay(for: clock))
+        func head(_ row: Int) -> String? {
+            (controller.table.view(atColumn: 0, row: row, makeIfNecessary: true) as? MailRowCell)?.head
+        }
+        XCTAssertEqual(head(1), "Today")
+
+        clock = clock.addingTimeInterval(24 * 3600)
+        controller.setDay(calendar.startOfDay(for: clock))
+        XCTAssertEqual(head(1), "Yesterday", "the next day, the same mail is yesterday's")
+        clock = clock.addingTimeInterval(7 * 24 * 3600)
+        controller.setDay(calendar.startOfDay(for: clock))
+        XCTAssertEqual(head(1), "Earlier")
+
+        // The day itself: it moves on only as the day changes, and the brief's line says the day it is made on.
+        let status = AppStatus(newMail: NewMailAlerts(notifier: SystemNotifier.Silent(), isActive: { true },
+                                                      badge: { _ in }, announce: { _ in }))
+        let today = status.today
+        status.dayMayHaveChanged(now: today.addingTimeInterval(3600))
+        XCTAssertEqual(status.today, today, "the same day")
+        let changed = Flag()
+        withObservationTracking { _ = status.today } onChange: { changed.on = true }
+        let tomorrow = try XCTUnwrap(calendar.date(byAdding: .day, value: 1, to: today))
+        status.dayMayHaveChanged(now: tomorrow.addingTimeInterval(60))
+        XCTAssertEqual(status.today, tomorrow)
+        XCTAssertTrue(changed.on, "the list, which reads it, is drawn again")
+        let line = { (now: Date) in BriefLine(needs: [], waiting: 0, canWait: 0, now: now, locale: Locale(identifier: "en_GB")) }
+        XCTAssertNotEqual(line(today.addingTimeInterval(23 * 3600)).date, line(tomorrow.addingTimeInterval(60)).date)
+    }
+
+    private final class Flag: @unchecked Sendable {
+        var on = false
     }
 
     func testTheBriefBesideAnAccountsInboxKeepsItsList() async throws {
