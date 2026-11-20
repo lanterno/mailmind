@@ -37,7 +37,7 @@ struct MailboxTable: View {
                                            measure: measure, accounts: mailbox.accounts,
                                            mine: RowWords.mine(mailbox.accounts, status: status)),
                              brief: brief, briefChosen: place == .desk(.brief),
-                             sections: DayGroup.sections(place))
+                             sections: DayGroup.sections(place), day: status.today)
                 .overlay(alignment: .top) {
                     EmptyList(app: mailbox.app, mailbox: mailbox, list: list)
                         .padding(.top, brief == nil ? 0
@@ -48,6 +48,9 @@ struct MailboxTable: View {
                     briefWidth.map { RowMeasure.fits($0, in: proxy.size.width) } ?? false
                 } action: { briefOneLine = $0 }
         }
+        // A new day: the brief's line says its date (read as the line is made), and the rows' times are read again,
+        // which the core words for the day it is ("Yesterday").
+        .onChange(of: status.today) { list.refresh() }
     }
 
     /// Today's brief over the Inbox's rows (`BriefRow`): in every Inbox, or one account's, while not searching.

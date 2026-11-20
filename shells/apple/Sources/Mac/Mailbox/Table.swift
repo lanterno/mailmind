@@ -23,6 +23,8 @@ struct MailboxRowsTable: NSViewRepresentable {
     let briefChosen: Bool
     /// The list stands in days, with a head over each day's first row.
     let sections: Bool
+    /// The day it is (`AppStatus.today`): as it moves on, the heads are worked out again.
+    var day = Calendar.current.startOfDay(for: Date())
     @Environment(MeadowShell.self) private var shell: MeadowShell?
 
     func makeCoordinator() -> MailboxTableController {
@@ -41,6 +43,7 @@ struct MailboxRowsTable: NSViewRepresentable {
         controller.shell = shell
         controller.setShowsAccount(showsAccount)
         controller.setSections(sections)
+        controller.setDay(day)
         controller.setLook(look)
         controller.setBrief(brief, chosen: briefChosen)
         controller.follow(chosen)
@@ -81,8 +84,11 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
     private var rowWidth: CGFloat = 0
     /// The brief's summary's width on one line.
     private var briefWidth: Float?
-    /// The day the heads were worked out on.
+    /// The day the heads were worked out on, and the day the window last said it is (`setDay`).
     private var now = Date()
+    private var day: Date?
+    /// The clock the heads are worked out by; a test sets its own.
+    var clock: () -> Date = Date.init
     /// Whether the list stood at its top as it last settled, its height then, whether its height has changed since,
     /// and whether it settles at the end of this turn (`keepAtTop`).
     private var stoodAtTop = true
@@ -213,6 +219,22 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
         redrawShown()
     }
 
+    /// A new day (midnight, or the clock or the zone set): Today's rows are Yesterday's now, so every head and the
+    /// height it takes is worked out again.
+    func setDay(_ day: Date) {
+        guard let was = self.day else {
+            self.day = day
+            return
+        }
+        guard day != was else { return }
+        self.day = day
+        now = clock()
+        guard sections else { return }
+        forgetShapes()
+        keepingPlace { table.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<table.numberOfRows)) }
+        redrawShown()
+    }
+
     func setBrief(_ line: BriefLine?, chosen: Bool) {
         let had = brief != nil
         let changed = line != brief || chosen != briefChosen
@@ -285,7 +307,7 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
     // MARK: Pages
 
     func rowsChanged(_ positions: IndexSet, totalChanged: Bool) {
-        now = Date()
+        now = clock()
         var reshown = positions
         if totalChanged {
             // New mail above moves every row down: their shapes are worked out again as they show. Only a row whose

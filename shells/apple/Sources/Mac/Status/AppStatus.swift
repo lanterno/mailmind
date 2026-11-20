@@ -1,5 +1,5 @@
 #if os(macOS)
-import Foundation
+import AppKit
 import Observation
 
 /// What the app knows about itself, for the status, Settings and the first run: the accounts and how each stands, the
@@ -33,6 +33,10 @@ final class AppStatus {
     private(set) var upcoming: [API.UpcomingEvent] = []
     /// The minute it is, for the words that count down, and the hour Automatic's light goes by.
     private(set) var now = Date()
+    /// The day it is, which the list's day heads and the brief's line go by: it moves on at midnight, as the clock or
+    /// the zone is changed, and on waking (`dayMayHaveChanged`), so a list open overnight heads its mail Yesterday.
+    private(set) var today = Calendar.current.startOfDay(for: Date())
+    @ObservationIgnored private var dayWatch: [any NSObjectProtocol] = []
     /// Whether macOS is in Dark Mode, which makes Automatic Night: the app's status follows it from launch
     /// (`followSystemAppearance`); a test sets it.
     var systemDark = false
@@ -87,6 +91,26 @@ final class AppStatus {
         newMail.now = { [weak self] in self?.now ?? Date() }
         newMail.hasAccounts = { [weak self] in self?.accounts.isEmpty == false }
         newMail.lookUp = { [weak self] account, folder, uid in await self?.row(account: account, folder: folder, uid: uid) }
+        watchTheDay()
+    }
+
+    /// The day as it is now, where it has moved on (or back, as the clock or the zone is set).
+    func dayMayHaveChanged(now: Date = Date(), calendar: Calendar = .current) {
+        let day = calendar.startOfDay(for: now)
+        if day != today { today = day }
+    }
+
+    /// Midnight, the clock or the zone set, and a wake from sleep, which may have passed midnight unheard.
+    private func watchTheDay() {
+        let names: [(NotificationCenter, Notification.Name)] = [
+            (.default, .NSCalendarDayChanged), (.default, .NSSystemClockDidChange),
+            (.default, .NSSystemTimeZoneDidChange), (NSWorkspace.shared.notificationCenter, NSWorkspace.didWakeNotification),
+        ]
+        dayWatch = names.map { center, name in
+            center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.dayMayHaveChanged() }
+            }
+        }
     }
 
     /// The row of a message just come, by its UID, as its folder lists it (`Lists.row`), however far down its folder:
@@ -465,6 +489,7 @@ final class AppStatus {
                 try? await Task.sleep(for: .seconds(wait))
                 guard let self, !Task.isCancelled else { return }
                 self.now = Date()
+                self.dayMayHaveChanged(now: self.now)
                 if self.now.timeIntervalSince(read) >= 55 {
                     read = self.now
                     await self.readUpcoming()
