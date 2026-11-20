@@ -241,11 +241,11 @@ def test_a_message_that_raises_is_counted_and_the_rest_go_on(app, world, ai, mon
     plan = preview(app, ai)
     real, calls = mailbox.filing.do_write, []
 
-    def once_broken(path, body):
+    def once_broken(path, body, **told):
         calls.append(path)
         if len(calls) == 1:
             raise RuntimeError("something odd")
-        return real(path, body)
+        return real(path, body, **told)
     monkeypatch.setattr(mailbox.filing, "do_write", once_broken)
     r = confirm(app, plan).json
     assert (r["count"], r["failed"]) == (plan["count"] - 1, 1)
