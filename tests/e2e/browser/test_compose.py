@@ -919,6 +919,27 @@ def test_a_new_send_counts_what_preferences_says_now_though_the_page_loaded_befo
     clean(page)
 
 
+def weekly_invite():
+    """The corpus's invite as a series: every Tuesday at 14:00 in Berlin since 13 October, so on 2 November (the world's
+    frozen time) its next is Tuesday 3 November, 13:00 UTC."""
+    data = w.variant(INVITE, Message_ID="<weekly.review@studio.example.test>", Subject="Weekly design review")
+    for was, now in [(b"Standard Time:20261103T", b"Standard Time:20261013T"), (b"en-US:Design review", b"en-US:Weekly design review"),
+                     (b"000000review\n", b"000000weekly\nRRULE:FREQ=WEEKLY;BYDAY=TU\n")]:
+        assert was in data, was
+        data = data.replace(was, now)
+    return data
+
+
+def test_a_weekly_invites_card_says_its_next_time_as_today_and_next_lists_it(page, world):
+    world.deliver(w.ADA, "INBOX", weekly_invite())
+    opened(page)
+    page.locator("#rows .row").filter(has_text="Weekly design review").click()
+    when = page.locator(".invite-card .inv-line").first
+    expect(when).to_contain_text("Tue, Nov 3, 1:00 pm – 2:00 pm")     # the page's clock, in the browser's zone (UTC)
+    expect(when).not_to_contain_text("Oct 13")                        # never the series' first
+    clean(page)
+
+
 def test_rsvp_goes_out_after_its_ten_seconds_and_undo_stops_it(page, app, world):
     opened(page)
     row(page, world, INVITE).click()
