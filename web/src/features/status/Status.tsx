@@ -183,6 +183,8 @@ export function SoonPill({ m }: { m: Mailbox }) {
   });
   const key = event ? `${copyId(event)}|${event.start}` : "";
   const minutes = event ? Math.ceil((new Date(event.start).getTime() - now) / 60000) : 0;
+  // When it starts, even once it has: the reminder says "starts now" itself.
+  const startsAt = event ? eventWhen({ start: event.start, all_day: event.all_day }, new Date(now))[0] : "";
   const when = minutes > 0 ? `in ${minutes} min` : "now";
   const title = event?.summary || "(no title)";
   const message = `${title} starts ${when}`;
@@ -192,7 +194,7 @@ export function SoonPill({ m }: { m: Mailbox }) {
     told.add(key);
     if (document.hidden && typeof Notification !== "undefined" && Notification.permission === "granted" && mayNotify("notify_meetings", new Date(now))) {
       try {
-        const n = new Notification(message, { body: [event && eventWhen(event, new Date(now))[0], event?.location].filter(Boolean).join(" · "), tag: `mailmind-soon-${key}` });
+        const n = new Notification(message, { body: [startsAt, event?.location].filter(Boolean).join(" · "), tag: `mailmind-soon-${key}` });
         n.onclick = () => {
           window.focus();
           n.close();
@@ -208,7 +210,7 @@ export function SoonPill({ m }: { m: Mailbox }) {
       <button
         className="sp-open"
         id="soonOpen"
-        title={[eventWhen(event, new Date(now))[0], event.location, event.organizer].filter(Boolean).join(" · ")}
+        title={[startsAt, event.location, event.organizer].filter(Boolean).join(" · ")}
         aria-label={`${message}${event.location ? `, ${event.location}` : ""}. Open the invite`}
         onClick={() => m.openAny(copyOf(event))}
       >

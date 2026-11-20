@@ -22,21 +22,33 @@ export const needsNote = (n: number) => (n ? `${n} need${n === 1 ? "s" : ""} you
 // its heading never says less than its tile does.
 export const ofWhole = (shown: number, whole: number | null | undefined) => (whole != null && whole > shown ? `${shown} of ${whole}` : `${shown}`);
 
-// [big, small]: "3:00 pm" over "today", "Sat" over "8:10 am", "Thu 6" over "all day" a week out.
-export function eventWhen(e: Pick<Upcoming, "start" | "all_day">, now: Date): [string, string] {
-  const d = new Date(e.start), today = new Date(now);
-  today.setHours(0, 0, 0, 0);
-  const days = Math.round((new Date(d).setHours(0, 0, 0, 0) - today.getTime()) / 864e5);
-  const time = e.all_day ? "all day" : d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }).toLowerCase();
-  if (days <= 0) return e.all_day ? ["Today", "all day"] : [time, "today"];
-  return [d.toLocaleDateString(undefined, days < 7 ? { weekday: "short" } : { weekday: "short", day: "numeric" }), time];
+// "3:00 pm": a time on this browser's clock, lowered.
+export const clock = (d: Date) => d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }).toLowerCase();
+
+// [big, small]: "3:00 pm" over "today", "Sat" over "8:10 am", "Thu 6" over "all day" a week out. The server lists what
+// hasn't ended, so a meeting under way is said as one: "now" over "until 12:30 am" (or the day it ends, a day or more
+// on), never as a start "today" that was yesterday's. One begun before today that `end` doesn't show running says the
+// day it began, "yesterday", and a day's event begun earlier and running today is today's. As the Mac app's
+// `EventWhen.short` says them.
+export function eventWhen(e: Pick<Upcoming, "start" | "all_day"> & { end?: string }, now: Date): [string, string] {
+  const d = new Date(e.start), end = e.end ? new Date(e.end) : null;
+  const midnight = (t: Date) => new Date(t).setHours(0, 0, 0, 0);
+  const days = Math.round((midnight(d) - midnight(now)) / 864e5);   // calendar days here: one of 23 or 25 hours is one
+  const time = e.all_day ? "all day" : clock(d);
+  if (!e.all_day && d <= now && end && end > now) {
+    const until = end.getTime() - now.getTime() < 864e5 ? clock(end) : end.toLocaleDateString(undefined, { weekday: "short" });
+    return ["now", `until ${until}`];
+  }
+  if (days === 0 || (days < 0 && e.all_day)) return e.all_day ? ["Today", "all day"] : [time, "today"];
+  if (days === -1) return [time, "yesterday"];
+  return [d.toLocaleDateString(undefined, days >= 7 || days < 0 ? { weekday: "short", day: "numeric" } : { weekday: "short" }), time];
 }
 
 // A week's meeting or deadline, whichever side of now it falls on.
 export function meetingWhen(e: Pick<Upcoming, "start" | "all_day">): string {
   const d = new Date(e.start);
   const day = d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
-  return e.all_day ? `${day}, all day` : `${day}, ${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }).toLowerCase()}`;
+  return e.all_day ? `${day}, all day` : `${day}, ${clock(d)}`;
 }
 
 // What a weekly review looked back on, beside its title: the last seven days when it was written today, and else the seven days
