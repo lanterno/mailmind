@@ -3,7 +3,7 @@
 //! snooze tells the change queue, a block trashes the copy it names, and Undo takes back a snooze, a mute and a
 //! cleaned-up sender.
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock, Weak};
 
 use mm_attention::muting::Muting;
 use mm_attention::snoozing::Snoozing;
@@ -15,6 +15,7 @@ use mm_kernel::log;
 use mm_mailbox::commands::MailCommands;
 use mm_mailbox::filing::Filing;
 use mm_mailbox::folders::Folders;
+use mm_mailbox::realtime::Realtime;
 use mm_mailbox::stats::LiveStats;
 use mm_mailbox::sync_ports::{AroundSync, Events, MailboxEvent};
 use mm_mailbox::undo::{Reversed, Reverser};
@@ -144,12 +145,22 @@ impl Reverser for UnblockReverser {
 
 /// What a sync round asks of the others (`Syncing`'s Attention, and its kick): what is snoozed and due wakes first,
 /// new mail kicks the job that triages it, where this process runs one, a server that answers again lets the
-/// changes queued for it go, and one that couldn't be reached outside a sync has the sync run now.
+/// changes queued for it go and has its IDLE worker connect now, and one that couldn't be reached outside a sync has
+/// the sync run now.
 #[derive(Debug)]
 pub(crate) struct AroundRounds {
     pub(crate) snoozing: Arc<Snoozing>,
     pub(crate) jobs: Arc<Jobs>,
     pub(crate) commands: Arc<MailCommands>,
+    /// IDLE's workers, made after the sync that holds this (`bind_realtime`).
+    pub(crate) realtime: OnceLock<Weak<Realtime>>,
+}
+
+impl AroundRounds {
+    /// IDLE's workers, once they are made: a server that answers again hurries its worker from then on.
+    pub(crate) fn bind_realtime(&self, realtime: &Arc<Realtime>) {
+        let _ = self.realtime.set(Arc::downgrade(realtime));
+    }
 }
 
 impl AroundSync for AroundRounds {
@@ -175,6 +186,9 @@ impl AroundSync for AroundRounds {
     fn server_back(&self, account: &str) {
         if let Err(fault) = self.commands.release(account) {
             log::warning("commands", "the changes waiting for a server weren't let go", &[], Some(fault.class));
+        }
+        if let Some(realtime) = self.realtime.get().and_then(Weak::upgrade) {
+            realtime.hurry(account);
         }
     }
 

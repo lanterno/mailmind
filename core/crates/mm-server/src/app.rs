@@ -394,6 +394,12 @@ impl App {
         let warming = crate::backfill_wiring::warming(&directory, &servers, &ingest, &folders, environment);
         let backfill =
             crate::backfill_wiring::backfill(&directory, &database, &servers, &gates, &folders, &seams.clock);
+        let around = Arc::new(AroundRounds {
+            snoozing: attention.snoozing.clone(),
+            jobs: jobs.clone(),
+            commands: commands.clone(),
+            realtime: std::sync::OnceLock::new(),
+        });
         let syncing = Arc::new(Syncing::new(SyncingParts {
             ingest: ingest.clone(),
             accounts: move_accounts.clone(),
@@ -401,16 +407,14 @@ impl App {
             folders: folders.clone(),
             events: mailbox_events.clone(),
             clock: seams.clock.clone(),
-            around: Arc::new(AroundRounds {
-                snoozing: attention.snoozing.clone(),
-                jobs: jobs.clone(),
-                commands: commands.clone(),
-            }),
+            around: around.clone(),
             warm: warming.clone(),
         }));
         live_sync.bind(syncing.clone());
-        // IDLE: a worker for each account, which `Workers::start` sets going; what it hears syncs those accounts.
+        // IDLE: a worker for each account, which `Workers::start` sets going; what it hears syncs those accounts, and a
+        // server a sync finds answering again has its worker connect now.
         let realtime = crate::idle_wiring::realtime(&directory, &login, &syncing, environment.read_only(), &idle_heard);
+        around.bind_realtime(&realtime);
         let reconciler = Reconciler::new(ReconcilerParts {
             store: database.clone(),
             accounts: move_accounts,

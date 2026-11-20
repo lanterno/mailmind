@@ -274,6 +274,13 @@ impl Realtime {
         self.supervisor.renew();
     }
 
+    /// The account's server answers again: its worker, if it rests after a connection that failed, connects now, its
+    /// rests starting over, so mail that arrives is heard within moments rather than after a rest that may have grown
+    /// to five minutes. A worker on a connection is left be. Before `start` and after `stop` it does nothing.
+    pub fn hurry(&self, account: &str) {
+        self.supervisor.hurry(account);
+    }
+
     /// The accounts with a worker, each with whether it still runs: one whose server has no IDLE has ended.
     pub fn watching(&self) -> Vec<(String, bool)> {
         self.supervisor.watching()

@@ -102,6 +102,8 @@ pub struct Watch<S> {
     conn: Mutex<Option<Arc<dyn Interrupt>>>,
     /// What it rests if its connection fails now.
     rest: Mutex<Duration>,
+    /// Asked to leave its rest and open another connection now, its rests starting over (`hurry`).
+    hurried: AtomicBool,
     /// Asked to let its connection go and open another at once (`renew`).
     renewing: AtomicBool,
     /// Its thread has ended.
@@ -124,6 +126,11 @@ impl<S> Watch<S> {
     /// Whether a renewal was asked since it last looked, which it now has.
     fn renewed(&self) -> bool {
         self.renewing.swap(false, Ordering::SeqCst)
+    }
+
+    /// Whether it was hurried since it last looked, which it now has.
+    fn was_hurried(&self) -> bool {
+        self.hurried.swap(false, Ordering::SeqCst)
     }
 }
 
@@ -183,7 +190,9 @@ enum Turn {
 impl<W: Watched> Inner<W> {
     fn rest(&self, watch: &Watch<W::Spec>, rest: Duration) {
         let waiting = held(&self.wake);
-        let resting = |_: &mut ()| !watch.leaving() && !watch.renewing.load(Ordering::SeqCst);
+        let resting = |_: &mut ()| {
+            !watch.leaving() && !watch.renewing.load(Ordering::SeqCst) && !watch.hurried.load(Ordering::SeqCst)
+        };
         let _ = self.woken.wait_timeout_while(waiting, rest, resting).unwrap_or_else(PoisonError::into_inner);
     }
 
@@ -225,7 +234,8 @@ impl<W: Watched> Inner<W> {
                 continue;
             }
             self.rest(watch, rest);
-            if watch.renewed() {
+            // Both looked at, so neither is left to end a rest to come.
+            if watch.renewed() | watch.was_hurried() {
                 watch.set_rest(held(&self.rests).first);
             } else {
                 watch.set_rest((rest * 2).min(held(&self.rests).longest));
@@ -246,6 +256,8 @@ impl<W: Watched> Inner<W> {
         *held(&watch.conn) = Some(interrupt.clone());
         let rests = *held(&self.rests);
         watch.set_rest(rests.first);
+        // A hurry this connection came too late to answer is spent: it serves.
+        watch.hurried.store(false, Ordering::SeqCst);
         let began = Instant::now();
         let served = if watch.renewed() { Ok(()) } else { caught(|| self.watched.serve(watch, conn)) };
         *held(&watch.conn) = None;
@@ -264,6 +276,7 @@ impl<W: Watched> Inner<W> {
             stopping: self.stop.clone(),
             conn: Mutex::new(None),
             rest: Mutex::new(held(&self.rests).first),
+            hurried: AtomicBool::new(false),
             renewing: AtomicBool::new(false),
             ended: AtomicBool::new(false),
         });
@@ -306,6 +319,17 @@ impl<W: Watched> Inner<W> {
         if let Some(conn) = conn {
             conn.interrupt();
         }
+    }
+
+    /// Have a worker that isn't serving leave its rest and connect again now, its rests starting over. One serving on a
+    /// connection is left be: it has nothing to wait out.
+    fn hurry(&self, watch: &Watch<W::Spec>) {
+        if held(&watch.conn).is_some() {
+            return;
+        }
+        let _waking = held(&self.wake);
+        watch.hurried.store(true, Ordering::SeqCst);
+        self.woken.notify_all();
     }
 
     fn reconcile(self: &Arc<Self>) -> usize {
@@ -382,6 +406,20 @@ impl<W: Watched> Supervisor<W> {
         }
         for (_, watch) in &table.watchers {
             self.inner.renew(watch);
+        }
+    }
+
+    /// Have `key`'s worker, resting after its connection failed, connect again now, its rests starting over: what its
+    /// server answering again asks, so the worker isn't left out for the rest of a rest that may run to the longest.
+    /// A worker serving on a connection is left be, and so is a key with none. Before `begin` and after `stop` it does
+    /// nothing.
+    pub fn hurry(&self, key: &str) {
+        let table = held(&self.inner.table);
+        if !table.running || self.inner.stop.load(Ordering::SeqCst) {
+            return;
+        }
+        if let Some((_, watch)) = table.watchers.iter().find(|(k, _)| k == key) {
+            self.inner.hurry(watch);
         }
     }
 

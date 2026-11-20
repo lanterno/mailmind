@@ -36,7 +36,9 @@
 //! as it would have, after the round's next sync or three minutes on.
 //!
 //! A sync that works after one of the account's failed, a wake between them or not, and a person's Retry, let go of
-//! the waits of the changes queued for its server (`AroundSync::server_back`): they go now, not minutes on.
+//! the waits of the changes queued for its server (`AroundSync::server_back`): they go now, not minutes on; and its
+//! IDLE worker, resting after a connection that failed, connects now (`Realtime::hurry`), so new mail is heard within
+//! moments, not after a rest that may have grown to five minutes.
 //!
 //! An account removed (`removed`) stops each sync and read of older mail reading its mail at its next step, as its
 //! flights (`flights`) were told, and nothing is kept of how its syncs went: its status, how far its first scan had
