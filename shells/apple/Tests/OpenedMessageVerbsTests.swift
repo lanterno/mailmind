@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Observation
 import XCTest
 
 /// The desk's and the composer's routes over a test's wire, so one server sees every verb, whichever area sends it.
@@ -779,6 +780,54 @@ final class OpenedMessageVerbsTests: XCTestCase {
                                           + "to clear the selection.", everything: false))
     }
 
+    /// Summaries landing fill the Inbox's Needs you after it was read empty: the empty pane, which said nothing needs
+    /// you, is drawn again as the list fills and asks for a message to read, as the page's empty reader follows its
+    /// list; and says nothing needs you again once the list empties.
+    func testTheEmptyPaneFollowsNeedsYouAsItFillsAndEmpties() async throws {
+        let needing = NeedsBox()
+        let server = Self.server(), inbox = Self.rows
+        server.on("GET", API.Get.Messages.path) { asked in
+            let rows = inbox.map { row in
+                var row = row
+                row.needsYou = needing.on
+                return row
+            }
+            let offset = Int(asked.query["offset"] ?? "0") ?? 0
+            let items = Array(rows.dropFirst(offset))
+            return FakeServer.ok(API.MessagesAnswer.folderListing(API.FolderListing(
+                account: asked.query["account"], folder: asked.query["folder"] ?? "INBOX",
+                grouped: asked.query["group"] != nil, hasMore: false, items: items, offset: offset, ok: true,
+                total: rows.count)))
+        }
+        let world = await world(server)
+        world.app.mailbox.tab = .needs
+        world.app.place = .folder(account: Fixture.ada, folder: "INBOX")
+        let list = try XCTUnwrap(world.app.list)
+        await waiting(for: "the Inbox's first read") { list.firstRowsAt != nil }
+        XCTAssertEqual(PaneEmptyWords.of(world.app).title, "Nothing needs you.")
+
+        // As a view reads them: drawn again once the list changes.
+        func redrawn(after change: () -> Void) async -> Bool {
+            let told = NeedsBox()
+            withObservationTracking { _ = PaneEmptyWords.of(world.app) } onChange: { told.on = true }
+            change()
+            await waiting(for: "the list read again") { told.on }
+            return told.on
+        }
+        let filled = await redrawn {
+            needing.on = true
+            list.refresh()
+        }
+        XCTAssertTrue(filled, "the pane is drawn again as Needs you fills")
+        XCTAssertEqual(PaneEmptyWords.of(world.app).title, "Pick a message to read")
+        let emptied = await redrawn {
+            needing.on = false
+            list.refresh()
+        }
+        XCTAssertTrue(emptied)
+        XCTAssertEqual(PaneEmptyWords.of(world.app).title, "Nothing needs you.")
+    }
+
     /// The reply box shows R where r opens it: under the mail window's pane, whose list takes r, and in a message's
     /// own window, which takes the reader's single keys, while they are on.
     func testTheReplyBoxShowsROnlyWhereROpensIt() async {
@@ -1411,5 +1460,16 @@ func waiting(for what: String, _ done: @MainActor () -> Bool) async {
             return
         }
         try? await Task.sleep(for: .milliseconds(2))
+    }
+}
+
+/// A flag the fake server reads on its own task while the test sets it, and that a change seen sets.
+private final class NeedsBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var held = false
+
+    var on: Bool {
+        get { lock.withLock { held } }
+        set { lock.withLock { held = newValue } }
     }
 }
