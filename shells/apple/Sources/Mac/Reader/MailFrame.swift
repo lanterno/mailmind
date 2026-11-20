@@ -25,18 +25,19 @@ struct FrameSource: Sendable {
 /// in a plain mail, its quote folded, as tall as its content so the reader scrolls as one.
 ///
 /// The web view's walls are wave 1's: the mail's own JavaScript off, no navigation away from the document, nothing
-/// kept on disk, a scheme that answers only the body's document, and now no link preview and no menu item that opens
-/// or downloads anything. Two things the page does by reaching into its frame are done here without any script in the
-/// mail's world:
+/// kept on disk, a scheme that answers only the body's document, and no link preview and no menu item that opens or
+/// downloads anything. The document's policy is a sandbox that doesn't allow scripts, and WebKit holds that for every
+/// world in the document, the app's own isolated one too: no event listener or timer runs there, so a script of the
+/// app's in the frame would never hear a click or measure again. Instead the app asks, from outside, as the page
+/// measures its sandboxed iframe from the parent:
 ///
 /// - The look and the folded quote are written into the document as the scheme answers it: a `<style>` in its head
 ///   and a `<details>` round the quote, which the document's policy allows and which run nothing.
-/// - Link clicks, the link the pointer is over and the content's height are told by a short script of the app's own
-///   in an isolated content world (`FrameScript`). WebKit runs the mail's world with JavaScript off, so nothing of the mail runs at all, and the
-///   isolated world shares only the document's tree with it: its globals, and the one message handler it posts to,
-///   are invisible from the mail's world. The script reads an `<a>`'s href and text, takes the click so the frame goes
-///   nowhere, and measures the body; the app treats what it posts as the mail's data, checking a link before anything
-///   opens it.
+/// - How tall the content is, and the link under the pointer, under a click or focused when Return is pressed, are
+///   short questions (`FrameAsk`) the app's Swift evaluates in an isolated content world of its own, which the mail's
+///   world can't see. They ask as the frame loads, as its width changes, after a click or a key in it, and as the
+///   pointer moves over it; what they return is the mail's data, read as `FrameMessage` reads it, and a link is
+///   checked before anything opens it.
 struct MailFrame: NSViewRepresentable {
     let source: FrameSource
     let url: URL
@@ -75,7 +76,8 @@ struct MailFrame: NSViewRepresentable {
         }
     }
 
-    /// A frame's web view over `walls`, with the frame's walls, its document asked for.
+    /// A frame's web view over `walls`, with the frame's walls, its document asked for: hidden until it is first
+    /// measured, so the web view's own white never flashes in the dark.
     static func webView(_ walls: FrameGuard, title: String) -> FrameWebView {
         let configuration = WKWebViewConfiguration()
         configuration.setURLSchemeHandler(walls, forURLScheme: FrameScheme.scheme)
@@ -83,7 +85,6 @@ struct MailFrame: NSViewRepresentable {
         configuration.defaultWebpagePreferences.allowsContentJavaScript = false
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         configuration.mediaTypesRequiringUserActionForPlayback = .all
-        FrameScript.install(in: configuration.userContentController, handler: walls)
         let view = FrameWebView(frame: .zero, configuration: configuration)
         view.navigationDelegate = walls
         view.allowsBackForwardNavigationGestures = false
@@ -93,8 +94,8 @@ struct MailFrame: NSViewRepresentable {
         // Clear, so a mail that lies on the pane's paper has the paper's grain under it too. Where it can't be, the
         // document paints the paper itself (`MailLook.dress`), set before the load below asks for it.
         walls.clear = view.clearBackground()
-        // Hidden until the script first measures it: the web view's own white never flashes in the dark.
         view.isHidden = true
+        view.walls = walls
         walls.view = view
         view.load(URLRequest(url: walls.url))
         walls.showSoon()
@@ -104,23 +105,21 @@ struct MailFrame: NSViewRepresentable {
     static func dismantleNSView(_ view: WKWebView, coordinator: FrameGuard) {
         view.stopLoading()
         view.navigationDelegate = nil
-        FrameScript.remove(from: view.configuration.userContentController)
-        // A frame that goes leaves no link said under the pointer.
-        coordinator.told?(.hover(nil))
-        coordinator.told = nil
+        coordinator.stop()
         coordinator.find?.remove(view)
     }
 }
 
-/// What the app's script in the frame tells: a link taken, the content's height, or where the link the pointer is
-/// over goes.
+/// What the app reads from a frame: a link to open, the content's height, or where the link the pointer is over
+/// goes.
 enum FrameMessage: Equatable {
     case link(FrameLink)
     case height(CGFloat)
     /// The link under the pointer, as `hover(href:)` reads it: nil for none, or one MailMind wouldn't open.
     case hover(URL?)
 
-    /// A message as the script posts it, or nil for anything else. The text is the mail's, so only what fits is read.
+    /// What a question to the frame (`FrameAsk`) returned, or nil for anything else. The text is the mail's, so only
+    /// what fits is read.
     init?(_ body: Any) {
         guard let fields = body as? [String: Any], let kind = fields["kind"] as? String else { return nil }
         switch kind {
@@ -152,93 +151,67 @@ enum FrameMessage: Equatable {
     }
 }
 
-/// The app's script in a frame, in a content world of its own: it takes link clicks (a middle click too, as the
-/// page's does), says the href of the link the pointer comes onto and that it has left it (an empty href), and says
-/// how tall the content is whenever that changes. The mail's world can't see it or post to it.
+/// What the app asks of a frame, each a function body evaluated by Swift in a content world of its own: the mail's
+/// world can't see it, and nothing of it stays in the document between questions. The document's sandbox runs no
+/// listener or timer in any world, so these are asked from outside and return at once.
 @MainActor
-enum FrameScript {
+enum FrameAsk {
     static let world = WKContentWorld.world(name: "mailmind-frame")
-    static let handler = "frame"
 
     /// How tall the mail's own content is whatever height its frame has (the page's `contentHeight`): a mail whose
     /// html and body follow the frame's height measures as tall as the frame, so for that moment the two are held to
-    /// their content.
-    static let source = """
-        (() => {
-          const post = (m) => { try { window.webkit.messageHandlers.\(handler).postMessage(m); } catch (e) {} };
-          const take = (e) => {
-            const t = e.target;
-            const at = t && t.nodeType === 1 ? t : t && t.parentElement;
-            const a = at && at.closest ? at.closest("a[href]") : null;
-            if (!a) return;
-            e.preventDefault();
-            e.stopPropagation();
-            if (e.type === "auxclick" && e.button !== 1) return;
-            post({ kind: "link", href: a.getAttribute("href") || "", text: (a.textContent || "").slice(0, 2000) });
-          };
-          document.addEventListener("click", take, true);
-          document.addEventListener("auxclick", take, true);
-          let over = null;
-          const hover = (a) => {
-            if (a === over) return;
-            over = a;
-            post({ kind: "hover", href: a ? a.getAttribute("href") || "" : "" });
-          };
-          document.addEventListener("mouseover", (e) => {
-            const t = e.target;
-            const at = t && t.nodeType === 1 ? t : t && t.parentElement;
-            hover(at && at.closest ? at.closest("a[href]") : null);
-          }, true);
-          document.addEventListener("mouseout", (e) => { if (!e.relatedTarget) hover(null); }, true);
-          const height = () => {
-            const root = document.documentElement, body = document.body;
-            if (!body) return 0;
-            const kept = [root, body].map((e) => [e, e.getAttribute("style")]);
-            for (const [e] of kept) {
-              e.style.setProperty("height", "auto", "important");
-              e.style.setProperty("min-height", "0", "important");
-            }
-            const needs = body.scrollHeight;
-            for (const [e, style] of kept) {
-              if (style === null) e.removeAttribute("style"); else e.setAttribute("style", style);
-            }
-            return needs;
-          };
-          let asked = false, last = -1;
-          const measure = () => {
-            if (asked) return;
-            asked = true;
-            setTimeout(() => {
-              asked = false;
-              const now = height();
-              if (now !== last) { last = now; post({ kind: "height", value: now }); }
-            }, 16);
-          };
-          if (document.body && typeof ResizeObserver !== "undefined") new ResizeObserver(measure).observe(document.body);
-          document.addEventListener("toggle", measure, true);
-          window.addEventListener("load", measure);
-          window.addEventListener("resize", measure);
-          measure();
-        })();
+    /// their content. Nothing until the mail's document is there and read, as the page waits for it: as a load
+    /// commits, the web view's first, empty document can still answer, as tall as the frame.
+    static let height = """
+        if (location.protocol !== "\(FrameScheme.scheme):" || document.readyState === "loading") return null;
+        const root = document.documentElement, body = document.body;
+        if (!body) return { kind: "height", value: 0 };
+        const kept = [root, body].map((e) => [e, e.getAttribute("style")]);
+        for (const [e] of kept) {
+          e.style.setProperty("height", "auto", "important");
+          e.style.setProperty("min-height", "0", "important");
+        }
+        const needs = body.scrollHeight;
+        for (const [e, style] of kept) {
+          if (style === null) e.removeAttribute("style"); else e.setAttribute("style", style);
+        }
+        return { kind: "height", value: needs };
         """
 
-    static func install(in controller: WKUserContentController, handler messages: any WKScriptMessageHandler) {
-        controller.addUserScript(WKUserScript(source: source, injectionTime: .atDocumentEnd, forMainFrameOnly: true,
-                                              in: world))
-        controller.add(messages, contentWorld: world, name: handler)
-    }
+    /// The link at the point `x`, `y` of the frame's viewport, in CSS pixels: its href and its text.
+    static let link = """
+        const at = document.elementFromPoint(x, y);
+        const a = at && at.closest ? at.closest("a[href]") : null;
+        if (!a) return null;
+        return { kind: "link", href: a.getAttribute("href") || "", text: (a.textContent || "").slice(0, 2000) };
+        """
 
-    static func remove(from controller: WKUserContentController) {
-        controller.removeAllScriptMessageHandlers()
-        controller.removeAllUserScripts()
-    }
+    /// The link focused in the frame, as `link` says one.
+    static let focused = """
+        const at = document.activeElement;
+        const a = at && at.closest ? at.closest("a[href]") : null;
+        if (!a) return null;
+        return { kind: "link", href: a.getAttribute("href") || "", text: (a.textContent || "").slice(0, 2000) };
+        """
+
+    /// The href of the link at the point `x`, `y`, and nothing else: an empty one for none.
+    static let hover = """
+        const at = document.elementFromPoint(x, y);
+        const a = at && at.closest ? at.closest("a[href]") : null;
+        return { kind: "hover", href: a ? a.getAttribute("href") || "" : "" };
+        """
 }
 
 /// The frame's web view: the reader scrolls as one, so a wheel that would only move the page up or down goes to the
-/// reader's scroll view; its menu keeps only what reads or copies, never what opens or downloads.
+/// reader's scroll view; its menu keeps only what reads or copies, never what opens or downloads. What a person does
+/// in it (a click, the pointer moving or leaving, a key, a new width) goes to its walls, which ask the document.
 final class FrameWebView: WKWebView {
     /// Off once the content is taller than the reader lets a frame grow: then the frame scrolls its own.
     var forwardsScroll = true
+    /// What asks the document what a person's click, pointer or key was on.
+    weak var walls: FrameGuard?
+    /// Where the left button went down, in the viewport: a click opens a link only where it went up there too.
+    private var pressed: CGPoint?
 
     private static let kept: Set<String> = [
         "WKMenuItemIdentifierCopy", "WKMenuItemIdentifierCopyLink", "WKMenuItemIdentifierCopyImage",
@@ -256,12 +229,85 @@ final class FrameWebView: WKWebView {
         return true
     }
 
+    /// Where `event` is in the document's viewport, in CSS pixels, as `elementFromPoint` takes it.
+    func viewportPoint(of event: NSEvent) -> CGPoint {
+        let at = convert(event.locationInWindow, from: nil)
+        let scale = max(magnification * pageZoom, 0.01)
+        return CGPoint(x: at.x / scale, y: (isFlipped ? at.y : bounds.height - at.y) / scale)
+    }
+
     override func scrollWheel(with event: NSEvent) {
         if forwardsScroll, abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX), let next = nextResponder {
             next.scrollWheel(with: event)
         } else {
             super.scrollWheel(with: event)
         }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        pressed = event.clickCount == 1 && !event.modifierFlags.contains(.control) ? viewportPoint(of: event) : nil
+        super.mouseDown(with: event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        super.mouseUp(with: event)
+        let at = viewportPoint(of: event)
+        // A press that went up where it went down, once, is a click; a drag, a double click or a ⌃-click (the menu)
+        // opens nothing.
+        let click = pressed.map { hypot(at.x - $0.x, at.y - $0.y) <= 4 } ?? false
+        pressed = nil
+        walls?.clicked(at: at, opens: click && event.clickCount == 1)
+    }
+
+    override func otherMouseUp(with event: NSEvent) {
+        super.otherMouseUp(with: event)
+        // A middle click opens the link under it, as the page's does.
+        walls?.clicked(at: viewportPoint(of: event), opens: event.buttonNumber == 2)
+    }
+
+    /// WebKit hears the pointer through tracking areas of its own, which tell WebKit alone, never this view; so the
+    /// frame keeps one of its own, its moves and its leaving told to `pointerWatch`.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard !trackingAreas.contains(where: { $0.owner === pointerWatch }) else { return }
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow,
+                                                              .inVisibleRect], owner: pointerWatch, userInfo: nil))
+    }
+
+    /// The tracking area's owner, which AppKit doesn't keep: the pointer's moves over the frame and its leaving.
+    private lazy var pointerWatch = PointerWatch(frame: self)
+
+    private final class PointerWatch: NSResponder {
+        weak var frame: FrameWebView?
+
+        init(frame: FrameWebView) {
+            self.frame = frame
+            super.init()
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        override func mouseMoved(with event: NSEvent) {
+            guard let frame else { return }
+            frame.walls?.pointer(at: frame.viewportPoint(of: event))
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            frame?.walls?.pointerLeft()
+        }
+    }
+
+    override func keyDown(with event: NSEvent) {
+        super.keyDown(with: event)
+        // Return or Enter on a focused link opens it, once however long it is held; any key may unfold a quote.
+        walls?.keyed(opens: [36, 76].contains(event.keyCode) && !event.isARepeat)
+    }
+
+    override func setFrameSize(_ size: NSSize) {
+        let widthChanged = size.width != frame.width
+        super.setFrameSize(size)
+        // A new width wraps the content anew, so it is measured again.
+        if widthChanged { walls?.settle(for: .seconds(1)) }
     }
 
     override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
@@ -280,9 +326,10 @@ final class FrameWebView: WKWebView {
     }
 }
 
-/// Answers the frame's document through the core, dressed in its look, and lets the frame go nowhere else.
+/// Answers the frame's document through the core, dressed in its look, lets the frame go nowhere else, and asks the
+/// document how tall it is and which link a person meant.
 @MainActor
-final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate, WKScriptMessageHandler {
+final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate {
     private let source: FrameSource
     let url: URL
     private let look: MailLook
@@ -299,6 +346,18 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate, WKSc
     weak var find: ReaderFind?
     /// The loads still going: one the web view stopped gets nothing more.
     private var going: Set<ObjectIdentifier> = []
+    /// The height last told.
+    private var height: CGFloat?
+    /// Measuring again and again while the content may still change, until `settled`.
+    private var settling: Task<Void, Never>?
+    private var settled = ContinuousClock.now
+    /// Where the pointer is to be asked about next, and whether a question about it is going.
+    private var pointer: CGPoint?
+    private var pointing: Task<Void, Never>?
+    /// Counts the pointer's leaving, so an answer about where it was before is dropped.
+    private var leftCount = 0
+    /// The link last said to be under the pointer.
+    private var hovering: URL?
 
     init(source: FrameSource, url: URL, look: MailLook, html: Bool) {
         self.source = source
@@ -311,13 +370,27 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate, WKSc
         self.init(source: .core(core), url: url, look: look, html: html)
     }
 
-    /// Show the frame if the script hasn't measured it soon: an empty document says nothing.
+    /// Show the frame if nothing has measured it soon: an empty document says nothing.
     func showSoon() {
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(1.5))
             self?.view?.isHidden = false
         }
     }
+
+    /// The frame is going: no more questions, and no link said under the pointer.
+    func stop() {
+        settling?.cancel()
+        settling = nil
+        pointing?.cancel()
+        pointing = nil
+        pointer = nil
+        leftCount += 1
+        told?(.hover(nil))
+        told = nil
+    }
+
+    // MARK: The document
 
     func webView(_ webView: WKWebView, start task: any WKURLSchemeTask) {
         let id = ObjectIdentifier(task)
@@ -363,7 +436,14 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate, WKSc
         going.remove(ObjectIdentifier(task))
     }
 
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        // Measured as it is read, so the frame shows before its images have all come. Paper measures itself.
+        if printHead == nil { settle(for: .seconds(2)) }
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        // Its images and faces have come; one that comes late still changes its height for a while.
+        if printHead == nil { settle(for: .seconds(5)) }
         loaded?(true)
         loaded = nil
     }
@@ -380,19 +460,103 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate, WKSc
         loaded = nil
     }
 
-    /// Only the document asked for loads: a link clicked, a form sent or a redirect goes nowhere.
+    /// Only the document asked for loads: a link clicked, a form sent or a redirect goes nowhere. A link opens only
+    /// as the app asks the document which one a person clicked (`clicked(at:opens:)`).
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
         action.request.url == url && action.navigationType == .other ? .allow : .cancel
     }
 
-    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        // Only the app's world has this handler; anything else is not ours to hear.
-        guard message.world.name == FrameScript.world.name, let read = FrameMessage(message.body) else { return }
-        if case .height(let height) = read {
-            view?.isHidden = false
-            (view as? FrameWebView)?.forwardsScroll = height < MailFrame.tallest
+    // MARK: Asking the document
+
+    /// Ask the document `question` in the app's world, and read what it returns as the mail's data: nil for nothing,
+    /// an error, or anything `FrameMessage` doesn't read.
+    private func ask(_ question: String, _ arguments: [String: Any] = [:]) async -> FrameMessage? {
+        guard let view else { return nil }
+        guard let said = try? await view.callAsyncJavaScript(question, arguments: arguments, in: nil,
+                                                             contentWorld: FrameAsk.world) else { return nil }
+        return FrameMessage(said)
+    }
+
+    private static func place(_ point: CGPoint) -> [String: Any] {
+        ["x": Double(point.x), "y": Double(point.y)]
+    }
+
+    /// Measure the content, and tell its height when it has changed: the frame shows once it has one, and stops
+    /// handing the wheel on once it is taller than the reader lets a frame grow.
+    func measure() async {
+        guard case .height(let now)? = await ask(FrameAsk.height), now != height, let view else { return }
+        height = now
+        view.isHidden = false
+        (view as? FrameWebView)?.forwardsScroll = now < MailFrame.tallest
+        told?(.height(now))
+    }
+
+    /// Measure in a moment, then again, more seldom each time, until `span` from now: whatever a load, a new width, a
+    /// quote unfolded or an image arriving changes shows within it. Each call starts over, so a splitter dragged
+    /// measures once it rests.
+    func settle(for span: Duration) {
+        let until = ContinuousClock.now + span
+        if until > settled { settled = until }
+        settling?.cancel()
+        settling = Task { @MainActor [weak self] in
+            var pause = Duration.milliseconds(16)
+            while (try? await Task.sleep(for: pause)) != nil, let walls = self {
+                await walls.measure()
+                guard ContinuousClock.now < walls.settled else { return }
+                pause = min(pause * 2, .seconds(1))
+            }
         }
-        told?(read)
+    }
+
+    /// A click, or a middle click, at `point`: the link under it opens when `opens`; anything it unfolded is measured.
+    func clicked(at point: CGPoint, opens: Bool) {
+        settle(for: .seconds(1))
+        guard opens else { return }
+        Task { @MainActor [weak self] in
+            guard let self, case .link(let link)? = await self.ask(FrameAsk.link, Self.place(point)) else { return }
+            self.told?(.link(link))
+        }
+    }
+
+    /// A key pressed in the frame: Return or Enter opens the link focused (`opens`); anything it unfolded is measured.
+    func keyed(opens: Bool) {
+        settle(for: .seconds(1))
+        guard opens else { return }
+        Task { @MainActor [weak self] in
+            guard let self, case .link(let link)? = await self.ask(FrameAsk.focused) else { return }
+            self.told?(.link(link))
+        }
+    }
+
+    /// The pointer moved to `point`: the link under it is asked for, one question at a time and no more often than a
+    /// frame or two, about where the pointer is by then.
+    func pointer(at point: CGPoint) {
+        pointer = point
+        guard pointing == nil else { return }
+        pointing = Task { @MainActor [weak self] in
+            while let walls = self, let point = walls.pointer, !Task.isCancelled {
+                walls.pointer = nil
+                let round = walls.leftCount
+                if case .hover(let url)? = await walls.ask(FrameAsk.hover, Self.place(point)), round == walls.leftCount {
+                    walls.hover(url)
+                }
+                try? await Task.sleep(for: .milliseconds(40))
+            }
+            self?.pointing = nil
+        }
+    }
+
+    /// The pointer left the frame: no link is under it.
+    func pointerLeft() {
+        pointer = nil
+        leftCount += 1
+        hover(nil)
+    }
+
+    private func hover(_ url: URL?) {
+        guard url != hovering else { return }
+        hovering = url
+        told?(.hover(url))
     }
 }
 #endif

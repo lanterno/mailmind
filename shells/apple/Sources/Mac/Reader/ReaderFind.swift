@@ -4,8 +4,9 @@ import SwiftUI
 import WebKit
 
 /// Find in Message (⌥⌘F; ⌘F in a message's own window): a word looked for in the open message's body, or each body
-/// a conversation shows, as a Mac's find bar does. WebKit finds and selects it in a frame; the app's own script in that frame (its isolated world, never
-/// the mail's) says where the selection is, and the reader scrolls to it, as the frames are as tall as their content.
+/// a conversation shows, as a Mac's find bar does. WebKit finds and selects it in a frame; the app asks that frame where
+/// the selection is, in its own isolated world (`FrameAsk.world`, never the mail's), and the reader scrolls to it, as
+/// the frames are as tall as their content.
 @MainActor
 @Observable
 final class ReaderFind {
@@ -82,7 +83,7 @@ final class ReaderFind {
         found = false
     }
 
-    /// Scroll the reader to the selection WebKit made: its rectangle, as the app's script reads it, made visible in
+    /// Scroll the reader to the selection WebKit made: its rectangle, as the app's question reads it, made visible in
     /// whatever scrolls the frame.
     private static func reveal(_ view: WKWebView) async {
         let script = """
@@ -92,7 +93,7 @@ final class ReaderFind {
             return [r.left, r.top, r.width, r.height];
             """
         guard let read = try? await view.callAsyncJavaScript(script, arguments: [:], in: nil,
-                                                             contentWorld: FrameScript.world) as? [NSNumber],
+                                                             contentWorld: FrameAsk.world) as? [NSNumber],
               read.count == 4 else { return }
         let rect = NSRect(x: read[0].doubleValue, y: read[1].doubleValue, width: read[2].doubleValue,
                           height: read[3].doubleValue)
@@ -105,7 +106,7 @@ final class ReaderFind {
     private static func clearSelection(_ view: WKWebView) {
         Task {
             _ = try? await view.callAsyncJavaScript("window.getSelection()?.removeAllRanges(); return null;",
-                                                    arguments: [:], in: nil, contentWorld: FrameScript.world)
+                                                    arguments: [:], in: nil, contentWorld: FrameAsk.world)
         }
     }
 }
