@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DigestItem } from "../mailbox";
-import { commitments, eventWhen, meetingWhen, greeting, nameIn, needsNote, reviewRange, waitAge } from "./model";
+import { commitments, eventWhen, meetingWhen, greeting, nameIn, needsNote, ofWhole, reviewRange, waitAge } from "./model";
 
 const item = (key: number, over: Partial<DigestItem> = {}) => ({ key, folder: "INBOX", uid: key, importance: 1, needs_you: false, safe_to_file: false, commitment_worthy: false, ...over }) as DigestItem;
 
@@ -53,5 +53,15 @@ describe("the side column's words", () => {
     expect(nameIn('"Lin Park" <lin@example.test>')).toBe("Lin Park");
     expect(nameIn("<lin@example.test>")).toBe("lin@example.test");
     expect(nameIn(null)).toBe("");
+  });
+});
+
+describe("your week's lists", () => {
+  it("say how many they show of the week's whole, as its tiles count it", () => {
+    expect(ofWhole(8, 13)).toBe("8 of 13");
+    expect(ofWhole(3, 3)).toBe("3");
+    expect(ofWhole(2, null)).toBe("2");
+    expect(ofWhole(2, undefined)).toBe("2");
+    expect(ofWhole(5, 4)).toBe("5");
   });
 });
