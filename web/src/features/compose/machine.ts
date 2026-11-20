@@ -119,7 +119,10 @@ export function createComposing(env: Env) {
       const sig = env.signature(from);
       if (sig) body = sigBlock = `\n\n-- \n${sig}`;   // write above the signature, not after it
     }
-    const to = (opts.to ?? []).map((v) => ({ v, bad: false })), cc = (opts.cc ?? []).map((v) => ({ v, bad: false })), bcc = (opts.bcc ?? []).map((v) => ({ v, bad: false }));
+    // A draft saved and reopened comes back checked as its chips were typed, since they may hold what no server would
+    // take; what an original named is taken as it is. A closed composer's words keep their marks (`reopen`).
+    const prefill = (vs: string[] | undefined) => (vs ?? []).map((v) => (opts.draftId ? chip(v) : { v, bad: false }));
+    const to = prefill(opts.to), cc = prefill(opts.cc), bcc = prefill(opts.bcc);
     c = {
       id: nextId++, mode: opts.mode ?? "new", from, to, cc, bcc, typed: { to: "", cc: "", bcc: "" }, showCc: cc.length > 0 || bcc.length > 0,
       subject: opts.subject ?? "", subject0: opts.subject0 ?? opts.subject ?? "", body, sigBlock,
