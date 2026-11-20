@@ -6,10 +6,11 @@ import { aiOffered, offLine } from "../../lib/ai";
 import { ApiError, get, post } from "../../lib/api/client";
 import type { AiStatus, Verdict } from "../../lib/api/types";
 import { askOverLimit } from "../../lib/overLimit";
-import { avatarHue, shortAddress } from "../../lib/text";
+import { avatarHue } from "../../lib/text";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import { readAgain, useDigest } from "../mailbox";
+import { decisionWords } from "./screenerWords";
 
 const VERDICT_WORD: Record<Verdict, string> = { keep: "Allow", block: "Screen out" };
 
@@ -42,11 +43,11 @@ export function ScreenerPane({ account }: { account: string | undefined }) {
   const ai = aiOffered(said);     // AI turned off: no verdict is suggested, and nothing offers one
   const [decided, setDecided] = useState<ReadonlySet<string>>(new Set());
   const rows = (data?.items ?? []).filter((s) => !decided.has(s.from_addr));
-  const decide = async (addr: string, verdict: Verdict) => {
+  const decide = async (addr: string, name: string | null | undefined, verdict: Verdict) => {
     setDecided(new Set([...decided, addr]));
     try {
       const d = await post("/api/rules", { token: addr, verdict });
-      toast(verdict === "keep" ? `Allowed ${shortAddress(addr)}` : `Screened out ${shortAddress(addr)}${(d as { trashed?: unknown }).trashed ? " · trashed" : ""}`);
+      toast(decisionWords(verdict, name, addr, Boolean((d as { trashed?: unknown }).trashed)));
       readAgain(qc);
       void qc.invalidateQueries({ queryKey: ["screener"] });
     } catch {
@@ -75,8 +76,8 @@ export function ScreenerPane({ account }: { account: string | undefined }) {
               {hint && <div className="scr-hint"><Icon name="wind" /> <b>{VERDICT_WORD[hint.verdict]}?</b> {hint.why}</div>}
             </div>
             <div className="scr-acts">
-              <button className={hint?.verdict === "keep" ? "scr-allow suggested" : "scr-allow"} onClick={() => void decide(s.from_addr, "keep")}><Icon name="check" /> Allow</button>
-              <button className={hint?.verdict === "block" ? "scr-block suggested" : "scr-block"} onClick={() => void decide(s.from_addr, "block")}><Icon name="ban" /> Screen out</button>
+              <button className={hint?.verdict === "keep" ? "scr-allow suggested" : "scr-allow"} onClick={() => void decide(s.from_addr, s.from_name, "keep")}><Icon name="check" /> Allow</button>
+              <button className={hint?.verdict === "block" ? "scr-block suggested" : "scr-block"} onClick={() => void decide(s.from_addr, s.from_name, "block")}><Icon name="ban" /> Screen out</button>
             </div>
           </div>
         );
