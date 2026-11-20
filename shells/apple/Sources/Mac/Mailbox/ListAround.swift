@@ -52,9 +52,19 @@ struct MailboxTable: View {
 
     /// Today's brief over the Inbox's rows (`BriefRow`): in every Inbox, or one account's, while not searching.
     private var briefLine: BriefLine? {
-        guard let desk, mailbox.app?.listed?.isInbox == true else { return nil }
-        return BriefLine(needs: desk.brief.needs, waiting: mailbox.across?.waiting ?? 0,
-                         canWait: desk.brief.aiTurnedOff ? nil : desk.brief.tidy.count)
+        desk.flatMap { Self.briefLine($0.brief, mailbox: mailbox) }
+    }
+
+    /// The brief's line over the Inbox the list shows: what needs you, waits and can wait in that Inbox's mail, one
+    /// account's alone in its own, as the rail's Inbox counts what needs you in the scope the window shows. Nil where
+    /// the list isn't an Inbox.
+    static func briefLine(_ brief: BriefModel, mailbox: Mailbox) -> BriefLine? {
+        guard let listed = mailbox.app?.listed, listed.isInbox else { return nil }
+        let account = listed.account
+        let there = { (item: API.DigestItem) in account == nil || item.account == account }
+        let waiting = account.map { mailbox.folders[$0]?.waiting ?? 0 } ?? mailbox.across?.waiting ?? 0
+        return BriefLine(needs: brief.needs.filter(there), waiting: waiting,
+                         canWait: brief.aiTurnedOff ? nil : brief.tidy.filter(there).count)
     }
 
     /// The rows checked are in Trash, where the bulk bar restores them.
