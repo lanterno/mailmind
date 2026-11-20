@@ -585,7 +585,9 @@ struct MeadowPopoverAnchor<Content: View>: NSViewRepresentable {
         var close: () -> Void = {}
         var keys: (NSEvent) -> Bool = { _ in false }
         private var panel: NSPanel?
-        private var host: NSHostingView<AnyView>?
+        private var host: MeadowPopoverHost?
+        /// The size the panel was last placed round, so it is placed again only when the content wants another.
+        private var placedSize: CGSize?
         private var monitor: Any?
         /// What it hangs from: the button that opened it.
         private weak var anchor: NSView?
@@ -611,6 +613,7 @@ struct MeadowPopoverAnchor<Content: View>: NSViewRepresentable {
             guard let root, let anchor, let window = anchor.window else { return }
             let panel = panel ?? made(root)
             let size = host?.fittingSize ?? .zero
+            placedSize = size
             let pop = CGSize(width: max(0, size.width - 2 * Self.room), height: max(0, size.height - 2 * Self.room))
             // The button in the window, its origin at the top left as the placement has it.
             let space = window.frame.size
@@ -622,9 +625,11 @@ struct MeadowPopoverAnchor<Content: View>: NSViewRepresentable {
                                y: window.frame.minY + space.height - at.y - pop.height - Self.room,
                                width: size.width, height: size.height)
             // Its paper stands 12 in from the window's edge, its shadow's room wider: the panel is cut at the edge,
-            // so nothing of it falls past the window, as nothing of a toast does.
-            let shown = frame.intersection(window.frame)
-            panel.setFrame(shown.isEmpty ? frame : shown, display: true)
+            // so its shadow never falls past the window, as nothing of a toast does. Its paper is never cut: one with
+            // more to hold than the room there is stands whole past the edge.
+            let paper = frame.insetBy(dx: Self.room, dy: Self.room)
+            let shown = frame.intersection(window.frame).union(paper)
+            panel.setFrame(shown, display: true)
             host?.frame = NSRect(x: frame.minX - panel.frame.minX, y: frame.minY - panel.frame.minY,
                                  width: frame.width, height: frame.height)
             if panel.parent == nil {
@@ -636,6 +641,7 @@ struct MeadowPopoverAnchor<Content: View>: NSViewRepresentable {
 
         func hide() {
             root = nil
+            placedSize = nil
             if let monitor { NSEvent.removeMonitor(monitor) }
             monitor = nil
             if let panel {
@@ -652,8 +658,9 @@ struct MeadowPopoverAnchor<Content: View>: NSViewRepresentable {
             panel.hasShadow = false
             panel.isReleasedWhenClosed = false
             panel.becomesKeyOnlyIfNeeded = true
-            let host = NSHostingView(rootView: root)
+            let host = MeadowPopoverHost(rootView: root)
             host.sizingOptions = [.intrinsicContentSize]
+            host.resized = { [weak self] in self?.resized() }
             // The content in a plain view that holds it whole where the panel is cut at the window's edge.
             let holder = NSView()
             holder.addSubview(host)
@@ -661,6 +668,13 @@ struct MeadowPopoverAnchor<Content: View>: NSViewRepresentable {
             self.panel = panel
             self.host = host
             return panel
+        }
+
+        /// The content wants another size than the panel was placed round, as a menu's scroll does once it has
+        /// measured its items: placed again, while it is up, so it is never left cut at its first measure.
+        private func resized() {
+            guard root != nil, let host, host.fittingSize != placedSize else { return }
+            place()
         }
 
         /// A key typed while it is up, and what goes on of it: Esc closes it; a key it may take is its own, taken or
@@ -694,6 +708,19 @@ struct MeadowPopoverAnchor<Content: View>: NSViewRepresentable {
                 return again ? nil : event
             }
         }
+    }
+}
+
+/// A popover's content, which says when the size it wants changes after it first showed: in a plain view of the
+/// panel's, nothing else would size it again, and it would stay at its first measure, its content cut.
+final class MeadowPopoverHost: NSHostingView<AnyView> {
+    var resized: (() -> Void)?
+
+    override func invalidateIntrinsicContentSize() {
+        super.invalidateIntrinsicContentSize()
+        guard resized != nil else { return }
+        // Once this pass is done: placing the panel lays the content out again.
+        Task { @MainActor [weak self] in self?.resized?() }
     }
 }
 
