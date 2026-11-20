@@ -33,6 +33,13 @@ A rule change classifies again the stored mail it covers (`ingest.reclassify`, c
 `rules.add` or `rules.remove`): each row a rule decides now or decided before. A row no rule had a say in
 stays as ingest judged it, since not all it read then is kept. A document written another way, as an import is, reaches only new mail.
 
+A block, by Screen out at the Screener's gate or in Curate's rules, moves nothing: the sender's mail stays where it
+is, read now as `BLOCKED`, as their mail arriving later will be, and a sweep files it as it files any junk. Junk asks
+nothing of you (`kernel.attention.answers`, the core's `verdict::answers` and `listing::attention`): a row read as junk
+needs you in no list, whatever the AI said of it before the block, so the Inbox's Needs you leaves it out as the brief
+does, and both count the same. What the AI said stays, and needs you again once the rule goes. A sender's cleanup is the
+way to block and file their mail at once, under one Undo.
+
 Ingest keeps a message's unsubscribe headers (`messages.list_unsub_raw` and `list_unsub_method`, through
 `mime.list_unsub`), `none` included. `Unsubscribing.resolve` answers for a sender from the newest message
 that can say: those columns, a stored body, or for older mail the two headers read off the server, within
