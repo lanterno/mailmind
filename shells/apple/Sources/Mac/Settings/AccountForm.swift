@@ -420,8 +420,8 @@ struct AccountRoutes {
     /// Sync the account again.
     var retry: (String) async -> Void
 
-    /// The core's routes, a secret sent through `SecretPost`, and the app's status.
-    static func over(_ core: Core, status: AppStatus) -> AccountRoutes {
+    /// The core's routes, a secret sent through `SecretPost`, the app's status, and its writing.
+    static func over(_ core: Core, status: AppStatus, composing: Composing = .shared) -> AccountRoutes {
         AccountRoutes(
             test: { body in
                 do {
@@ -440,6 +440,9 @@ struct AccountRoutes {
             kept: { _, adding in
                 await status.readAccounts()
                 await status.readDigest()
+                // Who you are as writing reads it (the signature, the name, the accounts that send) at once, so a new
+                // message or a reply written right after Save signs with what was just kept, not with the last sync's.
+                await composing.readDigest()
                 // The window's rail and list read again now, not at the end of the new account's first sync: the rail
                 // shows it at once, and its Inbox says it is being read for the first time. Not waited for: its
                 // folders are read live from its server, and the sheet closes (or tests a Proton account) meanwhile.

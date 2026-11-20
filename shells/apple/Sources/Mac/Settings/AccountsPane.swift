@@ -114,6 +114,8 @@ struct AccountsPane: View {
         }
         await status.readAccounts()
         await status.readDigest()
+        // Writing lets go of it too: it is no longer offered to send from.
+        await Composing.shared.readDigest()
         // The window's rail lets go of it now, and its list with it; not waited for.
         MailApp.shared.accountsChanged()
         if chosen == nil { chosen = status.accounts.first?.email }
