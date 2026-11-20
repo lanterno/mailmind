@@ -467,6 +467,21 @@ def test_reopen_a_saved_draft(page, world):
     clean(page)
 
 
+def test_a_reopened_drafts_chip_that_isnt_an_address_shows_and_holds_send(page, world):
+    opened(page)
+    writing(page, "bob@example", "Kiln rota", "Which week is mine?")
+    page.keyboard.press("Escape")                         # closing saves it, chip and all
+    until(page, lambda: len(copies(world, "Kiln rota")) == 1, "the draft saved")
+    open_folder(page, w.ADA, "Drafts")
+    page.locator("#rows .row").filter(has_text="Kiln rota").click()
+    page.locator('#reader [data-ca="edit"]').click()
+    expect(page.locator("#cmpTo .cm-chip.bad")).to_contain_text("bob@example")
+    send_button(page).click()
+    expect(page.locator("#cmpGuard")).to_contain_text("“bob@example” isn’t a valid address.")
+    assert world.smtp.messages == []
+    clean(page)
+
+
 def test_a_draft_replaced_or_discarded_leaves_the_list_at_once(page, world):
     open_folder(page, w.BEA, "Drafts")
     row(page, world, "bea-drafts-01-apple-mail.eml").click()
