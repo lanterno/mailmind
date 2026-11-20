@@ -80,13 +80,13 @@ _FOLLOW_PROVIDER = ("ai_model", "ai_base_url")             # a provider's own, s
 _TIMES = ("quiet_from", "quiet_until")
 _CLOCK = re.compile(r"([01][0-9]|2[0-3]):[0-5][0-9]")
 _MODEL = re.compile(rf"[A-Za-z0-9._:/@+-]{{1,{AI_MODEL_MAX}}}")
-_REFUSALS = {"undo_send_seconds": f"the Undo Send window must be {send_window.SHORTEST} to {send_window.LONGEST} seconds",
-             AI_DAILY_LIMIT: f"the AI daily limit must be more than $0 and at most ${AI_DAILY_LIMIT_MAX}",
-             "quiet_from": "quiet hours need a time such as 22:00",
-             "quiet_until": "quiet hours need a time such as 07:00",
-             "ai_model": f"the AI model must be up to {AI_MODEL_MAX} letters, digits and . _ : / @ + -",
-             "ai_base_url": f"the AI service's URL must be https, or http on this Mac, in at most {AI_BASE_URL_MAX} "
-                            "characters, with no user, password, query or fragment"}
+_REFUSALS = {"undo_send_seconds": f"The Undo Send window must be {send_window.SHORTEST} to {send_window.LONGEST} seconds.",
+             AI_DAILY_LIMIT: f"The AI daily limit must be more than $0 and at most ${AI_DAILY_LIMIT_MAX}.",
+             "quiet_from": "Quiet hours need a time such as 22:00.",
+             "quiet_until": "Quiet hours need a time such as 07:00.",
+             "ai_model": f"The AI model’s name must be up to {AI_MODEL_MAX} letters, digits and . _ : / @ + - characters.",
+             "ai_base_url": f"The AI service’s URL must be https, or http on this Mac, in at most {AI_BASE_URL_MAX} "
+                            "characters, with no user, password, query or fragment."}
 LOCAL_ELSEWHERE = "A model on this Mac must be at 127.0.0.1, ::1 or localhost."
 
 
@@ -156,7 +156,7 @@ def changes(asked: Mapping[str, Any], raw: Mapping[str, Any] | None = None) -> d
         if name != AI_DAILY_LIMIT and name not in DEFAULTS:
             continue
         if not _takes(name, value):
-            raise Refused(_REFUSALS.get(name, f"{name} can't be that"))
+            raise Refused(_REFUSALS.get(name, f"That can’t be the {name} setting."))
         wanted[name] = _kept(name, value)
     now = read(raw or {})
     if "ai_provider" in wanted and wanted["ai_provider"] != now["ai_provider"]:
