@@ -2,6 +2,7 @@
 //! group, a copy that has gone from where the preview saw it left alone, and a snooze through Attention's. What it
 //! answers is `PlanCarriedOut`.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use mm_kernel::errors::{Failure, Fault, Kind, Problem, READ_ONLY};
@@ -19,6 +20,8 @@ struct World {
     /// What a snooze answers; the count of pks where none is said.
     snoozed: Option<Result<Value, Failure>>,
     asked: Mutex<Vec<String>>,
+    /// How often a client was told the plan's moves landed.
+    told: AtomicUsize,
 }
 
 impl World {
@@ -57,6 +60,10 @@ impl OneByOne for World {
     fn set_flags(&self, pk: i64, flags: &[(&str, bool)]) -> Result<Value, Failure> {
         self.note(format!("flags {pk} {flags:?}"));
         self.answer(pk, false)
+    }
+
+    fn landed(&self) {
+        self.told.fetch_add(1, Ordering::SeqCst);
     }
 }
 
@@ -229,4 +236,34 @@ fn a_read_only_process_refuses_the_whole_plan_at_its_first_message() {
     let done = plans(&world).carry_out("archive", None, &seen(&[1, 2]), Some("g"));
     assert_eq!(done, Err(READ_ONLY.into()));
     assert_eq!(world.asked(), ["read 2", "archive 11 g"], "none after it was asked");
+}
+
+#[test]
+fn moves_that_landed_within_the_request_are_told_once_for_the_whole_plan() {
+    let world = Arc::new(world(&[(1, 11), (2, 12), (3, 13)]));
+    plans(&world).carry_out("archive", None, &seen(&[1, 2, 3]), Some("g")).expect("carried out");
+    assert_eq!(world.told.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn a_plan_whose_moves_the_worker_has_or_that_failed_tells_of_no_landing() {
+    let world = Arc::new(World {
+        answers: vec![
+            (11, Ok(json!({"ok": true, "msg": "queued", "status": "queued", "undoable": true}))),
+            (12, Err(Problem::new(Kind::Conflict, "the server refused the archive").into())),
+        ],
+        ..world(&[(1, 11), (2, 12)])
+    });
+    plans(&world).carry_out("archive", None, &seen(&[1, 2]), Some("g")).expect("carried out");
+    assert_eq!(world.told.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn a_plan_of_flag_changes_or_a_snooze_tells_of_no_move() {
+    for verb in ["read", "star", "snooze"] {
+        let world =
+            Arc::new(World { answers: vec![(11, Ok(json!({"ok": true, "undoable": false})))], ..world(&[(1, 11)]) });
+        plans(&world).carry_out(verb, Some("tomorrow"), &seen(&[1]), Some("g")).expect("carried out");
+        assert_eq!(world.told.load(Ordering::SeqCst), 0, "{verb}");
+    }
 }

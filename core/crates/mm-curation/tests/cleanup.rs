@@ -470,6 +470,9 @@ impl Filing for World {
         self.note(format!("trash {pk} {group}"));
         Ok(json!({"ok": true}))
     }
+    fn landed(&self) {
+        self.note("landed".into());
+    }
     fn trash_many(&self, rows: &[NamedCopy], group: &str) -> Result<Value, Failure> {
         self.note(format!("trash many {} {group}", rows.len()));
         let filed: Vec<Value> =
@@ -641,6 +644,8 @@ fn a_cleanup_blocks_sweeps_then_unsubscribes_and_a_repeat_fires_nothing() {
             format!("undo \"unblock\" \"{LOOM}\" {group}"),
             format!("trash 9 {group}"),
             format!("trash 4 {group}"),
+            // Once for the sweep, which trashed each telling no one.
+            "landed".into(),
             "post https://loom.example.test/u/ada-218".into(),
             "latch unsubscribed_oneclick".into(),
             format!("cleaned up {LOOM} 2 unsubscribed_oneclick"),
@@ -710,6 +715,7 @@ fn a_batch_blocks_each_sender_and_trashes_every_copy_under_one_group() {
     let said = world.said();
     assert_eq!(said.iter().filter(|s| s.starts_with("undo \"unblock\"")).count(), 2);
     assert!(said.contains(&"trash many 2 cleanup:batch".to_owned()));
+    assert!(!said.contains(&"landed".to_owned()), "filing marked rows tells of them itself");
     assert!(said.contains(&format!("cleaned up {LOOM} 0 skipped")));
     assert!(said.contains(&"cleaned up deals@spindle.example.test 2 skipped".to_owned()));
 }
