@@ -86,3 +86,16 @@ def test_the_sql_answers_as_the_python_does(alias):
         assert bool(got) == attention.needs_you(i, c, a), row
         got = db.execute(f"SELECT 1 FROM {table} WHERE {attention.reply_worthy_sql(alias)}").fetchone()
         assert bool(got) == attention.reply_worthy(i, c), row
+
+
+def test_a_row_carries_each_answer_its_verdict_gives():
+    for i, c, a in GRID:
+        assert attention.answers(i, c, a, 0) == {
+            "needs_you": attention.needs_you(i, c, a), "reply_worthy": attention.reply_worthy(i, c),
+            "commitment_worthy": attention.commitment_worthy(i, c, a), "safe_to_file": attention.safe_to_file(i, c, a)}, (i, c, a)
+
+
+def test_a_message_read_as_junk_asks_nothing_whatever_its_verdict_says():
+    """A sender blocked after the AI read their mail: the brief leaves it out, and so does every list's Needs you."""
+    for i, c, a in GRID:
+        assert not any(attention.answers(i, c, a, 1).values()), (i, c, a)

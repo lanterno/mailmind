@@ -79,6 +79,26 @@ def test_a_conversation_with_no_thread_count_says_how_many_the_list_holds():
     assert listing.listed_item(row(cnt=3, thread_count=None, unread=0, any_flagged=0, any_attach=0), True, when)["thread_count"] == 3
 
 
+ASKS = ("needs_you", "reply_worthy", "commitment_worthy", "safe_to_file")
+SAID = {"importance": 4, "category": "action-needed", "action": "Check the sign-in"}     # the AI's, before a block
+
+
+@pytest.mark.parametrize("group", [False, True])
+def test_a_row_read_as_junk_asks_nothing_though_the_ai_said_it_needed_you_before(group):
+    """Its sender blocked after the AI read it: out of Needs you, as the brief leaves it out. What the AI said stays, and
+    needs you again once the rule goes."""
+    made = conversation if group else row
+    kept = listing.listed_item(made(**SAID), group, when)
+    junk = listing.listed_item(made(**SAID, is_junk=1, bucket="blocked"), group, when)
+    assert [kept[k] for k in ASKS] == [True, True, True, False]
+    assert [junk[k] for k in ASKS] == [False] * 4 and junk["action"] == "Check the sign-in"
+
+
+def test_a_snoozed_row_read_as_junk_asks_nothing():
+    it = listing.snoozed_item(row(**SAID, is_junk=1, bucket="blocked", snoozed_until=900), wakes)
+    assert [it[k] for k in ASKS] == [False] * 4
+
+
 def test_a_plain_row_has_no_rollup():
     assert "count" not in listing.listed_item(row(), False, when)
 
