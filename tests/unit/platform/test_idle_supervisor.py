@@ -355,6 +355,47 @@ def test_a_worker_resting_is_woken_at_once(build, how):
     assert not worker.is_alive()
 
 
+def test_a_hurry_wakes_a_worker_resting_and_it_connects_at_once_its_rests_started_over(build):
+    sup = build("a")
+    sup.FIRST_REST, sup.LONGEST_REST = 3600, 4 * 3600        # one left resting is still resting when the test gives up on it
+    sup.refuse_connect = 2
+    started(sup)
+    assert wait_until(lambda: len(sup.said) == 1)
+    sup.hurry("a")
+    assert wait_until(lambda: len(sup.said) == 2)            # its next connect fails too: it rests from the first again
+    assert sup.rests == [3600, 3600] and sup.next_rest("a") == 3600
+    sup.hurry("a")
+    assert wait_until(lambda: sup.serving("a"))
+    assert sup.said == [("failed", "a", "ConnectionRefusedError")] * 2
+
+
+def test_a_hurry_leaves_a_worker_serving_be_and_ends_no_rest_to_come(build):
+    sup = build("a")
+    sup.FIRST_REST = sup.LONGEST_REST = 3600
+    started(sup)
+    assert wait_until(lambda: sup.serving("a"))
+    line = sup.line_of("a")
+    sup.hurry("a")
+    assert not wait_until(lambda: line.interrupted_by or len(sup.lines) > 1, timeout=0.05)
+    line.drop()                                               # lost before it served a while: it rests
+    assert wait_until(lambda: sup.said)
+    assert not wait_until(lambda: len(sup.lines) > 1, timeout=0.2), "the hurry it had while it served ends no rest"
+
+
+def test_a_hurry_for_a_key_with_no_worker_before_begin_or_after_stop_does_nothing(build):
+    sup = build("a")
+    sup.FIRST_REST = 3600
+    sup.refuse_connect = 1
+    sup.hurry("a")
+    started(sup)
+    assert wait_until(lambda: sup.said)
+    sup.hurry("b")
+    assert not wait_until(lambda: sup.lines, timeout=0.2), "resting still"
+    sup.stop()
+    sup.hurry("a")
+    assert sup.lines == []
+
+
 def test_a_worker_that_finds_itself_unwanted_says_so_and_hands_over(build):
     """Changed with no one to say so: it notices for itself, and asks for a reconcile on its way out."""
     sup = build("a")

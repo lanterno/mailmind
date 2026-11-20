@@ -290,6 +290,36 @@ def test_a_worker_whose_connection_dropped_asks_for_a_sync_once_it_is_connected_
     assert news == [{w.ADA}]
 
 
+@pytest.mark.parametrize("found", ["a sync that works", "a person's Retry"])
+def test_a_worker_resting_after_its_server_went_away_connects_at_once_when_it_is_found_back(world, supervisor, monkeypatch,
+                                                                                          found):
+    """However long its rest has grown, IDLE connects within moments of its server being found answering again, so mail
+    that comes is heard with no Get New Mail."""
+    from mailmind.bootstrap import mailbox
+    away = threading.Event()
+    away.set()
+    world.server.drop("LOGIN", user=w.ADA, times=None, when=lambda _: away.is_set())
+    monkeypatch.setattr(supervisor, "FIRST_REST", 3600)        # a rest that outlasts the test
+    monkeypatch.setattr(mailbox, "realtime", supervisor)       # the app's, which the sync's server_back hurries
+    supervisor.start()
+    assert all_idling_but_ada(world) and wait_until(lambda: count(world, "LOGIN") >= 1)
+    mailbox.syncing.sync_guarded({w.ADA})                       # the server is still away: the sync fails
+    away.clear()
+    before = set(threading.enumerate())
+    if found == "a sync that works":
+        mailbox.syncing.sync_guarded({w.ADA})
+    else:
+        mailbox.syncing.do_sync_retry({"account": w.ADA})
+    assert idling(world, w.ADA)
+    for retrying in set(threading.enumerate()) - before:     # the sync a Retry set going ends inside the test
+        if retrying.name.endswith("(<lambda>)"):
+            retrying.join(30)
+
+
+def all_idling_but_ada(world):
+    return all(idling(world, user) for user in (w.BEA, w.CY))
+
+
 def test_a_worker_that_takes_several_tries_to_connect_again_asks_for_one_sync(world, supervisor, news, monkeypatch):
     monkeypatch.setattr(supervisor, "IDLE_SECONDS", 0.1)
     monkeypatch.setattr(supervisor, "FIRST_REST", 0.01)
