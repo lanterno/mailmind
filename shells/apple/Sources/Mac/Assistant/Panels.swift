@@ -440,6 +440,14 @@ struct ReviewBody: View {
     let again: () -> Void
     @Environment(\.meadow) private var meadow
 
+    /// A list's heading: how many it shows, and of how many the week holds where it shows fewer ("Still needs you ·
+    /// 8 of 13"), so it never says less than its tile does; with none, its title alone.
+    static func heading(_ title: String, shown: Int, of whole: Int) -> String {
+        guard shown > 0 else { return title }
+        return whole > shown ? String(localized: "\(title) · \(shown) of \(whole)")
+            : String(localized: "\(title) · \(shown)")
+    }
+
     var body: some View {
         let stats = review.stats
         DeskCard(look: .note) {
@@ -472,8 +480,8 @@ struct ReviewBody: View {
                 .foregroundStyle(meadow.moss)
             }
         }
-        section(review.needs.isEmpty ? String(localized: "Still needs you")
-                : String(localized: "Still needs you · \(review.needs.count)"), icon: .inbox)
+        section(Self.heading(String(localized: "Still needs you"), shown: review.needs.count, of: stats.needsYou),
+                icon: .inbox)
         if review.needs.isEmpty {
             Text("Nothing important is unanswered.").font(.meadow(.ui, 13.5)).foregroundStyle(meadow.ink3)
         }
@@ -490,7 +498,8 @@ struct ReviewBody: View {
             }
         }
         if !review.waiting.isEmpty {
-            section(String(localized: "You’re waiting on a reply"), icon: .hourglass)
+            section(Self.heading(String(localized: "You’re waiting on a reply"), shown: review.waiting.count,
+                                 of: stats.waitingOn), icon: .hourglass)
             ForEach(Array(review.waiting.enumerated()), id: \.offset) { _, waiting in
                 item(waiting.subject, detail: "to \(waiting.to.isEmpty ? "—" : waiting.to)",
                      copy: Self.copy(waiting.key, waiting.folder ?? "", waiting.uid, waiting.account))
