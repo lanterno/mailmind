@@ -83,13 +83,19 @@ enum MessageWords {
 /// wrote them. A date that won't read is said as it is written.
 @MainActor
 enum MessageWhen {
-    static func said(_ header: String, now: Date = .now) -> String {
+    /// How long ago a header's date was, as the core says it on a list's row (`mm_kernel::relative::since`): counted in
+    /// the person's calendar days, so it agrees with the day heads over the rows. The same day is "just now" within a
+    /// minute and a half, then minutes or hours; the day before is "yesterday", then days within the week and weeks
+    /// within a month; further back, or on a later day than today, the date as the header wrote it.
+    static func said(_ header: String, now: Date = .now, calendar: Calendar = .current) -> String {
         guard let date = date(header) else { return header }
         let seconds = Int(now.timeIntervalSince(date).rounded(.down))
-        let days = Int((Double(seconds) / 86_400).rounded(.down)), rest = seconds - days * 86_400
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date),
+                                           to: calendar.startOfDay(for: now)).day ?? 0
         switch days {
-        case 0 where rest < 3600: return String(localized: "just now")
-        case 0: return String(localized: "\(rest / 3600)h ago")
+        case 0 where seconds < 90: return String(localized: "just now")
+        case 0 where seconds < 3600: return String(localized: "\(seconds / 60)m ago")
+        case 0: return String(localized: "\(seconds / 3600)h ago")
         case 1: return String(localized: "yesterday")
         case 2..<7: return String(localized: "\(days)d ago")
         case 7..<30: return String(localized: "\(days / 7)w ago")
