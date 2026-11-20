@@ -87,6 +87,9 @@ struct InviteCard: View {
     let replies: InviteReplies
     let link: CoreLink
     let notices: DeskNotices
+    /// A series' next time, as Today & next lists it for this message, where it lists it: the card shows that one
+    /// rather than the series' first.
+    var next: API.UpcomingEvent?
     @Environment(\.meadow) private var meadow
 
     private var answerable: Bool {
@@ -114,7 +117,8 @@ struct InviteCard: View {
                     .foregroundStyle(meadow.ink)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
-                line(invite.recurrence.isEmpty ? invite.when : "\(invite.when) · \(invite.recurrence)")
+                let when = Self.when(invite, next: next)
+                line(invite.recurrence.isEmpty ? when : "\(when) · \(invite.recurrence)")
                 if !invite.location.isEmpty { line(invite.location) }
                 if let people = Self.people(organizer: invite.organizer, attendees: invite.attendees) {
                     Text(people)
@@ -146,9 +150,21 @@ struct InviteCard: View {
         .accessibilityLabel("\(Self.kind(invite.method)): \(invite.summary)")
     }
 
+    /// When the event is, on the clock the rest of the app reads (`EventWhen`), and a series' next time where Today &
+    /// next has it: the invite's own words only where its times can't be read.
+    static func when(_ invite: API.Invite, next: API.UpcomingEvent?, calendar: Calendar = .current,
+                     locale: Locale = .current) -> String {
+        if let next, let span = EventWhen.span(start: next.start, end: next.end, allDay: next.allDay,
+                                               calendar: calendar, locale: locale) {
+            return span
+        }
+        return EventWhen.span(start: invite.startIso, end: invite.endIso, allDay: invite.allDay, calendar: calendar,
+                              locale: locale) ?? invite.when
+    }
+
     /// The calendar's leaf (`.cal`): the month in rust over the day.
     @ViewBuilder private var leaf: some View {
-        let day = Self.calendarDay(invite.startIso)
+        let day = Self.calendarDay(next?.start ?? invite.startIso)
         VStack(spacing: 0) {
             Text(verbatim: day?.month ?? "")
                 .font(.meadow(.ui, 11, .heavy))

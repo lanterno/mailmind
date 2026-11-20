@@ -67,6 +67,29 @@ enum EventWhen {
         return allDay ? String(localized: "\(day), all day") : "\(day), \(clock(date, calendar: calendar, locale: locale))"
     }
 
+    /// When an event runs, as an invite's card says it, on the same clock as the rest: "Sat 21 Nov, 23:55 – 00:40",
+    /// "Thu 26 Nov, all day", "Thu 26 Nov – Sat 28 Nov". Its end's day is said where it lasts a day or more. Nil where
+    /// the start can't be read.
+    static func span(start: String, end: String, allDay: Bool, calendar: Calendar = .current,
+                     locale: Locale = .current) -> String? {
+        guard let from = moment(start, calendar: calendar) else { return nil }
+        let day = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
+            .weekday(.abbreviated).day().month(.abbreviated)
+        let to = moment(end, calendar: calendar).flatMap { $0 > from ? $0 : nil }
+        if allDay {
+            // A day's event ends as the day after its last begins.
+            guard let to, let last = calendar.date(byAdding: .day, value: -1, to: to),
+                  !calendar.isDate(last, inSameDayAs: from), last > from else {
+                return String(localized: "\(from.formatted(day)), all day")
+            }
+            return "\(from.formatted(day)) – \(last.formatted(day))"
+        }
+        let begins = "\(from.formatted(day)), \(clock(from, calendar: calendar, locale: locale))"
+        guard let to else { return begins }
+        let ends = clock(to, calendar: calendar, locale: locale)
+        return to.timeIntervalSince(from) < 24 * 3600 ? "\(begins) – \(ends)" : "\(begins) – \(to.formatted(day)), \(ends)"
+    }
+
     /// "3:00 pm", lowered as the page writes it.
     static func clock(_ date: Date, calendar: Calendar = .current, locale: Locale = .current) -> String {
         date.formatted(Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)

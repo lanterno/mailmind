@@ -553,8 +553,17 @@ struct DeskInviteCard: View {
     var body: some View {
         if let desk, let opened = context.opened, let invite = opened.invite {
             InviteCard(copy: context.copy, invite: invite, part: opened.invitePart, replies: desk.invites,
-                       link: desk.link, notices: desk.notices)
+                       link: desk.link, notices: desk.notices,
+                       next: Self.next(of: invite, in: context.copy,
+                                       upcoming: desk.brief.upcoming + AppStatus.shared.upcoming))
         }
+    }
+
+    /// A series' next time, where Today & next lists this message's (the brief's list, or the reminder's, read each
+    /// minute): the core works out when a series falls next, and lists the soonest few. A single event's is its own.
+    static func next(of invite: API.Invite, in copy: MailCopy, upcoming: [API.UpcomingEvent]) -> API.UpcomingEvent? {
+        guard !invite.rrule.isEmpty || !(invite.rdates ?? []).isEmpty else { return nil }
+        return upcoming.first { MailCopy(key: $0.key, folder: $0.folder, uid: $0.uid, account: $0.account) == copy }
     }
 }
 
