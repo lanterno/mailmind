@@ -46,9 +46,12 @@ struct AccountForm: View {
                 VStack(spacing: 0) {
                     row("Email") {
                         VStack(alignment: .leading, spacing: 4) {
+                            // Each field says its row's name to VoiceOver: a plain field's own title is never shown,
+                            // and VoiceOver read only its prompt, or nothing once it held text.
                             TextField("Email", text: $draft.email, prompt: Text(verbatim: "you@example.com"))
                                 .textContentType(.emailAddress)
                                 .meadowComposeField()
+                                .accessibilityLabel("Email")
                                 .disabled(draft.editing != nil)
                             if draft.editing != nil {
                                 SettingHelp(String(localized:
@@ -87,12 +90,14 @@ struct AccountForm: View {
                         TextField("Alias", text: $draft.alias,
                                   prompt: Text("Optional: the name shown in the sidebar and on rows"))
                             .meadowComposeField()
+                            .accessibilityLabel("Alias")
                     }
                     row("Signature") {
                         TextField("Signature", text: $draft.signature, prompt: Text(signaturePrompt), axis: .vertical)
                             .lineLimit(3...6)
                             .padding(.vertical, 7)
                             .meadowComposeField()
+                            .accessibilityLabel("Signature")
                     }
                 }
             }
@@ -202,7 +207,9 @@ struct AccountForm: View {
                 TextField(hostName, text: host, prompt: Text(verbatim: prompt))
                     .meadowComposeField()
                     .focused($focused, equals: field)
+                    .accessibilityLabel(hostName)
                 TextField(portName, text: port).meadowComposeField().frame(width: 72)
+                    .accessibilityLabel(portName)
             }
             MeadowSegmentedChoice(label: String(localized: "Security"), selection: security,
                                   options: AccountDraft.Security.allCases.map { ($0, $0.label) }, fills: false)
@@ -234,6 +241,7 @@ struct AccountForm: View {
             SecureField("Password", text: $draft.password, prompt: Text(draft.passwordPrompt))
                 .meadowComposeField()
                 .focused($focused, equals: .password)
+                .accessibilityLabel("Password")
             SettingHelp(String(localized: "Kept in your login Keychain, never in a file."))
             if draft.type == .gmail {
                 AppPasswordSteps()
