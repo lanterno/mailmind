@@ -53,13 +53,19 @@ final class MenuKeysTests: XCTestCase {
         XCTAssertEqual(mailbox.toast?.id, before, "with nothing more to say")
     }
 
-    /// Edit, Message and Mailbox as the menu bar holds them for the window in front, as AppKit's menus.
-    private func bar(mailbox: Mailbox?, window: MessageWindowVerbs?, writing: MailWriting?) -> NSMenu {
+    /// Edit, Message, Mailbox, Assistant and Window as the menu bar holds them for the window in front, as AppKit's
+    /// menus, with the mail window open or closed as `door` says.
+    private func bar(mailbox: Mailbox?, window: MessageWindowVerbs?, writing: MailWriting?,
+                     door: MailWindowDoor = .alwaysOpen) -> NSMenu {
         let tools = ReaderTools(print: {}, find: { [weak self] in self?.found += 1 })
+        let status = AppStatus(newMail: NewMailAlerts(notifier: SystemNotifier.Silent(), isActive: { true },
+                                                      badge: { _ in }, announce: { _ in }))
         let menus: [(String, AnyView)] = [
-            ("Edit", AnyView(FindInMessageItem(tools: tools, messageWindow: window != nil))),
-            ("Message", AnyView(MessageMenuItems(mailbox: mailbox, window: window, writing: writing))),
-            ("Mailbox", AnyView(MailboxMenuItems(mailbox: mailbox))),
+            ("Edit", AnyView(FindInMessageItem(tools: tools, messageWindow: window != nil, window: window, door: door))),
+            ("Message", AnyView(MessageMenuItems(mailbox: mailbox, window: window, writing: writing, door: door))),
+            ("Mailbox", AnyView(MailboxMenuItems(mailbox: mailbox, door: door))),
+            ("Assistant", AnyView(AssistantMenuItems(status: status, door: door))),
+            ("Window", AnyView(MailWindowItem(door: door))),
         ]
         let bar = NSMenu(title: "Main")
         for (title, items) in menus {
@@ -75,6 +81,98 @@ final class MenuKeysTests: XCTestCase {
 
     private final class Fired: @unchecked Sendable {
         var titles: [String] = []
+    }
+
+    /// The mail window as a test opens and closes it, and how often the menus opened it again.
+    private final class Door {
+        var open = false
+        var reopened = 0
+    }
+
+    /// The titles of `menu`'s items in a menu bar, as AppKit shows them.
+    private func titles(_ menu: String, in bar: NSMenu) -> [String] {
+        bar.item(withTitle: menu)?.submenu?.items.map(\.title) ?? []
+    }
+
+    /// Whether the item titled `title` in a menu bar is enabled.
+    private func enabled(_ title: String, in bar: NSMenu) throws -> Bool {
+        let items = bar.items.flatMap { $0.submenu?.items ?? [] }
+        return try XCTUnwrap(items.first { $0.title == title }, "\(title) in \(items.map(\.title))").isEnabled
+    }
+
+    /// With the mail window closed, SwiftUI still hands the menus its mailbox, its desk and its message as they were,
+    /// so their items once acted on a window that wasn't there. A place opens the window again and goes there
+    /// (All Inboxes, a folder, Today's Brief); what acts on a message, search and the palette wait for it; Window
+    /// offers it again; and a message's own window, still open, keeps its verbs.
+    func testWithTheMailWindowClosedAPlaceOpensItAgainAndAMessagesVerbsWait() async throws {
+        let app = MailApp()
+        self.app = app
+        let mailbox = app.mailbox
+        mailbox.wire = Fixture.server(rows: Array(Fixture.inbox.prefix(6))).wire
+        await mailbox.refresh()
+        mailbox.tab = .all
+        app.place = .folder(account: Fixture.ada, folder: "INBOX")
+        let list = try XCTUnwrap(app.list)
+        await until { list.copy(at: 0) != nil }
+        let copy = MailCopy(try XCTUnwrap(list.copy(at: 0)))
+        mailbox.open(copy)
+        let writing = MailWriting(replyTo: copy, draft: nil, current: nil)
+        let door = Door()
+        let doors = MailWindowDoor(isOpen: { door.open }, mailbox: { mailbox }, reopen: { door.reopened += 1 })
+        // What SwiftUI hands the menus once the mail window has closed: its mailbox and message as they were.
+        let closed = { self.bar(mailbox: mailbox, window: nil, writing: writing, door: doors) }
+        let zero: CGKeyCode = 29, one: CGKeyCode = 18, b: CGKeyCode = 11, k: CGKeyCode = 40, f: CGKeyCode = 3
+        let r: CGKeyCode = 15, u: CGKeyCode = 32, a: CGKeyCode = 0
+        let commandZero = try Self.press(zero, .maskCommand)
+        try XCTSkipUnless(commandZero.charactersIgnoringModifiers == "0", "this Mac's keyboard has no 0 where a US one has")
+
+        XCTAssertEqual(titles("Window", in: closed()), ["MailMind"], "Window offers the mail window again")
+        XCTAssertEqual(fired(commandZero, in: closed), ["All Inboxes"])
+        XCTAssertEqual(app.place, .allInboxes)
+        XCTAssertEqual(door.reopened, 1, "the mail window opens again, on All Inboxes")
+        XCTAssertEqual(fired(try Self.press(one, .maskCommand), in: closed), ["Inbox"])
+        XCTAssertEqual(app.place?.isInbox, true)
+        XCTAssertEqual(door.reopened, 2)
+        XCTAssertEqual(fired(try Self.press(b, [.maskAlternate, .maskCommand]), in: closed), ["Today’s Brief"])
+        XCTAssertEqual(app.place, .desk(.brief))
+        XCTAssertEqual(door.reopened, 3)
+
+        // A message, search and the palette wait for the window.
+        let waits: [(CGKeyCode, CGEventFlags)] = [(r, .maskCommand), (a, [.maskControl, .maskCommand]),
+                                                  (u, [.maskShift, .maskCommand]), (f, .maskCommand),
+                                                  (f, [.maskAlternate, .maskCommand]), (k, .maskCommand)]
+        for (code, held) in waits {
+            XCTAssertEqual(fired(try Self.press(code, held), in: closed), [], "\(code) with \(held) waits")
+        }
+        for title in ["Reply", "Forward", "Archive", "Delete", "Next Unread", "Search", "Command Palette…",
+                      "Find in Message…"] {
+            XCTAssertFalse(try enabled(title, in: closed()), "\(title) waits for the mail window")
+        }
+        XCTAssertFalse(mailbox.searchFocus)
+        XCTAssertFalse(mailbox.paletteOpen)
+        XCTAssertEqual(door.reopened, 3, "none of them opened the window")
+
+        // A message's own window, still open, acts on its message as before; once closed, it acts on nothing.
+        let verbs = MessageWindowVerbs(copy: copy, mailbox: mailbox, reader: ReaderModel(), routes: nil)
+        let own = { self.bar(mailbox: nil, window: verbs, writing: writing, door: doors) }
+        XCTAssertTrue(try enabled("Reply", in: own()))
+        XCTAssertTrue(try enabled("Archive", in: own()))
+        verbs.closed = true
+        XCTAssertFalse(try enabled("Reply", in: own()), "a closed message window's message waits too")
+        XCTAssertFalse(try enabled("Archive", in: own()))
+
+        // Open again, the window's own values are acted on, and Window lists it as it lists every window.
+        door.open = true
+        let open = { self.bar(mailbox: mailbox, window: nil, writing: writing, door: doors) }
+        XCTAssertEqual(titles("Window", in: open()), [])
+        app.place = .folder(account: Fixture.ada, folder: "INBOX")
+        await until { app.list?.copy(at: 0) != nil }
+        mailbox.open(copy)
+        XCTAssertTrue(try enabled("Archive", in: open()))
+        XCTAssertTrue(try enabled("Reply", in: open()))
+        XCTAssertEqual(fired(commandZero, in: open), ["All Inboxes"])
+        XCTAssertEqual(app.place, .allInboxes)
+        XCTAssertEqual(door.reopened, 3, "an open window isn't opened again")
     }
 
     /// The items `event` fires in a menu bar `make` draws afresh, by their titles.
