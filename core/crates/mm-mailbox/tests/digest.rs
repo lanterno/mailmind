@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use mm_kernel::errors::Fault;
 use mm_kernel::seams::{Clock, Moment};
+use mm_kernel::zone::Utc;
 use mm_mailbox::digest::{Digest, NotSyncing};
 use mm_mailbox::ports::{AccountBook, AiStatus, DigestReads, Faces, StoredDigest};
 use serde_json::{Value, json};
@@ -64,6 +65,7 @@ fn digest(accounts: Vec<&'static str>) -> Value {
         Arc::new(AiOff),
         "full",
         Arc::new(Frozen),
+        Arc::new(Utc),
     );
     digest.answer().expect("the digest")
 }

@@ -171,7 +171,7 @@ fn a_sent_thread_waits_on_its_first_recipient() {
         first_sent: Some(now - 3 * 86_400),
         recipients: Some(" lin@example.test , bea@example.test".to_owned()),
     };
-    let item = waiting_item(&row, moment(now));
+    let item = waiting_item(&row, moment(now), &Utc);
     assert_eq!(item["waiting_label"], "Sent 3d ago · no reply");
     assert_eq!(item["to"], "lin@example.test");
     assert_eq!(item["from_name"], "ada@example.test");

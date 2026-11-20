@@ -93,19 +93,22 @@ fn a_wall_clock_time_is_placed_as_python_placed_it() {
 #[test]
 fn rel_time_says_how_long_ago_as_a_list_does() {
     let now = Moment::from_micros(1_793_620_800_000_000); // 2026-11-02T12:00:00Z
-    let said = |iso: &str| relative::rel_time(Some(iso), now);
-    assert_eq!(said("2026-11-02T11:30:00+00:00"), "just now");
+    let said = |iso: &str| relative::rel_time(Some(iso), now, &Utc);
+    assert_eq!(said("2026-11-02T11:58:31+00:00"), "just now", "within a minute and a half, as the page says it");
+    assert_eq!(said("2026-11-02T11:58:30+00:00"), "1m ago");
+    assert_eq!(said("2026-11-02T11:30:00+00:00"), "30m ago");
     assert_eq!(said("2026-11-02T07:00:00+00:00"), "5h ago");
     assert_eq!(said("2026-11-02T13:00:00+01:00"), "just now", "an offset is counted");
     assert_eq!(said("2026-11-02T07:00:00"), "5h ago", "no zone is UTC's");
+    assert_eq!(said("2026-11-02T12:00:30+00:00"), "just now", "a little ahead of the clock, the same day");
     assert_eq!(said("2026-11-01T11:00:00+00:00"), "yesterday");
     assert_eq!(said("2026-10-29T12:00:00+00:00"), "4d ago");
     assert_eq!(said("2026-10-19T12:00:00+00:00"), "2w ago");
     assert_eq!(said("2026-09-05T12:00:00+00:00"), "Sep 05");
-    assert_eq!(said("2026-11-03T12:00:00+00:00"), "-1d ago", "a day ahead is days of -1, as Python said it");
+    assert_eq!(said("2026-11-03T12:00:00+00:00"), "Nov 03", "a day still to come is its date");
     assert_eq!(said("not a time at all"), "not a time");
-    assert_eq!(relative::rel_time(Some(""), now), "");
-    assert_eq!(relative::rel_time(None, now), "");
+    assert_eq!(relative::rel_time(Some(""), now, &Utc), "");
+    assert_eq!(relative::rel_time(None, now, &Utc), "");
 }
 
 #[test]

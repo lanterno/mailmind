@@ -2,6 +2,7 @@
 //! nothing, whatever the AI said of it before it was, as the brief leaves it out.
 
 use mm_kernel::seams::Moment;
+use mm_kernel::zone::Utc;
 use mm_mailbox::listing::{listed_item, snoozed_item};
 use mm_mailbox::ports::Row;
 use serde_json::{Value, json};
@@ -30,15 +31,15 @@ fn asks(item: &Value) -> [bool; 4] {
 
 #[test]
 fn a_row_carries_what_the_verdict_asks_of_you() {
-    assert_eq!(asks(&listed_item(&row(0), false, NOW)), [true, true, true, false]);
-    assert_eq!(asks(&listed_item(&row(0), true, NOW)), [true, true, true, false]);
+    assert_eq!(asks(&listed_item(&row(0), false, NOW, &Utc)), [true, true, true, false]);
+    assert_eq!(asks(&listed_item(&row(0), true, NOW, &Utc)), [true, true, true, false]);
     assert_eq!(asks(&snoozed_item(&row(0), NOW)), [true, true, true, false]);
 }
 
 #[test]
 fn a_row_read_as_junk_asks_nothing_though_the_ai_said_it_needed_you_before() {
     for grouped in [false, true] {
-        let item = listed_item(&row(1), grouped, NOW);
+        let item = listed_item(&row(1), grouped, NOW, &Utc);
         assert_eq!(asks(&item), [false; 4]);
         // What the AI said stays to be read, and needs you again if the sender's rule goes.
         assert_eq!(item["action"], json!("Check the sign-in"));
