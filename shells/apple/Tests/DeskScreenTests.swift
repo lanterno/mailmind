@@ -189,7 +189,7 @@ final class DeskScreenTests: XCTestCase {
         try draw("snooze-until", width: 300, SnoozeChooser(
             copies: [DeskFixture.ada, DeskFixture.grace], model: attention, canUnsnooze: true, menu: MeadowMenuModel(),
             close: {}).padding(20))
-        notices.say("Snoozed", undoable: true)
+        notices.say("Snoozed", undo: "Snooze")
         try draw("notice", width: 420, height: 80, DeskNoticeBanner(notices: notices, undo: {}).padding(12))
     }
 }

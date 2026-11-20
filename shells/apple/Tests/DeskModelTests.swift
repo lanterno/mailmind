@@ -1115,12 +1115,13 @@ final class DeskModelTests: XCTestCase {
 
     func testNoticesGoWhereTheWindowSaysThem() {
         var heard: [String] = []
-        notices.relay = { text, undoable in heard.append("\(text) \(undoable)") }
+        notices.relay = { text, undo in heard.append("\(text), Undo \(undo ?? "none")") }
 
-        notices.say("Snoozed", undoable: true)
+        notices.say("Snoozed", undo: "Snooze")
+        notices.say("Unsnoozed")
 
         XCTAssertNil(notices.shown)
-        XCTAssertEqual(heard, ["Snoozed true"])
+        XCTAssertEqual(heard, ["Snoozed, Undo Snooze", "Unsnoozed, Undo none"], "what Undo takes back, by name")
     }
 
     // MARK: Invites

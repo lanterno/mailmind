@@ -607,6 +607,48 @@ final class OpenedMessageVerbsTests: XCTestCase {
         await waiting(for: "a message opened from outside closes") { world.app.selection.copy == nil }
     }
 
+    /// Snooze and Mute offer Undo on their toast, and so on Edit ▸ Undo as "Undo Snooze" and "Undo Mute": ⌘Z, sent
+    /// to the window as the menu sends it, asks the server to undo once, as z and the toast's Undo do; and once z has
+    /// taken it back, Edit ▸ Undo has nothing of it left to take back again.
+    func testSnoozeAndMuteAreOnEditUndoAndZAndCommandZShareOneUndo() async throws {
+        let server = Self.server()
+        server.on("POST", API.Post.Mute.path, API.OnThread(ok: true, threadId: "t1"))
+        let world = await world(server)
+        await inbox(world.app)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled],
+                              backing: .buffered, defer: true)
+        let undo = try XCTUnwrap(window.undoManager)
+        undo.groupsByEvent = false
+        world.mailbox.undoManager = undo
+        func undos() -> Int { world.server.asked(API.Post.Undo.path).count }
+        func done(_ verb: () async -> Void) async {
+            undo.beginUndoGrouping()
+            await verb()
+            undo.endUndoGrouping()
+        }
+        let commandZ = Selector(("undo:"))
+
+        await done { await world.desk.attention.snooze([MailCopy(Self.rows[0])], .preset(.tomorrow)) }
+        XCTAssertNotNil(world.mailbox.toast?.undo, "the toast offers Undo")
+        XCTAssertEqual(undo.undoActionName, "Snooze", "Edit ▸ Undo Snooze")
+        XCTAssertTrue(window.tryToPerform(commandZ, with: nil), "⌘Z")
+        await waiting(for: "⌘Z undoes Snooze") { undos() == 1 }
+        XCTAssertFalse(undo.canUndo)
+
+        await done { await world.desk.attention.mute([MailCopy(Self.rows[1])]) }
+        XCTAssertEqual(undo.undoActionName, "Mute", "Edit ▸ Undo Mute")
+        world.mailbox.undo()  // z, or the toast's Undo
+        await waiting(for: "z undoes Mute") { undos() == 2 }
+        XCTAssertFalse(undo.canUndo, "z took Edit ▸ Undo's with it: ⌘Z has nothing more of it to take back")
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(undos(), 2, "Mute was undone once")
+
+        await done { await world.desk.attention.snooze([MailCopy(Self.rows[2])], .preset(.tomorrow)) }
+        XCTAssertTrue(window.tryToPerform(commandZ, with: nil))
+        await waiting(for: "⌘Z undoes the second Snooze") { undos() == 3 }
+        XCTAssertNil(world.mailbox.toast?.undo, "its toast no longer offers Undo")
+    }
+
     /// Unsnooze in Snoozed, Unmute in Muted and Dismiss in Waiting take the message off the stack shown, so the list
     /// moves on as File does; and a message opened from outside the stack closes.
     func testUnsnoozeUnmuteAndDismissInTheirStacksMoveOnAsFileDoes() async throws {
