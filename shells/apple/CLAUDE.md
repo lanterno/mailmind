@@ -141,12 +141,17 @@ The Mac app is `io.github.lanterno.mailmind`, version `MARKETING_VERSION` in `pr
   closed set or limit the server owns: those come with the generated types.
 - **A mail body's frame has walls of its own.** The mail's content world runs no JavaScript; the web view keeps
   nothing on disk, follows no link or redirect, and its scheme (`mailmind-frame:`) answers only
-  `/api/message/body.html` through the core. The document's own sandbox policy stays the boundary, as in the page.
-  The app's one script runs in an isolated world of its own (`mailmind-frame`), which the mail's page can't see or
-  reach, and says only that a link was clicked, the href of the link under the pointer (for the status line, read
-  as that string alone) and how tall the content is; the shell checks the link with
-  `LinkRisk` and opens it in the default browser, never in the frame. The frame's look and the plain-text quote
-  fold are written into the document's bytes before WebKit reads them, never by a script.
+  `/api/message/body.html` through the core. The document's own sandbox policy stays the boundary, as in the page,
+  and under it WebKit runs no event listener or timer in any of the document's worlds, the app's own too, so the app
+  puts no script in the frame. Its Swift asks the document short questions from outside (`FrameAsk`), in an isolated
+  world of its own (`mailmind-frame`) that the mail's page can't see or reach: how tall the content is (as it loads,
+  for a few seconds after, at a new width, after a click or a key in it), the link at a click (a left click that
+  didn't drag, a middle click, Return on a focused link) and the href under the pointer (asked at most every few
+  frames, through a tracking area of the frame's own, and cleared as the pointer leaves). What comes back is the
+  mail's data, read only as `FrameMessage` reads it: a number for a height, an href of at most 8192 characters. The
+  shell checks a link with `LinkRisk` and opens it in the default browser, never in the frame. The frame's look and
+  the plain-text quote fold are written into the document's bytes before WebKit reads them, never by a script.
+  `MailFrameTests` load the document under the core's own headers, so what the sandbox stops shows there.
 - **Links, images and files leave the frame only on a person's say.** A link opens after `LinkRisk`'s check (a
   warning asks first); remote images load only when asked, as the page's do; an attachment is saved through a save
   panel or shown in Quick Look, never opened by the app.
