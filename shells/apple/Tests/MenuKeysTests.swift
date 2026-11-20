@@ -54,15 +54,17 @@ final class MenuKeysTests: XCTestCase {
     }
 
     /// Edit, Message, Mailbox, Assistant and Window as the menu bar holds them for the window in front, as AppKit's
-    /// menus, with the mail window open or closed as `door` says.
+    /// menus, with the mail window open or closed as `door` says, and the window AppKit says is key as `keyWindow`
+    /// heard it, where a test says.
     private func bar(mailbox: Mailbox?, window: MessageWindowVerbs?, writing: MailWriting?,
-                     door: MailWindowDoor = .alwaysOpen) -> NSMenu {
+                     door: MailWindowDoor = .alwaysOpen, keyWindow: KeyWindow? = nil) -> NSMenu {
         let tools = ReaderTools(print: {}, find: { [weak self] in self?.found += 1 })
         let status = AppStatus(newMail: NewMailAlerts(notifier: SystemNotifier.Silent(), isActive: { true },
                                                       badge: { _ in }, announce: { _ in }))
         let menus: [(String, AnyView)] = [
             ("Edit", AnyView(FindInMessageItem(tools: tools, messageWindow: window != nil, window: window, door: door))),
-            ("Message", AnyView(MessageMenuItems(mailbox: mailbox, window: window, writing: writing, door: door))),
+            ("Message", AnyView(MessageMenuItems(mailbox: mailbox, window: window, writing: writing,
+                                                 keyWindow: keyWindow, door: door))),
             ("Mailbox", AnyView(MailboxMenuItems(mailbox: mailbox, door: door))),
             ("Assistant", AnyView(AssistantMenuItems(status: status, door: door))),
             ("Window", AnyView(MailWindowItem(door: door))),
@@ -259,5 +261,137 @@ final class MenuKeysTests: XCTestCase {
         let ownFind = try item("Find in Message", in: FindInMessageItem(tools: tools, messageWindow: true))
         XCTAssertEqual(ownFind.keyEquivalent, "f")
         XCTAssertEqual(ownFind.keyEquivalentModifierMask, .command)
+    }
+
+    // MARK: The window AppKit says is key
+
+    /// The keys a request's body names, wherever in it.
+    private static func keys(_ value: JSONValue) -> [Int] {
+        switch value {
+        case .object(let fields):
+            var found: [Int] = []
+            if case .number(let key)? = fields["key"] { found.append(Int(key)) }
+            return found + fields.filter { $0.key != "key" }.values.flatMap(keys)
+        case .array(let items):
+            return items.flatMap(keys)
+        default:
+            return []
+        }
+    }
+
+    /// The keys each request to `path` named.
+    private static func keys(_ server: FakeServer, _ path: String) -> [Int] {
+        server.asked(path).flatMap { keys((try? JSONDecoder().decode(JSONValue.self, from: $0.body)) ?? .null) }
+    }
+
+    private static func content(_ shows: KeyWindow.Shows?, _ tracker: KeyWindow) -> AnyView {
+        AnyView(Color.clear.frame(width: 240, height: 120).keyWindowShows(shows, in: tracker))
+    }
+
+    /// A window as `MessageWindow` and `ComposeWindow` make theirs, which says what it shows to `tracker`.
+    private func tagged(_ shows: KeyWindow.Shows?, _ tracker: KeyWindow) -> (NSWindow, NSHostingView<AnyView>) {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 240, height: 120),
+                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let host = NSHostingView(rootView: Self.content(shows, tracker))
+        host.frame = window.contentLayoutRect
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+        return (window, host)
+    }
+
+    /// A message's own window, key: SwiftUI handed the menus none of its values there, or the mail window's, stale, so
+    /// Message › Reply did nothing while it was in front. As AppKit says it is key, every item of the Message menu acts
+    /// on its message, through the menu and through its key; and once the mail window is key again, on the mail
+    /// window's, whatever SwiftUI still hands on.
+    func testTheMessageMenuActsOnTheKeyMessageWindowsMessage() async throws {
+        let server = OpenedMessageVerbsTests.server()
+        server.on("POST", API.Post.Mute.path, API.OnThread(ok: true, threadId: "t90"))
+        let app = MailApp()
+        self.app = app
+        let mailbox = app.mailbox
+        mailbox.wire = server.wire
+        await mailbox.refresh()
+        let copy = OpenedMessageVerbsTests.away
+        let reader = ReaderModel()
+        reader.hold(copy, OpenedMessageVerbsTests.head(copy))
+        // What SwiftUI hands the menus while the message's window is key: no window, and the mail window's message.
+        let other = MailCopy(key: 1, folder: "INBOX", uid: 1, account: Fixture.ada)
+        let stale = MailWriting(replyTo: other)
+
+        let center = NotificationCenter()
+        let tracker = KeyWindow(center: center)
+        var verbs = MessageWindowVerbs(copy: copy, mailbox: mailbox, reader: reader, routes: server.wire)
+        let (window, host) = tagged(.message(verbs), tracker)
+        defer { window.close() }
+        center.post(name: NSWindow.didBecomeKeyNotification, object: window)
+        await until { tracker.message === verbs }
+        XCTAssertEqual(tracker.writing(focused: stale), MailWriting(replyTo: copy), "Reply answers the window's message")
+        let menus = { self.bar(mailbox: mailbox, window: nil, writing: stale, keyWindow: tracker) }
+        // A fresh window over the same message, once a verb has sent the last one's away.
+        func again() async {
+            verbs = MessageWindowVerbs(copy: copy, mailbox: mailbox, reader: reader, routes: server.wire)
+            host.rootView = Self.content(.message(verbs), tracker)
+            host.layoutSubtreeIfNeeded()
+            await until { tracker.message === verbs }
+        }
+
+        let a: CGKeyCode = 0, f: CGKeyCode = 3, r: CGKeyCode = 15, u: CGKeyCode = 32, l: CGKeyCode = 37
+        let m: CGKeyCode = 46, delete: CGKeyCode = 51
+        let commandR = try Self.press(r, .maskCommand)
+        try XCTSkipUnless(commandR.charactersIgnoringModifiers == "r", "this Mac's keyboard has no R where a US one has")
+
+        // Reply, Reply All and Forward, on the window's message.
+        XCTAssertEqual(fired(commandR, in: menus), ["Reply"])
+        XCTAssertEqual(fired(try Self.press(r, [.maskShift, .maskCommand]), in: menus), ["Reply All"])
+        XCTAssertEqual(fired(try Self.press(f, [.maskShift, .maskCommand]), in: menus), ["Forward"])
+
+        // Mark, Star and Reply Later ask the server about it, and leave it in the window.
+        XCTAssertEqual(fired(try Self.press(u, [.maskShift, .maskCommand]), in: menus).count, 1)
+        await until { !server.asked(API.Post.Seen.path).isEmpty }
+        XCTAssertEqual(Self.keys(server, API.Post.Seen.path), [copy.key])
+        XCTAssertEqual(fired(try Self.press(l, [.maskShift, .maskCommand]), in: menus).count, 1)
+        await until { !server.asked(API.Post.Flag.path).isEmpty }
+        XCTAssertEqual(Self.keys(server, API.Post.Flag.path), [copy.key])
+        XCTAssertEqual(fired(try Self.press(l, [.maskControl, .maskCommand]), in: menus), ["Reply Later"])
+        await until { !server.asked(API.Post.Replylater.path).isEmpty }
+        XCTAssertEqual(Self.keys(server, API.Post.Replylater.path), [copy.key])
+
+        // Move To… asks where, over the window.
+        XCTAssertEqual(fired(try Self.press(m, [.maskShift, .maskCommand]), in: menus), ["Move To…"])
+        XCTAssertEqual(verbs.moving?.from, copy.folder)
+        verbs.moving = nil
+
+        // Archive, Delete, Mute and Snooze each send it away, and the window closes.
+        XCTAssertEqual(fired(try Self.press(a, [.maskControl, .maskCommand]), in: menus), ["Archive"])
+        await until { verbs.left }
+        XCTAssertEqual(Self.keys(server, API.Post.Archive.path), [copy.key])
+        await again()
+        XCTAssertEqual(fired(try Self.press(delete, .maskCommand), in: menus), ["Delete"])
+        await until { verbs.left }
+        XCTAssertEqual(Self.keys(server, API.Post.Trash.path), [copy.key])
+        await again()
+        XCTAssertEqual(fired(try Self.press(m, [.maskControl, .maskCommand]), in: menus), ["Mute Thread"])
+        await until { verbs.left }
+        XCTAssertEqual(Self.keys(server, API.Post.Mute.path), [copy.key])
+        await again()
+        let snooze = try XCTUnwrap(menus().item(withTitle: "Message")?.submenu?.item(withTitle: "Snooze")?.submenu)
+        snooze.update()
+        let first = try XCTUnwrap(snooze.items.firstIndex { $0.isEnabled && !$0.title.isEmpty },
+                                  "\(snooze.items.map(\.title))")
+        snooze.performActionForItem(at: first)
+        await until { verbs.left }
+        XCTAssertEqual(Self.keys(server, API.Post.Snooze.path), [copy.key])
+
+        // The mail window key again: the menus act on its mailbox, though SwiftUI hands on the message window still.
+        await again()
+        let mail = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 100, height: 100), styleMask: [.titled, .closable],
+                            backing: .buffered, defer: false)
+        mail.isReleasedWhenClosed = false
+        defer { mail.close() }
+        center.post(name: NSWindow.didResignKeyNotification, object: window)
+        center.post(name: NSWindow.didBecomeKeyNotification, object: mail)
+        XCTAssertNil(tracker.messageWindow(focused: verbs))
+        XCTAssertEqual(tracker.writing(focused: stale), stale)
     }
 }
