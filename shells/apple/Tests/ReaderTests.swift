@@ -1,7 +1,7 @@
 import Foundation
 import XCTest
 
-/// What the frame's script may say, what a link does, and what stands around a body.
+/// What the app reads from a frame, what a link does, and what stands around a body.
 @MainActor
 final class ReaderTests: XCTestCase {
     func testTheFramesMessagesAreReadAndNothingElse() {

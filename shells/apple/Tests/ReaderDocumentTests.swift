@@ -142,40 +142,6 @@ final class ReaderDocumentTests: XCTestCase {
         XCTAssertEqual(painted, Self.rgb(night.background), "the night's paper, never white")
     }
 
-    /// The frame's own script says the href of the link the pointer comes onto, and an empty one as it leaves for
-    /// what is no link or leaves the frame, once each; nothing is clicked, so nothing opens.
-    func testTheFramesScriptSaysTheLinkUnderThePointer() async throws {
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .nonPersistent()
-        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
-        let heard = FrameHeard()
-        FrameScript.install(in: configuration.userContentController, handler: heard)
-        defer { FrameScript.remove(from: configuration.userContentController) }
-        let view = WKWebView(frame: CGRect(x: 0, y: 0, width: 480, height: 200), configuration: configuration)
-        let loaded = FrameLoaded()
-        view.navigationDelegate = loaded
-        view.loadHTMLString("<!doctype html><html><body><p id=\"p\">Hi <a id=\"a\" href=\"https://a.example.test/x\">"
-                            + "<b id=\"b\">the plan</b></a></p></body></html>", baseURL: nil)
-        await loaded.wait()
-        func pointer(_ type: String, on id: String, to: String? = nil) async throws {
-            let related = to.map { "document.getElementById('\($0)')" } ?? "null"
-            _ = try await view.callAsyncJavaScript(
-                "document.getElementById('\(id)').dispatchEvent(new MouseEvent('\(type)', {bubbles: true, relatedTarget: \(related)}));",
-                contentWorld: FrameScript.world)
-        }
-        let link = URL(string: "https://a.example.test/x")
-        try await pointer("mouseover", on: "b")
-        await until { heard.said.last == .hover(link) }
-        try await pointer("mouseover", on: "a")
-        try await pointer("mouseover", on: "p")
-        await until { heard.said.last == .hover(nil) }
-        try await pointer("mouseover", on: "a")
-        await until { heard.said.last == .hover(link) }
-        try await pointer("mouseout", on: "a")
-        await until { heard.said.last == .hover(nil) }
-        XCTAssertEqual(heard.said, [.hover(link), .hover(nil), .hover(link), .hover(nil)], "each change once")
-    }
-
     /// The status line says where the link goes while the pointer is over one, and nothing once it isn't.
     func testTheStatusLineSaysWhereTheLinkGoes() {
         let hover = LinkHover()
@@ -819,17 +785,6 @@ final class ReaderDocumentTests: XCTestCase {
 }
 
 /// A web view's first load, finished.
-/// What the frame's script said, as the frame reads it.
-@MainActor
-private final class FrameHeard: NSObject, WKScriptMessageHandler {
-    private(set) var said: [FrameMessage] = []
-
-    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.world.name == FrameScript.world.name, let read = FrameMessage(message.body) else { return }
-        if case .hover = read { said.append(read) }
-    }
-}
-
 private final class FrameLoaded: NSObject, WKNavigationDelegate {
     private var done = false
     private var waiting: CheckedContinuation<Void, Never>?

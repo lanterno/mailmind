@@ -1,0 +1,366 @@
+import AppKit
+import WebKit
+import XCTest
+
+/// A mail body's frame under the policy the core really sends with it: the document comes through the frame's own
+/// scheme handler, answered by a test core's `/api/message/body.html` with the core's headers (the sandbox that runs
+/// no script among them) and the test's mail as its body. Under that policy no listener or timer runs in any world of
+/// the document, so the frame must still measure its content, follow a link a person clicks and say the link under
+/// the pointer, while nothing of the mail's own runs.
+@MainActor
+final class MailFrameTests: XCTestCase {
+    private static let key = "8d2b6f0a4c8e2a6d0f4b8c2e6a0d4f8b2c6e0a4d8f2b6c0e4a8d2f6b0c4e8a2d"
+    private static let copy = MailCopy(key: 7, folder: "INBOX", uid: 7, account: "ada@example.test")
+    private var folder: URL!
+    private var core: Core?
+    private var shown: [Shown] = []
+
+    override func setUp() async throws {
+        _ = NSApplication.shared
+        folder = FileManager.default.temporaryDirectory.appending(path: "mailmind-frame-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        core = try await Core.open(CoreHome(folder: folder.path(percentEncoded: false),
+                                            variables: ["MAILMIND_DB_KEY": Self.key, "MAILMIND_NOSYNC": "1"],
+                                            standIn: folder.appending(path: "keychain.json").path(percentEncoded: false)))
+    }
+
+    override func tearDown() async throws {
+        for frame in shown {
+            MailFrame.dismantleNSView(frame.view, coordinator: frame.walls)
+            frame.window.close()
+        }
+        shown = []
+        if let core { await core.close() }
+        core = nil
+        try? FileManager.default.removeItem(at: folder)
+    }
+
+    // MARK: The frame
+
+    /// A frame on the screen as the reader shows one, and what it told.
+    @MainActor
+    private final class Shown {
+        let view: FrameWebView
+        let walls: FrameGuard
+        let window: NSWindow
+        var heights: [CGFloat] = []
+        var links: [FrameLink] = []
+        var hovers: [URL?] = []
+        var loaded: Bool?
+
+        init(view: FrameWebView, walls: FrameGuard, window: NSWindow) {
+            self.view = view
+            self.walls = walls
+            self.window = window
+        }
+    }
+
+    /// The document the core makes of a body (`mm_content::frame`): its `<base target="_blank">` and nothing else
+    /// in its head.
+    private static func document(_ body: String) -> String {
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><base target=\"_blank\"></head><body>"
+            + body + "</body></html>"
+    }
+
+    /// The frame's route as the core answers it, with `body` in place of the stored mail it would have read: the
+    /// core's headers, the policy among them, as it sent them for this very request.
+    private func source(_ body: String) throws -> FrameSource {
+        let core = try XCTUnwrap(core)
+        let document = Data(Self.document(body).utf8)
+        return FrameSource { target in
+            let answer = await core.send("GET", target, Data())
+            return CoreAnswer(status: 200, contentType: answer.contentType, headers: answer.headers, body: document)
+        }
+    }
+
+    /// The policy the core sends with a frame's document: a sandbox that keeps the origin and allows no script.
+    private func policy() async throws -> String {
+        let core = try XCTUnwrap(core)
+        let target = try XCTUnwrap(ReaderModel.frameURL(Self.copy).flatMap(FrameScheme.target(of:)))
+        let answer = await core.send("GET", target, Data())
+        return try XCTUnwrap(answer.headers.first { $0.name.lowercased() == "content-security-policy" }?.value)
+    }
+
+    /// `body` in a frame `width` points wide, in a window of its own, as the reader makes one: the frame's least
+    /// height until it is measured, and what it tells kept.
+    private func frame(_ body: String, width: CGFloat = 480, html: Bool = true) async throws -> Shown {
+        let policy = try await policy()
+        XCTAssertTrue(policy.hasPrefix("sandbox allow-same-origin;"), policy)
+        XCTAssertFalse(policy.contains("allow-scripts"), "the document's sandbox runs no script: \(policy)")
+        let url = try XCTUnwrap(ReaderModel.frameURL(Self.copy))
+        let look = MailLook.of(html: html, prefs: .init(), darkAppearance: false, dark: ReaderPalette.of(dark: true),
+                               light: ReaderPalette.of(dark: false))
+        let walls = FrameGuard(source: try source(body), url: url, look: look, html: html)
+        let view = MailFrame.webView(walls, title: "Email body")
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 400), styleMask: [.titled],
+                              backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = view
+        window.orderFront(nil)
+        let frame = Shown(view: view, walls: walls, window: window)
+        walls.told = { [weak frame] message in
+            switch message {
+            case .height(let height): frame?.heights.append(height)
+            case .link(let link): frame?.links.append(link)
+            case .hover(let url): frame?.hovers.append(url)
+            }
+        }
+        walls.loaded = { [weak frame] ok in frame?.loaded = ok }
+        shown.append(frame)
+        return frame
+    }
+
+    /// What the test asks the document, in a world of the test's own.
+    private func asked(_ frame: Shown, _ script: String) async throws -> Any? {
+        try await frame.view.callAsyncJavaScript(script, arguments: [:], in: nil, contentWorld: .world(name: "test"))
+    }
+
+    /// The middle of the element `id`, in the frame's viewport.
+    private func middle(of id: String, in frame: Shown) async throws -> CGPoint {
+        let read = try await asked(frame, """
+            const r = document.getElementById("\(id)").getBoundingClientRect();
+            return [r.left + r.width / 2, r.top + r.height / 2];
+            """) as? [NSNumber]
+        let point = try XCTUnwrap(read)
+        return CGPoint(x: point[0].doubleValue, y: point[1].doubleValue)
+    }
+
+    /// The content's height as the document has it now, at the frame's width.
+    private func needs(_ frame: Shown) async throws -> CGFloat {
+        let read = try await asked(frame, "return document.body.scrollHeight;") as? NSNumber
+        return CGFloat(try XCTUnwrap(read).doubleValue)
+    }
+
+    /// Wait until `done`, for as long as a frame may take to load and settle.
+    private func until(_ done: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async {
+        let started = ContinuousClock.now
+        while !done() {
+            guard ContinuousClock.now - started < .seconds(8) else {
+                XCTFail("still waiting after eight seconds", file: file, line: line)
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    /// Wait until the frame's document has loaded and the frame shows: a person clicks only what they can see.
+    private func loaded(_ frame: Shown, file: StaticString = #filePath, line: UInt = #line) async {
+        await until({ frame.loaded != nil && !frame.view.isHidden }, file: file, line: line)
+        XCTAssertEqual(frame.loaded, true, file: file, line: line)
+    }
+
+    /// Wait until the frame has loaded and told the height its content needs now, taller than `above`, and return it.
+    @discardableResult
+    private func settled(_ frame: Shown, above: CGFloat = 0, file: StaticString = #filePath, line: UInt = #line)
+        async throws -> CGFloat
+    {
+        await loaded(frame, file: file, line: line)
+        let started = ContinuousClock.now
+        while true {
+            let needs = try await needs(frame)
+            if needs > above, frame.heights.last == needs { return needs }
+            guard ContinuousClock.now - started < .seconds(8) else {
+                XCTFail("the content needs \(needs), and the frame told \(frame.heights)", file: file, line: line)
+                return needs
+            }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
+    // MARK: Events, as AppKit hands them to the frame
+
+    private func mouse(_ type: NSEvent.EventType, at point: CGPoint, in frame: Shown, clicks: Int = 1) -> NSEvent {
+        let inWindow = frame.view.convert(point, to: nil)
+        return NSEvent.mouseEvent(with: type, location: inWindow, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                  windowNumber: frame.window.windowNumber, context: nil, eventNumber: 0,
+                                  clickCount: clicks, pressure: type == .mouseMoved ? 0 : 1)!
+    }
+
+    /// A click at `point`, as AppKit hands it to the view under the pointer, which is the frame: down there, and up
+    /// `moved` points on. (The test's window is never key, so the window would take a first click to make it key,
+    /// where a person's reader is.)
+    private func click(at point: CGPoint, in frame: Shown, moved: CGFloat = 0, clicks: Int = 1) {
+        let under = frame.view.superview.flatMap { $0.hitTest(frame.view.convert(point, to: $0)) }
+        XCTAssertTrue(under === frame.view, "the frame takes a click on its body")
+        frame.view.mouseDown(with: mouse(.leftMouseDown, at: point, in: frame, clicks: clicks))
+        frame.view.mouseUp(with: mouse(.leftMouseUp, at: CGPoint(x: point.x + moved, y: point.y), in: frame,
+                                       clicks: clicks))
+    }
+
+    /// A middle click at `point`: the other button's events with the middle button's number.
+    private func middleClick(at point: CGPoint, in frame: Shown) throws {
+        for type in [NSEvent.EventType.otherMouseDown, .otherMouseUp] {
+            let cg = try XCTUnwrap(mouse(type, at: point, in: frame).cgEvent)
+            cg.setIntegerValueField(.mouseEventButtonNumber, value: 2)
+            let event = try XCTUnwrap(NSEvent(cgEvent: cg))
+            if type == .otherMouseDown { frame.view.otherMouseDown(with: event) } else { frame.view.otherMouseUp(with: event) }
+        }
+    }
+
+    /// `event` handed to the owner of each of the frame's tracking areas that asked for it, as AppKit does.
+    private func track(_ event: NSEvent, _ asked: NSTrackingArea.Options, _ selector: Selector, in frame: Shown) {
+        let owners = frame.view.trackingAreas.filter { $0.options.contains(asked) }.compactMap { $0.owner as? NSObject }
+        XCTAssertFalse(owners.isEmpty, "the frame's areas track the pointer")
+        for owner in owners where owner.responds(to: selector) { owner.perform(selector, with: event) }
+    }
+
+    /// The pointer moving to `point` over the frame.
+    private func move(to point: CGPoint, in frame: Shown) {
+        track(mouse(.mouseMoved, at: point, in: frame), .mouseMoved, #selector(NSResponder.mouseMoved(with:)), in: frame)
+    }
+
+    /// The pointer leaving the frame.
+    private func leave(_ frame: Shown) throws {
+        let event = try XCTUnwrap(NSEvent.enterExitEvent(
+            with: .mouseExited, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: frame.window.windowNumber, context: nil, eventNumber: 0, trackingNumber: 0, userData: nil))
+        track(event, .mouseEnteredAndExited, #selector(NSResponder.mouseExited(with:)), in: frame)
+    }
+
+    // MARK: Its height
+
+    private static let gif = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="
+
+    private static let newsletter = "<h1>The guild's autumn letter</h1>"
+        + (1...60).map { "<p>Paragraph \($0): the long table, the menu and who brings the bread.</p>" }.joined()
+
+    /// A 60-paragraph newsletter measures its whole height, thousands of points, not the 400 the reader starts a
+    /// frame at; and it shows, handing the wheel on to the reader, which scrolls it as one.
+    func testALongBodyMeasuresItsWholeHeight() async throws {
+        let frame = try await frame(Self.newsletter)
+        let height = try await settled(frame)
+        XCTAssertGreaterThan(height, 3000, "the whole letter")
+        XCTAssertFalse(frame.view.isHidden)
+        XCTAssertTrue(frame.view.forwardsScroll, "the reader scrolls the frame as one")
+    }
+
+    /// A narrower frame wraps its lines anew, and measures again, taller.
+    func testANewWidthMeasuresAgain() async throws {
+        let frame = try await frame(Self.newsletter)
+        let wide = try await settled(frame)
+        frame.window.setContentSize(NSSize(width: 240, height: 400))
+        let narrow = try await settled(frame, above: wide)
+        XCTAssertGreaterThan(narrow, wide, "more lines at 240 points")
+    }
+
+    /// A folded quote, its `<details>` opened by a click on its summary (natively: no script runs in the frame),
+    /// makes the body taller, and the frame measures again.
+    func testAQuoteUnfoldedMeasuresAgain() async throws {
+        let frame = try await frame("<p>Thursday, then.</p><details id=\"quote\"><summary id=\"fold\">Show quoted text"
+                                    + "</summary><div style=\"height:900px\">On Mon, Bo wrote: shall we?</div></details>")
+        let folded = try await settled(frame)
+        click(at: try await middle(of: "fold", in: frame), in: frame)
+        let unfolded = try await settled(frame, above: folded)
+        XCTAssertGreaterThanOrEqual(unfolded, folded + 800, "the quote's height counted")
+    }
+
+    /// An image that comes in after the document has loaded (a person showed the images, and one arrives late)
+    /// makes the body taller: the frame measures again for a while after it loads.
+    func testABodyThatGrowsAfterItLoadedMeasuresAgain() async throws {
+        let frame = try await frame("<p>Your tickets:</p><img id=\"code\" alt=\"\" src=\"\(Self.gif)\" "
+                                    + "style=\"display:block;width:200px;height:0\"><p>See you there.</p>")
+        let before = try await settled(frame)
+        try await Task.sleep(for: .milliseconds(600))
+        _ = try await asked(frame, "document.getElementById(\"code\").style.height = \"700px\"; return null;")
+        let grown = try await settled(frame, above: before)
+        XCTAssertGreaterThanOrEqual(grown, before + 600, "the image's height counted")
+    }
+
+    // MARK: Its links
+
+    /// A link clicked goes to the opener with its href and its text, the text the mail shows, which `LinkRisk`
+    /// checks the address against; the frame itself stays on the message.
+    func testALinkClickedGoesToTheOpenerWithItsHrefAndText() async throws {
+        let frame = try await frame("<p>Please confirm at <a id=\"bank\" href=\"https://evil.example.test/login\">"
+                                    + "<b>bank.example.test</b></a> today.</p>")
+        await loaded(frame)
+        click(at: try await middle(of: "bank", in: frame), in: frame)
+        await until { !frame.links.isEmpty }
+        let link = FrameLink(href: "https://evil.example.test/login", text: "bank.example.test")
+        XCTAssertEqual(frame.links, [link])
+        guard case .browse(_, let warning?) = LinkOpening.of(href: link.href, text: link.text, senderDomain: "example.test")
+        else { return XCTFail("the link's words name another address than it goes to: a warning asks first") }
+        XCTAssertTrue(warning.contains("different domain"), warning)
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(frame.links.count, 1, "once")
+        XCTAssertEqual(frame.view.url, try XCTUnwrap(ReaderModel.frameURL(Self.copy)), "the frame went nowhere")
+    }
+
+    /// Every link in the core's document opens a new tab (`<base target="_blank">`), which the sandbox stops before
+    /// anything hears of it: one that says so itself opens through the opener too, as does a middle click, and
+    /// Return on a link the keyboard reached. A drag that ends elsewhere, or a press on no link, opens nothing.
+    func testATargetBlankLinkOpensAsDoTheMiddleButtonAndReturn() async throws {
+        let frame = try await frame("<p><a id=\"menu\" href=\"https://guild.example.test/menu\" target=\"_blank\">"
+                                    + "The menu</a></p><p id=\"words\">Thursday at seven.</p>"
+                                    + "<p><a id=\"rsvp\" href=\"mailto:bo@example.test?subject=Thursday\">Tell Bo</a></p>")
+        await loaded(frame)
+        let menu = FrameLink(href: "https://guild.example.test/menu", text: "The menu")
+        let rsvp = FrameLink(href: "mailto:bo@example.test?subject=Thursday", text: "Tell Bo")
+
+        click(at: try await middle(of: "menu", in: frame), in: frame)
+        await until { frame.links == [menu] }
+
+        try middleClick(at: try await middle(of: "rsvp", in: frame), in: frame)
+        await until { frame.links == [menu, rsvp] }
+
+        _ = try await asked(frame, "document.getElementById(\"menu\").focus(); return null;")
+        frame.window.makeFirstResponder(frame.view)
+        frame.view.keyDown(with: try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: frame.window.windowNumber, context: nil, characters: "\r", charactersIgnoringModifiers: "\r",
+            isARepeat: false, keyCode: 36)))
+        await until { frame.links == [menu, rsvp, menu] }
+
+        click(at: try await middle(of: "menu", in: frame), in: frame, moved: 60)
+        click(at: try await middle(of: "words", in: frame), in: frame)
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(frame.links, [menu, rsvp, menu], "a drag, and a press on no link, open nothing")
+        XCTAssertEqual(frame.view.url, try XCTUnwrap(ReaderModel.frameURL(Self.copy)), "the frame went nowhere")
+    }
+
+    // MARK: The link under the pointer
+
+    /// The pointer over a link says its href, once; off it, nothing; back on it, the href again; and leaving
+    /// the frame clears it.
+    func testTheLinkUnderThePointerIsSaidAndCleared() async throws {
+        let frame = try await frame("<p id=\"words\">See <a id=\"menu\" href=\"https://guild.example.test/menu\">"
+                                    + "<b id=\"bold\">the menu</b></a> for Thursday.</p>")
+        await loaded(frame)
+        let menu = URL(string: "https://guild.example.test/menu")
+        let onLink = try await middle(of: "bold", in: frame)
+        move(to: onLink, in: frame)
+        await until { frame.hovers == [menu] }
+        move(to: CGPoint(x: onLink.x + 1, y: onLink.y), in: frame)
+        move(to: CGPoint(x: 400, y: 300), in: frame)
+        await until { frame.hovers == [menu, nil] }
+        move(to: onLink, in: frame)
+        await until { frame.hovers == [menu, nil, menu] }
+        try leave(frame)
+        await until { frame.hovers == [menu, nil, menu, nil] }
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(frame.hovers, [menu, nil, menu, nil], "each change once")
+    }
+
+    // MARK: The mail's own
+
+    /// Nothing of the mail's own runs: not a `<script>`, not an `onload=` on an image or an SVG, not a `javascript:`
+    /// link clicked, which WebKit drops where scripts are off, and which the opener would refuse anyway. A link beside
+    /// it still opens. The sanitizer would have taken them all out; the frame's walls hold without it.
+    func testNothingOfTheMailsOwnRuns() async throws {
+        let frame = try await frame("<script>document.documentElement.dataset.script = \"ran\";</script>"
+                                    + "<img alt=\"\" src=\"\(Self.gif)\" onload=\"document.documentElement.dataset.img = 'ran'\">"
+                                    + "<svg width=\"10\" height=\"10\" onload=\"document.documentElement.dataset.svg = 'ran'\"></svg>"
+                                    + "<p><a id=\"run\" href=\"javascript:document.documentElement.dataset.link = 'ran'\">Run</a></p>"
+                                    + "<p><a id=\"menu\" href=\"https://guild.example.test/menu\">The menu</a></p>")
+        await loaded(frame)
+        click(at: try await middle(of: "run", in: frame), in: frame)
+        click(at: try await middle(of: "menu", in: frame), in: frame)
+        await until { frame.links.contains { $0.href == "https://guild.example.test/menu" } }
+        for link in frame.links where link.href != "https://guild.example.test/menu" {
+            XCTAssertEqual(LinkOpening.of(href: link.href, text: link.text, senderDomain: nil), .refuse, link.href)
+        }
+        try await Task.sleep(for: .milliseconds(300))
+        let marks = try await asked(frame, "return JSON.stringify(document.documentElement.dataset);") as? String
+        XCTAssertEqual(marks, "{}", "nothing of the mail's ran")
+    }
+}
