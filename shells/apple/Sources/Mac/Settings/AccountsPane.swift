@@ -15,9 +15,11 @@ struct AccountsPane: View {
     @State private var testNext: String?
     @Environment(\.meadow) private var meadow
 
-    init(status: AppStatus, chosen: String? = nil) {
+    /// `form`: the form it opens on, as a test opens one.
+    init(status: AppStatus, chosen: String? = nil, form: Editing? = nil) {
         self.status = status
         _chosen = State(initialValue: chosen)
+        _form = State(initialValue: form)
     }
 
     /// Which form is open: a new account, the one an address names, or that one opened from its Sync card on what

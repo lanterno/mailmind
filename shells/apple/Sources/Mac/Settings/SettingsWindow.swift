@@ -27,6 +27,8 @@ struct SettingsLayout: View {
     @Bindable var status: AppStatus
     var lights = true
     var opened = true
+    /// The account form Accounts opens on, over the window: a test's, to send it keys as a person's go.
+    var opening: AccountsPane.Editing?
     @Environment(\.meadow) private var meadow
     @Environment(\.dismiss) private var dismiss
 
@@ -84,7 +86,7 @@ struct SettingsLayout: View {
 
     @ViewBuilder private var pane: some View {
         switch status.settingsTab {
-        case .accounts: AccountsPane(status: status)
+        case .accounts: AccountsPane(status: status, form: opening)
         case .general: GeneralPane(status: status)
         case .notifications: NotificationsPane(status: status)
         case .ai: AIPane(status: status)
