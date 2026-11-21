@@ -47,12 +47,31 @@ final class MailFrameTests: XCTestCase {
         var links: [FrameLink] = []
         var hovers: [URL?] = []
         var loaded: Bool?
+        /// The reader the frame stands in, once `read` has put it in one.
+        var reader: NSScrollView?
+        /// How far down the reader's document the frame stands: the message's head above it.
+        var head: CGFloat = 0
 
         init(view: FrameWebView, walls: FrameGuard, window: NSWindow) {
             self.view = view
             self.walls = walls
             self.window = window
         }
+
+        /// The frame as tall as it last told, and the pane's 4 points, as `MessageContent` gives it; and room under
+        /// it in the reader's document for the files and the reply box.
+        func layOut() {
+            guard let reader, let document = reader.documentView else { return }
+            let width = reader.contentSize.width
+            let tall = heights.last.map { $0 + 4 } ?? 400
+            document.frame = NSRect(x: 0, y: 0, width: width, height: head + tall + 200)
+            view.frame = NSRect(x: 0, y: head, width: width, height: tall)
+        }
+    }
+
+    /// The reader's document: flipped, as SwiftUI's is.
+    private final class Paper: NSView {
+        override var isFlipped: Bool { true }
     }
 
     /// The document the core makes of a body (`mm_content::frame`): its `<base target="_blank">` and nothing else
@@ -100,7 +119,9 @@ final class MailFrameTests: XCTestCase {
         let frame = Shown(view: view, walls: walls, window: window)
         walls.told = { [weak frame] message in
             switch message {
-            case .height(let height): frame?.heights.append(height)
+            case .height(let height):
+                frame?.heights.append(height)
+                frame?.layOut()
             case .link(let link): frame?.links.append(link)
             case .hover(let url): frame?.hovers.append(url)
             }
@@ -113,6 +134,62 @@ final class MailFrameTests: XCTestCase {
     /// What the test asks the document, in a world of the test's own.
     private func asked(_ frame: Shown, _ script: String) async throws -> Any? {
         try await frame.view.callAsyncJavaScript(script, arguments: [:], in: nil, contentWorld: .world(name: "test"))
+    }
+
+    /// `frame` in a reader as the pane lays one out: a scroll view as tall as the window, `head` points of the
+    /// message's head above the frame in its document, and the frame as tall as it tells.
+    @discardableResult
+    private func read(_ frame: Shown, head: CGFloat = 120) -> NSScrollView {
+        let reader = NSScrollView(frame: frame.window.contentLayoutRect)
+        reader.hasVerticalScroller = true
+        reader.documentView = Paper(frame: .zero)
+        frame.window.contentView = reader
+        reader.documentView?.addSubview(frame.view)
+        frame.reader = reader
+        frame.head = head
+        frame.layOut()
+        return reader
+    }
+
+    /// How far the frame's document has scrolled itself, down.
+    private func scrolledInside(_ frame: Shown) async throws -> Double {
+        let read = try await asked(frame, "return window.scrollY;") as? NSNumber
+        return try XCTUnwrap(read).doubleValue
+    }
+
+    /// Whether `rect`, in the frame's viewport, sits well inside what the reader shows, never at its edge.
+    private func wellInside(_ rect: CGRect, of frame: Shown) throws -> Bool {
+        let clip = try XCTUnwrap(frame.reader).contentView
+        let y = frame.view.isFlipped ? rect.minY : frame.view.bounds.height - rect.maxY
+        let inReader = clip.convert(NSRect(x: rect.minX, y: y, width: rect.width, height: rect.height), from: frame.view)
+        let shown = clip.bounds
+        return rect.height > 0 && inReader.minY >= shown.minY + 60 && inReader.maxY <= shown.maxY - 60
+    }
+
+    /// The rectangle `script` returns as `[left, top, width, height]`, in the frame's viewport: nil for none.
+    private func rect(_ frame: Shown, _ script: String) async throws -> CGRect? {
+        guard let read = try await asked(frame, script) as? [NSNumber], read.count == 4 else { return nil }
+        return CGRect(x: read[0].doubleValue, y: read[1].doubleValue, width: read[2].doubleValue,
+                      height: read[3].doubleValue)
+    }
+
+    /// Where the selection Find made is.
+    private func selection(_ frame: Shown) async throws -> CGRect? {
+        try await rect(frame, """
+            const s = window.getSelection();
+            if (!s || s.rangeCount === 0) return null;
+            const r = s.getRangeAt(0).getBoundingClientRect();
+            return [r.left, r.top, r.width, r.height];
+            """)
+    }
+
+    /// Where the element `selector` picks is.
+    private func place(of selector: String, in frame: Shown) async throws -> CGRect {
+        let read = try await rect(frame, """
+            const r = document.querySelector("\(selector)").getBoundingClientRect();
+            return [r.left, r.top, r.width, r.height];
+            """)
+        return try XCTUnwrap(read)
     }
 
     /// The middle of the element `id`, in the frame's viewport.
@@ -140,6 +217,19 @@ final class MailFrameTests: XCTestCase {
                 return
             }
             try? await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    /// Wait until `done` says so, asking again and again, for as long as a frame may take.
+    private func eventually(_ what: String, file: StaticString = #filePath, line: UInt = #line,
+                            _ done: () async throws -> Bool) async throws
+    {
+        let started = ContinuousClock.now
+        while try await !done() {
+            guard ContinuousClock.now - started < .seconds(5) else {
+                return XCTFail("still waiting after five seconds: \(what)", file: file, line: line)
+            }
+            try await Task.sleep(for: .milliseconds(20))
         }
     }
 
@@ -362,5 +452,66 @@ final class MailFrameTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(300))
         let marks = try await asked(frame, "return JSON.stringify(document.documentElement.dataset);") as? String
         XCTAssertEqual(marks, "{}", "nothing of the mail's ran")
+    }
+
+    // MARK: Find in Message
+
+    /// The core's fold of a rich mail's quote (`mm_content`'s `FOLD_OPEN`), which its sanitizer writes round the first
+    /// quoted reply and all after it.
+    private static let coreFold = "<details class=\"mm-quote\"><summary>\u{b7}\u{b7}\u{b7} quoted text</summary>"
+
+    /// A long statement: a heading, forty sections, then a quote the core folded, whose last line is THE LAST LINE.
+    private static let statement = "<h1 id=\"heading\">The bank's statement</h1>"
+        + (1...40).map { "<p id=\"section\($0)\">Section \($0): the market rules change in spring. Stalls book a week "
+            + "ahead, and the hall opens at eight.</p>" }.joined()
+        + "<p>On Mon, Bo wrote:</p>" + coreFold
+        + (1...20).map { "<p>Quoted line \($0) from the earlier mail about the hall.</p>" }.joined()
+        + "<p id=\"last\">THE LAST LINE</p></details>"
+
+    /// Find in a folded quote opens it, as WebKit does: the frame measures again as Find goes, so the match is inside
+    /// it and never past its foot, and the reader scrolls so the match sits well inside what it shows.
+    func testFindInAFoldedQuoteMeasuresTheFrameAgainAndShowsTheMatch() async throws {
+        let frame = try await frame(Self.statement)
+        read(frame)
+        let folded = try await settled(frame)
+        let find = ReaderFind()
+        find.add(frame.view)
+        find.query = "Quoted line 7"
+        await find.next()
+        XCTAssertEqual(find.found, true)
+        let opened = try await needs(frame)
+        XCTAssertGreaterThan(opened, folded + 400, "the match opened the quote")
+        XCTAssertEqual(frame.heights.last, opened, "the frame measured it as Find went")
+        XCTAssertGreaterThanOrEqual(frame.view.frame.height, opened, "and grew to hold it")
+        let selected = try await selection(frame)
+        let match = try XCTUnwrap(selected)
+        XCTAssertTrue(try wellInside(match, of: frame), "the match well inside the reader, not at its edge: \(match)")
+        let inside = try await scrolledInside(frame)
+        XCTAssertEqual(inside, 0, "the frame never scrolls itself")
+    }
+
+    /// The match at the foot of a quote Find opened: WebKit shows it by scrolling the frame inside itself, before the
+    /// frame is as tall as its content. The frame's scroll goes back to its top and the reader shows the match; back
+    /// at the reader's top, the body starts at its heading.
+    func testFindNeverLeavesTheFrameScrolledInsideItself() async throws {
+        let frame = try await frame(Self.statement)
+        let reader = read(frame)
+        try await settled(frame)
+        let find = ReaderFind()
+        find.add(frame.view)
+        find.query = "THE LAST LINE"
+        await find.next()
+        XCTAssertEqual(find.found, true)
+        try await Task.sleep(for: .milliseconds(300))
+        let inside = try await scrolledInside(frame)
+        XCTAssertEqual(inside, 0, "the frame never keeps a scroll of its own")
+        let selected = try await selection(frame)
+        let match = try XCTUnwrap(selected)
+        XCTAssertTrue(try wellInside(match, of: frame), "the match well inside the reader: \(match)")
+
+        reader.contentView.scroll(to: .zero)
+        reader.reflectScrolledClipView(reader.contentView)
+        let heading = try await place(of: "#heading", in: frame)
+        XCTAssertTrue((0..<60).contains(heading.minY), "the body starts at its heading: \(heading)")
     }
 }
