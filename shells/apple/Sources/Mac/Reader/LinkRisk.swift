@@ -2,11 +2,9 @@
 import Foundation
 
 /// Whether a link clicked in mail deserves a warning before it opens, as the page's `mailbox/linkRisk.ts` decides it,
-/// in the same words. Pure: it reads the link's href and text and the sender's domain, and nothing else.
-///
-/// It reads two things the page's doesn't yet: the whole name a link's words give, where the page's stops after three
-/// labels (`www.bank.co.uk` read as `bank.co`), and example.test, the fictional mail's own, as a suffix each
-/// organisation has a name under.
+/// in the same words. Pure: it reads the link's href and text and the sender's domain, and nothing else. Both read
+/// the whole name a link's words give (`www.bank.co.uk` is bank.co.uk, never bank.co), and take example.test, the
+/// fictional mail's own, as a suffix each organisation has a name under.
 enum LinkRisk {
     /// The labels under which a country gives organisations a second level of their own (`bank.co.uk`).
     private static let secondLevel: Set<String> = [
