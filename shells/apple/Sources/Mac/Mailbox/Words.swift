@@ -35,8 +35,10 @@ enum Words {
 
     /// Whether a name of several words is a person's. Never what an organisation's name has: a figure, an ampersand,
     /// a comma ("Mori, Ren" is said whole), a word such as Service, Desk, Bank or The. Then, with an address, a
-    /// person's mostly carries their name (ren@, ren.mori@, rmori@) and a role's doesn't (news@, orders@, noreply@);
-    /// with none, the name's shape: two to four capitalised words.
+    /// person's mostly carries their first name (ren@, ren.mori@), or their last with the first's initial beside it
+    /// (rmori@, mori.r@), and a role's doesn't (news@, orders@, noreply@). The last name alone isn't a person's sign:
+    /// an organisation's address carries the last word of its name as often ("Guild Gazette" <gazette@>), and a
+    /// person's name said whole is never wrong. With no address, the name's shape: two to four capitalised words.
     private static func isPerson(_ words: [String], address: String?) -> Bool {
         let folded = words.map {
             $0.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
@@ -51,8 +53,11 @@ enum Words {
         }
         let local = address[..<at].folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
         if roleAddresses.contains(local.filter(\.isLetter)) || noReply.contains(where: local.hasPrefix) { return false }
-        let ends = [folded[0], folded[folded.count - 1]].map { $0.filter(\.isLetter) }
-        return ends.contains { $0.count >= 2 && local.contains($0) }
+        let carried = local.filter(\.isLetter)
+        let first = folded[0].filter(\.isLetter), last = folded[folded.count - 1].filter(\.isLetter)
+        if first.count >= 2, carried.contains(first) { return true }
+        guard last.count >= 2, let initial = first.first else { return false }
+        return carried == "\(initial)\(last)" || carried == "\(last)\(initial)"
     }
 
     /// Words a person's name doesn't have and an organisation's often does, folded.
