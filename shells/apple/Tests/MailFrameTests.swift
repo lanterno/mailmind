@@ -110,15 +110,20 @@ final class MailFrameTests: XCTestCase {
     }
 
     /// `body` in a frame `width` points wide, in a window of its own, as the reader makes one: the frame's least
-    /// height until it is measured, and what it tells kept.
-    private func frame(_ body: String, width: CGFloat = 480, html: Bool = true) async throws -> Shown {
+    /// height until it is measured, and what it tells kept. `printed`: the copy File › Print makes of it instead, with
+    /// a head and the look on paper.
+    private func frame(_ body: String, width: CGFloat = 480, html: Bool = true, printed: Bool = false) async throws
+        -> Shown
+    {
         let policy = try await policy()
         XCTAssertTrue(policy.hasPrefix("sandbox allow-same-origin;"), policy)
         XCTAssertFalse(policy.contains("allow-scripts"), "the document's sandbox runs no script: \(policy)")
         let url = try XCTUnwrap(ReaderModel.frameURL(Self.copy))
-        let look = MailLook.of(html: html, prefs: .init(), darkAppearance: false, dark: ReaderPalette.of(dark: true),
-                               light: ReaderPalette.of(dark: false))
+        let look = printed ? MessagePrinter.look(html: html, prefs: ReadingPrefs())
+            : MailLook.of(html: html, prefs: .init(), darkAppearance: false, dark: ReaderPalette.of(dark: true),
+                          light: ReaderPalette.of(dark: false))
         let walls = FrameGuard(source: try source(body), url: url, look: look, html: html)
+        if printed { walls.printHead = "<div id=\"printhead\">Your tickets</div>" }
         let view = MailFrame.webView(walls, title: "Email body")
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 400), styleMask: [.titled],
                               backing: .buffered, defer: false)
@@ -656,5 +661,25 @@ final class MailFrameTests: XCTestCase {
         await loaded(plain)
         words = try await said(plain)
         XCTAssertEqual(words, "none", "the plain fold's own words say Show and Hide")
+    }
+
+    // MARK: On paper
+
+    /// A printed copy has every `<details>` open, as paper can't unfold one: the core's quote, without its pill, which
+    /// only opens it, and the mail's own.
+    func testAPrintedCopyHasEveryDetailsOpen() async throws {
+        let frame = try await frame("<p>Your tickets are attached.</p><details id=\"own\"><summary>Terms</summary>"
+                                    + "<p>No refunds after Friday.</p></details>" + Self.coreFold
+                                    + "<p>On Mon, Bo wrote: shall we?</p></details>", printed: true)
+        await until { frame.loaded != nil }
+        XCTAssertEqual(frame.loaded, true)
+        let head = try await place(of: "#printhead", in: frame)
+        XCTAssertGreaterThan(head.height, 0, "the printed copy's head")
+        let own = try await place(of: "#own", in: frame), terms = try await place(of: "#own > summary", in: frame)
+        XCTAssertGreaterThan(own.height, terms.height + 15, "the mail's own details, open on paper")
+        let quote = try await place(of: "details.mm-quote", in: frame)
+        let pill = try await place(of: "details.mm-quote > summary", in: frame)
+        XCTAssertEqual(pill.height, 0, "no pill on paper")
+        XCTAssertGreaterThan(quote.height - pill.height, 15, "the quote, open on paper")
     }
 }
