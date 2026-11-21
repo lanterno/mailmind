@@ -628,4 +628,33 @@ final class MailFrameTests: XCTestCase {
         }
         XCTAssertGreaterThan(reader.contentView.bounds.minY, 1000, "down at the mail's foot")
     }
+
+    // MARK: The quote's fold
+
+    /// The core's fold of a rich mail's quote says only "··· quoted text", open or closed. The look draws what the
+    /// plain fold says in its place: Show while it is closed, Hide once it is open. A plain mail's fold says so
+    /// itself, and gets nothing drawn beside it.
+    func testTheRichQuotesToggleSaysShowOrHide() async throws {
+        let frame = try await frame("<p>Thursday, then.</p>" + Self.coreFold + "<p>On Mon, Bo wrote: shall we?</p></details>")
+        await loaded(frame)
+        let toggle = "document.querySelector(\"details.mm-quote > summary\")"
+        func said(_ frame: Shown) async throws -> String? {
+            try await asked(frame, "return getComputedStyle(\(toggle), \"::after\").content;") as? String
+        }
+        var words = try await said(frame)
+        XCTAssertEqual(words, "\"··· Show quoted text\"", "closed")
+        let own = try await asked(frame, "return getComputedStyle(\(toggle)).fontSize;") as? String
+        XCTAssertEqual(own, "0px", "its own words aren't drawn")
+        let pill = try await place(of: "details.mm-quote > summary", in: frame)
+        XCTAssertGreaterThan(pill.width, 100, "the pill holds the words drawn")
+        click(at: CGPoint(x: pill.midX, y: pill.midY), in: frame)
+        try await eventually("the quote opens") { try await asked(frame, "return \(toggle).parentElement.open;") as? Bool == true }
+        words = try await said(frame)
+        XCTAssertEqual(words, "\"··· Hide quoted text\"", "open")
+
+        let plain = try await self.frame("<pre>Thursday, then.\nOn Mon, Bo wrote:\n&gt; shall we?</pre>", html: false)
+        await loaded(plain)
+        words = try await said(plain)
+        XCTAssertEqual(words, "none", "the plain fold's own words say Show and Hide")
+    }
 }
