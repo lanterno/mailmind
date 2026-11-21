@@ -83,6 +83,11 @@ struct MailLook: Equatable, Sendable {
             + "details.mm-quote .mm-hide,details.mm-quote[open] .mm-show{display:none}"
             + "details.mm-quote[open] .mm-hide{display:inline}details.mm-quote>pre{margin-top:10px;"
             + "padding-left:14px;border-left:2px solid \(colors.quoteLine);color:\(colors.quoteInk);font-size:.9em}"
+            // The core's fold of a rich mail (`mm_content`'s `FOLD_OPEN`) says only "··· quoted text", open or
+            // closed: its words go undrawn, and the plain fold's are drawn in their place, Show or Hide as it stands.
+            + "details.mm-quote>summary:not(:has(.mm-show)){font-size:0}"
+            + "details.mm-quote>summary:not(:has(.mm-show))::after{content:\"\(PlainQuote.show)\";font-size:12px}"
+            + "details.mm-quote[open]>summary:not(:has(.mm-show))::after{content:\"\(PlainQuote.hide)\"}"
     }
 
     /// Whether the mail is shown dark: the person's choice, else in the dark appearance only plain text is, as rich
@@ -192,9 +197,11 @@ enum PlainQuote {
         return (lines[..<at].joined(separator: "\n"), lines[at...].joined(separator: "\n"))
     }
 
+    /// What the fold's pill says, closed and open.
+    static let show = "··· Show quoted text", hide = "··· Hide quoted text"
+
     /// The fold's pill, which says Show or Hide as the fold stands, with no script.
-    static let summary = "<summary><span class=\"mm-show\">··· Show quoted text</span>"
-        + "<span class=\"mm-hide\">··· Hide quoted text</span></summary>"
+    static let summary = "<summary><span class=\"mm-show\">\(show)</span><span class=\"mm-hide\">\(hide)</span></summary>"
 
     /// The core's document of a plain mail (`frame::of_text`: its text whole and escaped in one `<pre>`) with its
     /// quote folded into a `<details>`, which opens and closes with no script. Any other document is left as it is.
