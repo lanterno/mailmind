@@ -86,6 +86,10 @@ final class MailListModel: MessageRows {
     @ObservationIgnored private var shown: Range<Int> = 0..<0
     /// Bumped by a refresh, so a page asked for before it is dropped when it comes.
     @ObservationIgnored private var generation = 0
+    /// When what is held was last asked for: the list opened, or read again.
+    @ObservationIgnored private var readAt = Date()
+    /// What reads the list again while the rows on screen say how long ago in minutes or hours (`refreshIfAging`).
+    @ObservationIgnored private var aging: Task<Void, Never>?
     @ObservationIgnored private let load: Loader
     let selection: Selection?
     /// Run once, as the first page's answer comes, read or refused: what waits on knowing which rows the list holds.
@@ -96,9 +100,37 @@ final class MailListModel: MessageRows {
         self.load = load
     }
 
-    /// Ask for the first page.
+    /// Ask for the first page, and keep the rows' words on how long ago their mail came true as time passes.
     func start() {
+        readAt = Date()
         ask(0)
+        guard aging == nil else { return }
+        aging = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.agingTick)
+                // The list let go of (another place opened) ends this at its next tick.
+                guard let self else { return }
+                self.refreshIfAging(now: Date())
+            }
+        }
+    }
+
+    /// How often the rows on screen are looked at for words that have grown old.
+    static let agingTick: Duration = .seconds(60)
+
+    /// The server says how long ago a row's mail came ("just now", "12m ago", "5h ago") as the list is read, so those
+    /// words stand still until something reads it again. Read what is held again, in place as the event stream's
+    /// changes are, once a minute while a row on screen says minutes, and every ten while one says hours: only the
+    /// rows whose words changed are drawn again, and the selection, the scroll and the keyboard stay. Whether it did.
+    @discardableResult
+    func refreshIfAging(now: Date) -> Bool {
+        guard !shown.isEmpty, firstRowsAt != nil else { return false }
+        let since = now.timeIntervalSince(readAt)
+        guard since >= 60 else { return false }
+        let ages = shown.compactMap { copy(at: $0)?.ts }.map { now.timeIntervalSince1970 - Double($0) }
+        let due = ages.contains { $0 < 3600 } || (since >= 600 && ages.contains { $0 < 86_400 })
+        if due { refresh() }
+        return due
     }
 
     func row(at position: Int) -> MessageRow? {
@@ -159,6 +191,7 @@ final class MailListModel: MessageRows {
 
     /// Read again what is held, as the page refetches a list in place when the event stream says mail changed.
     func refresh() {
+        readAt = Date()
         generation += 1
         asked.removeAll()
         let held = pages.isEmpty ? [0] : Array(pages.keys).sorted()
