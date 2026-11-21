@@ -6,8 +6,8 @@ import WebKit
 /// File › Print (⌘P) for the open message: its subject, who it's from and to, and when, over its body, on paper.
 ///
 /// The body is the frame's own document, asked of the core again in a web view of its own off the window, so a
-/// conversation, a body taller than the reader or a window in Night all print the same: in the Day light, with the
-/// quote open. It has the frame's walls: the mail's JavaScript off, nothing kept on disk, the frame's scheme the only
+/// conversation, a body taller than the reader or a window in Night all print the same: in the Day light, with every
+/// fold open, the quote's and the mail's own. It has the frame's walls: the mail's JavaScript off, nothing kept on disk, the frame's scheme the only
 /// one answered, and no navigation. Remote images stay held back, as the frame holds them, unless a person asked to
 /// see this message's (`ShownImages`): then they print, as a ticket's code must.
 @MainActor
@@ -80,12 +80,22 @@ final class MessagePrinter: NSObject {
         return subject.isEmpty ? String(localized: "Message") : subject
     }
 
-    /// The look on paper: the Day light's prose and the mail's own colours, never darkened.
+    /// The look on paper: the Day light's prose and the mail's own colours, never darkened, and every `<details>` open
+    /// (`unfolded`).
     static func look(html: Bool, prefs: ReadingPrefs) -> MailLook {
         var set = prefs.look
         set.colors = .original
-        return MailLook.of(html: html, prefs: set, darkAppearance: false, dark: ReaderPalette.of(dark: true))
+        let look = MailLook.of(html: html, prefs: set, darkAppearance: false, dark: ReaderPalette.of(dark: true))
+        return MailLook(css: look.css + unfolded, inverted: look.inverted, sheet: look.sheet,
+                        readingFace: look.readingFace, paper: look.paper)
     }
+
+    /// Paper can't unfold anything, so every `<details>` prints open, the core's quote and the mail's own, through
+    /// the part of it that holds what it folds (`::details-content`). The quote's pill, which only opens it, is left
+    /// off. A WebKit that doesn't know `::details-content` (Safari 18.4's brought it, macOS 15.4's) drops both rules
+    /// and prints the folds closed, as before.
+    static let unfolded = "details::details-content{content-visibility:visible}"
+        + "@supports selector(::details-content){details.mm-quote>summary{display:none}}"
 
     /// The head a printed copy starts with: the subject, then From, To, Cc and Date, each the mail's own words
     /// escaped, so nothing in them is read as markup.
