@@ -396,6 +396,58 @@ final class ListKeysTests: XCTestCase {
         XCTAssertNil(app.place?.search, "the next Esc leaves the search")
     }
 
+    /// A file's Quick Look put up from the reader, a person back in the list: Esc takes the preview down first, the
+    /// list keeping the keyboard and its place, and the next Esc is the list's own.
+    func testEscTakesAFilesQuickLookDownBeforeTheListsOwnEsc() async throws {
+        let (app, controller) = try await table()
+        let window = window()
+        defer { window.close() }
+        window.contentView?.addSubview(controller.scrollView)
+        window.makeFirstResponder(controller.table)
+        app.place = .search(Search(q: "from:grace", account: Fixture.ada))
+        var taken = 0
+        QuickLookShown.up(UUID()) { taken += 1 }
+
+        press("\u{1b}", controller.table, code: 53)
+        XCTAssertEqual(taken, 1, "Esc takes the preview down")
+        XCTAssertFalse(QuickLookShown.isUp)
+        XCTAssertNotNil(app.place?.search, "and only that: the search stays")
+        XCTAssertTrue(window.firstResponder === controller.table, "the list keeps the keyboard")
+        press("\u{1b}", controller.table, code: 53)
+        XCTAssertEqual(taken, 1)
+        XCTAssertNil(app.place?.search, "the next Esc is the list's: it leaves the search")
+    }
+
+    /// The reader's files and the Document Hub show a file in Quick Look through `quickLookClosable`, which says
+    /// while it is up, so the list's Esc can take it down, and stops saying so once it went.
+    func testAFileShownInQuickLookIsOneEscCanTakeDown() throws {
+        let window = NSWindow(contentRect: NSRect(x: -4000, y: -4000, width: 300, height: 200), styleMask: [.titled],
+                              backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let preview = PreviewHolder()
+        window.contentView = NSHostingView(rootView: PreviewHolder.Shown(holder: preview))
+        window.orderFront(nil)
+        let base = FileManager.default.temporaryDirectory.appending(path: "ListKeysTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: base) }
+        func settle(until done: () -> Bool) {
+            for _ in 0..<60 where !done() { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
+        }
+        preview.url = try PreviewFiles.write(Data("fictional".utf8), named: "floor-plan.txt", in: base)
+        settle { QuickLookShown.isUp }
+        XCTAssertTrue(QuickLookShown.close(), "a file shown is one Esc can take down")
+        settle { preview.url == nil }
+        XCTAssertNil(preview.url, "closing it clears what the view shows")
+        XCTAssertFalse(QuickLookShown.close(), "and nothing is up after")
+
+        preview.url = try PreviewFiles.write(Data("fictional".utf8), named: "floor-plan.txt", in: base)
+        settle { QuickLookShown.isUp }
+        XCTAssertTrue(QuickLookShown.isUp)
+        preview.url = nil
+        settle { !QuickLookShown.isUp }
+        XCTAssertFalse(QuickLookShown.isUp, "a preview closed some other way is no longer up")
+    }
+
     func testEscWithSeveralChosenKeepsTheOneChosenLast() async throws {
         let (app, controller) = try await table()
         let table = controller.table
@@ -654,5 +706,22 @@ final class MessageWindowKeysTests: XCTestCase {
         keys.takeIfNowhere()
         XCTAssertTrue(window.firstResponder === keys)
         window.contentView = nil
+    }
+}
+
+/// A file shown in Quick Look while `url` is set, as the reader's files and the Document Hub show one.
+@MainActor
+@Observable
+private final class PreviewHolder {
+    var url: URL?
+
+    struct Shown: View {
+        @Bindable var holder: PreviewHolder
+
+        var body: some View {
+            // Read here, as a view's own `@State` is: a change draws the view again.
+            let _ = holder.url
+            Color.clear.quickLookClosable($holder.url)
+        }
     }
 }
