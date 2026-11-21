@@ -38,6 +38,8 @@ struct FrameSource: Sendable {
 ///   world can't see. They ask as the frame loads, as its width changes, after a click or a key in it, and as the
 ///   pointer moves over it; what they return is the mail's data, read as `FrameMessage` reads it, and a link is
 ///   checked before anything opens it.
+/// - The frame is as tall as its content and never keeps a scroll of its own: the reader scrolls. Find's match is
+///   asked where it stands, and the reader scrolls to it.
 struct MailFrame: NSViewRepresentable {
     let source: FrameSource
     let url: URL
@@ -149,6 +151,17 @@ enum FrameMessage: Equatable {
         if scheme != "mailto", url.host?.isEmpty ?? true { return nil }
         return url
     }
+
+    /// Where something the app asked about stands in the document's viewport, in CSS pixels, as a question returned
+    /// it (`FrameAsk.selection`): four finite numbers and nothing beside them, or nil.
+    static func rect(_ body: Any?) -> CGRect? {
+        guard let fields = body as? [String: Any], Set(fields.keys) == ["kind", "x", "y", "width", "height"],
+              fields["kind"] as? String == "rect" else { return nil }
+        let read = ["x", "y", "width", "height"].compactMap { (fields[$0] as? NSNumber)?.doubleValue }
+        guard read.count == 4, read.allSatisfy({ $0.isFinite && abs($0) <= 1_000_000 }), read[2] >= 0, read[3] >= 0
+        else { return nil }
+        return CGRect(x: read[0], y: read[1], width: read[2], height: read[3])
+    }
 }
 
 /// What the app asks of a frame, each a function body evaluated by Swift in a content world of its own: the mail's
@@ -200,6 +213,54 @@ enum FrameAsk {
         const a = at && at.closest ? at.closest("a[href]") : null;
         return { kind: "hover", href: a ? a.getAttribute("href") || "" : "" };
         """
+
+    /// Puts the document's own scroll back to its top, and keeps any across, which a wide table may have. A frame as
+    /// tall as its content has nothing to scroll, but a fold opened, or a match Find showed, before the frame measured
+    /// again scrolls it inside itself, and the reader's top would then show the body's middle.
+    static let toTop = """
+        if (window.scrollY !== 0) window.scrollTo(window.scrollX, 0);
+        return null;
+        """
+
+    /// Where the selection is, which Find in Message made.
+    static let selection = """
+        const s = window.getSelection();
+        if (!s || s.rangeCount === 0) return null;
+        const r = s.getRangeAt(0).getBoundingClientRect();
+        return { kind: "rect", x: r.left, y: r.top, width: r.width, height: r.height };
+        """
+
+    /// What `view`'s document returns to `question`, asked in the app's world: the mail's data, which only
+    /// `FrameMessage` reads. Nil for nothing, or an error.
+    static func said(_ question: String, _ arguments: [String: Any] = [:], of view: WKWebView) async -> Any? {
+        try? await view.callAsyncJavaScript(question, arguments: arguments, in: nil, contentWorld: world)
+    }
+}
+
+extension WKWebView {
+    /// Scroll the reader the frame stands in so `rect`, in the document's viewport in CSS pixels, sits well inside
+    /// what it shows: left where it is when it already does, else a third of the way down, never at an edge.
+    func reveal(_ rect: CGRect) {
+        let scale = max(magnification * pageZoom, 0.01)
+        var asked = CGRect(x: rect.minX * scale, y: rect.minY * scale, width: max(rect.width * scale, 1),
+                           height: max(rect.height * scale, 1))
+        if !isFlipped { asked.origin.y = bounds.height - asked.maxY }
+        guard let scroll = enclosingScrollView else {
+            scrollToVisible(asked)
+            return
+        }
+        let clip = scroll.contentView
+        let shown = clip.bounds, at = clip.convert(asked, from: self)
+        let margin = min(shown.height / 4, 120)
+        let above = clip.isFlipped ? at.minY - shown.minY : shown.maxY - at.maxY
+        let below = clip.isFlipped ? shown.maxY - at.maxY : at.minY - shown.minY
+        guard above < margin || below < margin else { return }
+        let lead = shown.height / 3
+        var origin = shown.origin
+        origin.y = clip.isFlipped ? at.minY - lead : at.maxY + lead - shown.height
+        clip.scroll(to: clip.constrainBoundsRect(CGRect(origin: origin, size: shown.size)).origin)
+        scroll.reflectScrolledClipView(clip)
+    }
 }
 
 /// The frame's web view: the reader scrolls as one, so a wheel that would only move the page up or down goes to the
@@ -471,9 +532,7 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate {
     /// Ask the document `question` in the app's world, and read what it returns as the mail's data: nil for nothing,
     /// an error, or anything `FrameMessage` doesn't read.
     private func ask(_ question: String, _ arguments: [String: Any] = [:]) async -> FrameMessage? {
-        guard let view else { return nil }
-        guard let said = try? await view.callAsyncJavaScript(question, arguments: arguments, in: nil,
-                                                             contentWorld: FrameAsk.world) else { return nil }
+        guard let view, let said = await FrameAsk.said(question, arguments, of: view) else { return nil }
         return FrameMessage(said)
     }
 
@@ -482,9 +541,12 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate {
     }
 
     /// Measure the content, and tell its height when it has changed: the frame shows once it has one, and stops
-    /// handing the wheel on once it is taller than the reader lets a frame grow.
+    /// handing the wheel on once it is taller than the reader lets a frame grow. Until then the frame never keeps a
+    /// scroll of its own.
     func measure() async {
-        guard case .height(let now)? = await ask(FrameAsk.height), now != height, let view else { return }
+        guard case .height(let now)? = await ask(FrameAsk.height), let view else { return }
+        if now < MailFrame.tallest { _ = await FrameAsk.said(FrameAsk.toTop, of: view) }
+        guard now != height else { return }
         height = now
         view.isHidden = false
         (view as? FrameWebView)?.forwardsScroll = now < MailFrame.tallest
@@ -505,6 +567,28 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate {
                 guard ContinuousClock.now < walls.settled else { return }
                 pause = min(pause * 2, .seconds(1))
             }
+        }
+    }
+
+    /// Find in Message selected a match here, and may have opened a fold for it and scrolled the frame inside itself
+    /// to show it: measure at once, which puts that scroll back to the top, wait for the reader to give the frame its
+    /// new height, then say where the match is in the document's viewport.
+    func found() async -> CGRect? {
+        settle(for: .seconds(1))
+        await measure()
+        await laidOut()
+        guard let view else { return nil }
+        return FrameMessage.rect(await FrameAsk.said(FrameAsk.selection, of: view))
+    }
+
+    /// Wait, a moment at most, until the reader has given the frame the height it was last told.
+    private func laidOut() async {
+        guard let height else { return }
+        let started = ContinuousClock.now
+        while let view, view.frame.height + 0.5 < min(height, MailFrame.tallest),
+              ContinuousClock.now - started < .milliseconds(500)
+        {
+            try? await Task.sleep(for: .milliseconds(16))
         }
     }
 

@@ -4,9 +4,9 @@ import SwiftUI
 import WebKit
 
 /// Find in Message (⌥⌘F; ⌘F in a message's own window): a word looked for in the open message's body, or each body
-/// a conversation shows, as a Mac's find bar does. WebKit finds and selects it in a frame; the app asks that frame where
-/// the selection is, in its own isolated world (`FrameAsk.world`, never the mail's), and the reader scrolls to it, as
-/// the frames are as tall as their content.
+/// a conversation shows, as a Mac's find bar does. WebKit finds and selects it in a frame; the frame measures again,
+/// as a match in a fold opens it, and the app asks it where the selection is, in its own isolated world
+/// (`FrameAsk.world`, never the mail's); then the reader scrolls to it, as the frames are as tall as their content.
 @MainActor
 @Observable
 final class ReaderFind {
@@ -20,6 +20,8 @@ final class ReaderFind {
     @ObservationIgnored private var frames: [Weak] = []
     /// The frame the last match was in, where the next look starts.
     @ObservationIgnored private var at = 0
+    /// Counts the looks, so a match a look found before the query changed again doesn't move the reader.
+    @ObservationIgnored private var round = 0
 
     private struct Weak {
         weak var view: WKWebView?
@@ -53,6 +55,8 @@ final class ReaderFind {
 
     /// Look for the query from where the last match was, on through the other frames, and round to the first.
     func next(backwards: Bool = false) async {
+        round += 1
+        let look = round
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else {
             found = nil
@@ -76,31 +80,25 @@ final class ReaderFind {
             if let result = try? await view.find(query, configuration: configuration), result.matchFound {
                 at = index
                 found = true
-                await Self.reveal(view)
+                await reveal(view, look: look)
                 return
             }
         }
         found = false
     }
 
-    /// Scroll the reader to the selection WebKit made: its rectangle, as the app's question reads it, made visible in
-    /// whatever scrolls the frame.
-    private static func reveal(_ view: WKWebView) async {
-        let script = """
-            const s = window.getSelection();
-            if (!s || s.rangeCount === 0) return null;
-            const r = s.getRangeAt(0).getBoundingClientRect();
-            return [r.left, r.top, r.width, r.height];
-            """
-        guard let read = try? await view.callAsyncJavaScript(script, arguments: [:], in: nil,
-                                                             contentWorld: FrameAsk.world) as? [NSNumber],
-              read.count == 4 else { return }
-        let rect = NSRect(x: read[0].doubleValue, y: read[1].doubleValue, width: read[2].doubleValue,
-                          height: read[3].doubleValue)
-        guard rect.minX.isFinite, rect.minY.isFinite else { return }
-        let y = view.isFlipped ? rect.minY : view.bounds.height - rect.maxY
-        view.scrollToVisible(NSRect(x: rect.minX, y: y, width: max(rect.width, 1), height: rect.height)
-            .insetBy(dx: 0, dy: -80))
+    /// Scroll the reader to the selection WebKit made, so it sits well inside what the reader shows. A match in a
+    /// fold opens it, and WebKit may scroll the frame inside itself to show it: a frame of the reader's measures
+    /// again first, its own scroll put back to the top (`FrameGuard.found`). Where the selection is comes from the
+    /// app's own world (`FrameAsk.world`), never the mail's.
+    private func reveal(_ view: WKWebView, look: Int) async {
+        let rect = if let frame = view as? FrameWebView, let walls = frame.walls {
+            await walls.found()
+        } else {
+            FrameMessage.rect(await FrameAsk.said(FrameAsk.selection, of: view))
+        }
+        guard let rect, look == round else { return }
+        view.reveal(rect)
     }
 
     private static func clearSelection(_ view: WKWebView) {
