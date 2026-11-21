@@ -32,7 +32,9 @@ final class LinkRiskTests: XCTestCase {
     func testASignInLinkThatLeavesTheSendersDomain() {
         XCTAssertTrue(LinkRisk.risk(href: "https://other.example.org/x", text: "Verify your account",
                                     senderDomain: "bank.example.test")?.contains("unfamiliar domain") ?? false)
-        XCTAssertNil(LinkRisk.risk(href: "https://www.example.test/x", text: "Verify your account", senderDomain: "bank.example.test"))
+        XCTAssertNil(LinkRisk.risk(href: "https://www.bank.example.test/x", text: "Verify your account", senderDomain: "bank.example.test"))
+        XCTAssertNil(LinkRisk.risk(href: "https://login.bank.example.test/x", text: "Verify your account",
+                                   senderDomain: "mail.bank.example.test"))
         XCTAssertNil(LinkRisk.risk(href: "https://other.example.org/x", text: "Read more", senderDomain: "bank.example.test"))
         XCTAssertTrue(LinkRisk.risk(href: "https://login.evil.co.uk/", text: "Sign in", senderDomain: "bank.co.uk")?
             .contains("unfamiliar domain") ?? false)
@@ -45,11 +47,47 @@ final class LinkRiskTests: XCTestCase {
         XCTAssertEqual(Set(LinkRisk.linkHosts("https://a.example.test/%zz")), ["a.example.test"])
     }
 
+    /// The domain an organisation registers, under a suffix of one label, of two under a country's own second level
+    /// (co.uk, com.au) or a few others like it, and under example.test, where each fictional organisation has a name.
     func testRegistrableDomains() {
-        let cases = [("example.test", "example.test"), ("mail.example.test", "example.test"), ("a.b.example.test", "example.test"),
+        let cases = [("example.test", "example.test"), ("mail.example.test", "mail.example.test"),
+                     ("a.b.example.test", "b.example.test"), ("www.pellbank.example.test", "pellbank.example.test"),
                      ("bank.co.uk", "bank.co.uk"), ("mail.bank.co.uk", "bank.co.uk"), ("shop.com.au", "shop.com.au"),
-                     ("t.co", "t.co"), ("x.t.co", "t.co"), ("co.uk", "co.uk"), ("MAIL.Example.Test", "example.test")]
+                     ("www.shop.com.au", "shop.com.au"), ("station.police.uk", "station.police.uk"),
+                     ("www.health.govt.nz", "health.govt.nz"), ("t.co", "t.co"), ("x.t.co", "t.co"), ("co.uk", "co.uk"),
+                     ("MAIL.Example.Test", "mail.example.test"), ("guild.test", "guild.test"), ("a.guild.test", "guild.test")]
         for (host, domain) in cases { XCTAssertEqual(LinkRisk.registrable(host), domain, host) }
+    }
+
+    /// The name a link's words give is read whole, as a person reads it, less its www.: a link that goes there passes,
+    /// however many labels the name and its suffix have; one that goes elsewhere is said with the name in full.
+    func testTheNameInTheLinksWordsIsReadWhole() throws {
+        let fine = [("https://www.pellbank.example.test/statement", "www.pellbank.example.test"),
+                    ("https://pellbank.example.test/", "Sign in at www.pellbank.example.test to see it."),
+                    ("https://pellbank.example.test/", "accounts.pellbank.example.test"),
+                    ("https://www.bank.co.uk/", "www.bank.co.uk"), ("https://login.bank.co.uk/", "www.bank.co.uk"),
+                    ("https://shop.com.au/cart", "Visit www.shop.com.au today")]
+        for (href, text) in fine {
+            XCTAssertNil(LinkRisk.risk(href: href, text: text, senderDomain: nil), "\(text) goes to \(href)")
+        }
+        let said = try XCTUnwrap(LinkRisk.risk(href: "https://pellbank-secure.example.test/login",
+                                               text: "www.pellbank.example.test", senderDomain: nil))
+        XCTAssertTrue(said.contains("than the link text suggests (pellbank.example.test)"), said)
+        for href in ["https://evil.co.uk/", "https://bank.co.uk.evil.example.test/", "https://www.bank.co/"] {
+            XCTAssertTrue(LinkRisk.risk(href: href, text: "www.bank.co.uk", senderDomain: nil)?
+                .contains("different domain") ?? false, href)
+        }
+    }
+
+    /// Each name under example.test is an organisation of its own, as each under co.uk is: a sign-in link to another
+    /// is unfamiliar, and a Reply-To at another leaves the sender's.
+    func testANameUnderExampleTestIsAnOrganisationOfItsOwn() {
+        XCTAssertTrue(LinkRisk.risk(href: "https://pellbank-secure.example.test/login", text: "Sign in to your account",
+                                    senderDomain: "pellbank.example.test")?.contains("unfamiliar domain") ?? false)
+        XCTAssertNil(LinkRisk.risk(href: "https://login.pellbank.example.test/", text: "Sign in",
+                                   senderDomain: "notices.pellbank.example.test"))
+        XCTAssertTrue(LinkRisk.leavesOrganisation("desk@elsewhere.example.test", "bo@bank.example.test"))
+        XCTAssertFalse(LinkRisk.leavesOrganisation("desk@help.bank.example.test", "bo@bank.example.test"))
     }
 
     func testLeavingTheOrganisation() {
