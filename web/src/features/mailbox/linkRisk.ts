@@ -1,11 +1,19 @@
 // Links in a sandboxed body are inert, so the parent takes each click and warns on a look-alike before it opens one.
 // Pure: it reads the link's href and text, and nothing else.
-// The domain an organisation registers: the last two labels of a host, or three under a country's own second level (co.uk).
+// The domain an organisation registers: the last two labels of a host, or three under a suffix of two labels: a country's own
+// second level (co.uk, com.au), a few others the public suffix list has (police.uk, govt.nz), each kept with its country, as
+// `ad.jp` is a suffix where `ad.nl` is a newspaper, and example.test, under which each organisation of the fictional mail has a
+// name of its own. The Mac app's `LinkRisk` reads it the same.
 const SECOND_LEVEL = new Set(["ac", "co", "com", "edu", "go", "gob", "gouv", "gov", "k12", "ltd", "me", "mil", "ne", "net", "nom", "or", "org", "plc", "sch"]);
+const TWO_LABELS = new Set([
+  "example.test", "nhs.uk", "police.uk", "govt.nz", "school.nz", "asn.au", "id.au", "ad.jp", "ed.jp", "gr.jp", "lg.jp", "re.kr",
+  "pe.kr", "gv.at", "in.th", "mi.th", "idv.hk", "idv.tw", "per.sg", "muni.il", "firm.in", "gen.in", "ind.in", "nic.in", "res.in",
+]);
 export function registrable(host: string): string {
   const labels = host.toLowerCase().split(".");
   const [second, top] = labels.slice(-2);
-  return labels.slice(top?.length === 2 && second && SECOND_LEVEL.has(second) ? -3 : -2).join(".");
+  const underCountry = top?.length === 2 && second !== undefined && SECOND_LEVEL.has(second);
+  return labels.slice(underCountry || TWO_LABELS.has(labels.slice(-2).join(".")) ? -3 : -2).join(".");
 }
 
 // The href's own host, and the host of any http(s) URL inside it: legitimate redirectors put it there.
@@ -45,7 +53,8 @@ export function linkRisk(href: string, text: string, senderDomain: string | unde
     return null;
   }
   if (/(^|\.)xn--/i.test(host)) return `a non-Latin “punycode” domain (${host}), often used to imitate a real site`;
-  const named = text.trim().match(/\b([a-z0-9-]+\.[a-z]{2,}(?:\.[a-z]{2,})?)\b/i);
+  // The name the words give, whole, as a person reads it: "www.bank.co.uk" is bank.co.uk, never bank.co.
+  const named = text.trim().match(/\b((?:[a-z0-9-]+\.)+[a-z]{2,})\b/i);
   const claimed = named ? named[1]!.toLowerCase().replace(/^www\./, "") : null;
   if (claimed) {
     // Only a real host in the URL clears it, not a substring planted in a path, a query or a subdomain.
