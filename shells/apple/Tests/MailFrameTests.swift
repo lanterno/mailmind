@@ -30,6 +30,15 @@ final class MailFrameTests: XCTestCase {
             frame.window.close()
         }
         shown = []
+        // A key WebKit gave back stays the app's current event, and AppKit eases a scroll made under one, so the next
+        // test's reader wouldn't move at once: an event of no kind, taken from the queue, takes its place.
+        if NSApp.currentEvent?.type == .keyDown, let none = NSEvent.otherEvent(
+            with: .applicationDefined, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
+            subtype: 0, data1: 0, data2: 0)
+        {
+            NSApp.postEvent(none, atStart: true)
+            _ = NSApp.nextEvent(matching: .applicationDefined, until: .distantFuture, inMode: .default, dequeue: true)
+        }
         if let core { await core.close() }
         core = nil
         try? FileManager.default.removeItem(at: folder)
@@ -148,6 +157,9 @@ final class MailFrameTests: XCTestCase {
         frame.reader = reader
         frame.head = head
         frame.layOut()
+        // The app the tests run in is never active, so no window of it is key; asked to be, this one is where the
+        // app sends the keys it is handed (`NSApp.sendEvent`), as it sends a person's to the reader's window.
+        frame.window.makeKeyAndOrderFront(nil)
         return reader
     }
 
@@ -292,6 +304,23 @@ final class MailFrameTests: XCTestCase {
         let owners = frame.view.trackingAreas.filter { $0.options.contains(asked) }.compactMap { $0.owner as? NSObject }
         XCTAssertFalse(owners.isEmpty, "the frame's areas track the pointer")
         for owner in owners where owner.responds(to: selector) { owner.perform(selector, with: event) }
+    }
+
+    /// A key pressed as a person presses one: through the app (`NSApp.sendEvent`) to the window's first responder,
+    /// and back through it should WebKit give the key back. A function key carries the flags AppKit gives one.
+    private func press(_ typed: String, _ code: UInt16, held: NSEvent.ModifierFlags = [], in frame: Shown) throws {
+        let scalar = typed.unicodeScalars.first.map { Int($0.value) } ?? 0
+        var flags = held
+        if (0xF700...0xF8FF).contains(scalar) { flags.insert(.function) }
+        if (NSUpArrowFunctionKey...NSRightArrowFunctionKey).contains(scalar) { flags.insert(.numericPad) }
+        NSApp.sendEvent(try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: frame.window.windowNumber, context: nil, characters: typed, charactersIgnoringModifiers: typed,
+            isARepeat: false, keyCode: code)))
+    }
+
+    private func function(_ key: Int) -> String {
+        String(Character(UnicodeScalar(UInt32(key))!))
     }
 
     /// The pointer moving to `point` over the frame.
@@ -513,5 +542,90 @@ final class MailFrameTests: XCTestCase {
         reader.reflectScrolledClipView(reader.contentView)
         let heading = try await place(of: "#heading", in: frame)
         XCTAssertTrue((0..<60).contains(heading.minY), "the body starts at its heading: \(heading)")
+    }
+
+    // MARK: The keyboard
+
+    /// Once the body has the keyboard (a click in a paragraph), the keys that page and scroll move the reader as they
+    /// do from the list: Space a page down and ⇧Space back, Page Down and Up, ↓ and ↑ a line, End and Home. A frame as
+    /// tall as its content has nothing of its own to scroll: WebKit gives back every key but Page Up and Down, which it
+    /// keeps all the same. The keys go through `NSApp.sendEvent` to the key window, as a person's do.
+    func testTheKeysThatPageAndScrollMoveTheReaderOnceTheBodyHasTheKeyboard() async throws {
+        let frame = try await frame(Self.statement)
+        let reader = read(frame)
+        try await settled(frame)
+        click(at: try await middle(of: "section1", in: frame), in: frame)
+        XCTAssertTrue(frame.window.makeFirstResponder(frame.view), "a click gives the body the keyboard")
+        var top: CGFloat { reader.contentView.bounds.minY }
+        let shown = reader.contentView.bounds.height
+        let page = max(shown - 40, shown / 2)
+        let foot = (reader.documentView?.frame.height ?? 0) - shown
+        let steps: [(typed: String, code: UInt16, held: NSEvent.ModifierFlags, top: CGFloat, what: String)] = [
+            (" ", 49, [], page, "Space pages down"),
+            (" ", 49, .shift, 0, "⇧Space back up"),
+            (function(NSPageDownFunctionKey), 121, [], page, "Page Down"),
+            (function(NSPageUpFunctionKey), 116, [], 0, "Page Up"),
+            (function(NSDownArrowFunctionKey), 125, [], ReaderPage.line, "↓, a line"),
+            (function(NSUpArrowFunctionKey), 126, [], 0, "↑, a line back"),
+            (function(NSEndFunctionKey), 119, [], foot, "End, the foot"),
+            (function(NSHomeFunctionKey), 115, [], 0, "Home, the top"),
+        ]
+        for step in steps {
+            try press(step.typed, step.code, held: step.held, in: frame)
+            try await eventually(step.what) { abs(top - step.top) < 0.5 }
+            guard abs(top - step.top) < 0.5 else { return }
+        }
+        let inside = try await scrolledInside(frame)
+        XCTAssertEqual(inside, 0, "the frame itself never scrolled")
+        XCTAssertTrue(frame.window.firstResponder === frame.view, "the body keeps the keyboard")
+    }
+
+    /// A field in a body keeps the keys typed in it: the core's sanitizer lets none through, but the frame doesn't lean
+    /// on it. Space goes into the field as text; ↓ and End move its caret, and End, which WebKit gives back from a
+    /// field it can't scroll, still never moves the reader while the focus is in the field. Out of it, the same keys
+    /// page again.
+    func testAFieldInTheBodyKeepsTheKeysTypedInIt() async throws {
+        let frame = try await frame("<p><textarea id=\"note\" rows=\"3\" cols=\"20\">Gate</textarea></p>" + Self.statement)
+        let reader = read(frame)
+        try await settled(frame)
+        click(at: try await middle(of: "note", in: frame), in: frame)
+        XCTAssertTrue(frame.window.makeFirstResponder(frame.view))
+        try await eventually("the field has the focus") {
+            try await asked(frame, "return document.activeElement.id;") as? String == "note"
+        }
+        try press(" ", 49, in: frame)
+        try press(function(NSDownArrowFunctionKey), 125, in: frame)
+        try press(function(NSEndFunctionKey), 119, in: frame)
+        try press(function(NSPageDownFunctionKey), 121, in: frame)
+        try await eventually("Space went into the field") {
+            try await asked(frame, "return document.getElementById(\"note\").value;") as? String != "Gate"
+        }
+        try await Task.sleep(for: .milliseconds(400))
+        XCTAssertEqual(reader.contentView.bounds.minY, 0, "the reader stayed while the field had the keys")
+
+        click(at: try await middle(of: "section1", in: frame), in: frame)
+        try await eventually("the field let the focus go") {
+            try await asked(frame, "return document.activeElement.id;") as? String != "note"
+        }
+        try press(" ", 49, in: frame)
+        try await eventually("Space pages again") { reader.contentView.bounds.minY > 100 }
+    }
+
+    /// Tab moves the focus to the quote's toggle at the foot of a long mail: the reader asks the frame where it went
+    /// and scrolls to it, as it does to Find's match.
+    func testTabShowsWhereTheFocusWentInTheReader() async throws {
+        let frame = try await frame(Self.statement)
+        let reader = read(frame)
+        try await settled(frame)
+        click(at: try await middle(of: "section1", in: frame), in: frame)
+        XCTAssertTrue(frame.window.makeFirstResponder(frame.view))
+        try press("\t", 48, in: frame)
+        let toggle = "details.mm-quote > summary"
+        try await eventually("the toggle focused and in sight") {
+            let focused = try await asked(frame, "return document.activeElement === document.querySelector(\"\(toggle)\");")
+            let place = try await place(of: toggle, in: frame)
+            return try focused as? Bool == true && wellInside(place, of: frame)
+        }
+        XCTAssertGreaterThan(reader.contentView.bounds.minY, 1000, "down at the mail's foot")
     }
 }
