@@ -33,6 +33,7 @@ describe("what a short line calls someone", () => {
   it("calls a person by their first name, their address or their name's shape saying so", () => {
     expect(calling("Ren Mori", "ren@example.test")).toBe("Ren");
     expect(calling("Ren Mori", "rmori@example.test")).toBe("Ren");
+    expect(calling("Ren Mori", "mori.r@example.test")).toBe("Ren");
     expect(calling("Zoë Ångström", "zoe.angstrom@example.test")).toBe("Zoë");
     expect(calling("Ren Mori")).toBe("Ren");
     expect(calling("Lin")).toBe("Lin");
@@ -44,9 +45,14 @@ describe("what a short line calls someone", () => {
     expect(calling("Ada Park", "noreply-ada@example.test")).toBe("Ada Park");
     expect(calling("Studio 54")).toBe("Studio 54");
     expect(calling("the loom weekly")).toBe("the loom weekly");
+    // Its address carries the last word of its name, as a person's may carry theirs: never "Guild".
+    expect(calling("Guild Gazette", "gazette@example.test")).toBe("Guild Gazette");
+    expect(calling("Guild Gazette", "gazette@guild.example.test")).toBe("Guild Gazette");
   });
   it("says a name whose address doesn't carry it whole", () => {
     expect(calling("Ren Mori", "x9@example.test")).toBe("Ren Mori");
+    // The last name alone is no sign of a person, as gazette@ for "Guild Gazette" isn't.
+    expect(calling("Ren Mori", "mori@example.test")).toBe("Ren Mori");
   });
   it("has nothing to call one with only an address", () => {
     expect([calling(null), calling(""), calling(" \"\" "), calling("ren@example.test", "ren@example.test")]).toEqual([null, null, null, null]);

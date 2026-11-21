@@ -10,6 +10,8 @@ describe("what the Screener says of a decision", () => {
   it("calls an organisation by its whole name", () => {
     expect(decisionWords("keep", "Thimble & Co", "orders@thimble.example.test", false)).toBe("Allowed Thimble & Co");
     expect(decisionWords("block", "Parcel Service", "tracking@parcel.example.test", true)).toBe("Screened out Parcel Service · trashed");
+    // Its address carries the last word of its name: never "Screened out Guild".
+    expect(decisionWords("block", "Guild Gazette", "gazette@example.test", false)).toBe("Screened out Guild Gazette");
   });
 
   it("calls one with no name by their whole address, never its part before the @ alone", () => {
