@@ -32,7 +32,7 @@ final class MailboxWordsTests: XCTestCase {
     func testAPersonIsCalledByTheirFirstNameAndAnOrganisationWhole() {
         let people = [("Lin Mori", "lin@example.test"), ("Renée Lefèvre", "renee@atelier.example.test"),
                       ("Ivo Brandt", "ivo@harbor.example.test"), ("Grace Hopper", "grace.hopper@example.test"),
-                      ("Ren Takeda", "rtakeda@example.test")]
+                      ("Ren Takeda", "rtakeda@example.test"), ("Ren Takeda", "takeda.r@example.test")]
         for (name, address) in people {
             XCTAssertEqual(Words.calling(name, address: address), String(name.split(separator: " ")[0]), name)
         }
@@ -42,10 +42,13 @@ final class MailboxWordsTests: XCTestCase {
                              ("The Weekly Loom", "news@loom.example.test"), ("Thimble & Co", "orders@thimble.example.test"),
                              ("Build Bot", "noreply@ci.example.test"), ("Example Bank", "alerts@bank.example.test"),
                              ("Riverside School", "school@example.test"), ("Northwind Traders", "sales@example.test"),
-                             ("Takeda, Ren", "ren@example.test")]
+                             ("Takeda, Ren", "ren@example.test"), ("Guild Gazette", "gazette@example.test"),
+                             ("Guild Gazette", "gazette@guild.example.test")]
         for (name, address) in organisations {
             XCTAssertEqual(Words.calling(name, address: address), name, "\(name) is said whole")
         }
+        // The last name alone in the address is no sign of a person, as gazette@ for "Guild Gazette" isn't: said whole.
+        XCTAssertEqual(Words.calling("Ren Takeda", address: "takeda@example.test"), "Ren Takeda")
         XCTAssertEqual(Words.calling("Ren Takeda"), "Ren", "with no address, a person's name by its shape")
         XCTAssertEqual(Words.calling("Parcel Service"), "Parcel Service")
         XCTAssertEqual(Words.calling("Lin"), "Lin")
@@ -65,6 +68,11 @@ final class MailboxWordsTests: XCTestCase {
                        "About Parcel Service")
         XCTAssertEqual(SummaryCard.foot("Lin Mori", address: "lin@example.test"),
                        "Not Lin’s words — the message is the source.")
+        let gazette = ("Guild Gazette", "gazette@example.test")
+        XCTAssertEqual(ReplyBoxWords(name: gazette.0, address: gazette.1, following: false).placeholder,
+                       "Reply to Guild Gazette…")
+        XCTAssertEqual(ComposerForm.heading(.reply, to: [Recipient("Guild Gazette <gazette@example.test>")]),
+                       "Reply to Guild Gazette")
     }
 
     func testAFolderIsNamedByItsRole() {

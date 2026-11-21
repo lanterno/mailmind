@@ -737,6 +737,9 @@ final class DeskModelTests: XCTestCase {
         var queue = DeskFixture.screener
         queue.items.append(API.ScreenerItem(count: 1, domain: "example.test", fromAddr: "lin@example.test", fromName: "",
                                             when: "today"))
+        // An organisation whose address carries the last word of its name: said whole, never "Guild".
+        queue.items.append(API.ScreenerItem(count: 1, domain: "example.test", fromAddr: "gazette@example.test",
+                                            fromName: "Guild Gazette", when: "today"))
         routes.answer("GET", "/api/screener", queue)
         routes.answer("POST", "/api/rules", API.RuleChanged(ok: true, reclassified: 1, rules: DeskFixture.rules,
                                                             token: "x", trashed: false))
@@ -748,6 +751,8 @@ final class DeskModelTests: XCTestCase {
         XCTAssertEqual(said, "Screened out Studio Nine")
         await model.decide("lin@example.test", .block)
         XCTAssertEqual(said, "Screened out lin@example.test")
+        await model.decide("gazette@example.test", .block)
+        XCTAssertEqual(said, "Screened out Guild Gazette")
     }
 
     func testASenderWhoCameAfterTheAIWasAskedIsNotAskedYetUntilSuggestAgain() async {
