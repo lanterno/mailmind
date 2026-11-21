@@ -1652,6 +1652,53 @@ final class AccountCardTests: XCTestCase {
         XCTAssertEqual(closed, [nil], "Esc closes the sheet, as Cancel")
     }
 
+    /// The account sheet over Settings, its keys sent through `NSApp.sendEvent` as a person's go: AppKit hands them
+    /// to the key window, the sheet, so Tab moves down its fields, never through Settings' places behind it, and Esc
+    /// is the sheet's Cancel, never Settings' own Esc, which would leave the sheet up.
+    func testTabAndEscReachTheAccountSheetOverSettingsAsAPersonsKeysGo() throws {
+        let status = AppStatus(newMail: NewMailAlerts(notifier: SystemNotifier.Silent(), isActive: { true },
+                                                      badge: { _ in }, announce: { _ in }))
+        let window = NSWindow(contentRect: NSRect(origin: CGPoint(x: -4000, y: -4000), size: SettingsWindow.size),
+                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        window.contentView = NSHostingView(rootView: SettingsLayout(status: status, lights: false, opening: .adding)
+            .meadowLight(.day))
+        window.makeKeyAndOrderFront(nil)
+        var sheet: NSWindow?
+        for _ in 0..<40 where sheet == nil {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+            sheet = window.attachedSheet
+        }
+        let form = try XCTUnwrap(sheet, "Accounts opens on the account form")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+        let behind = window.firstResponder
+        func key(_ characters: String, _ code: UInt16) throws -> NSEvent {
+            try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                           windowNumber: form.windowNumber, context: nil, characters: characters,
+                                           charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code))
+        }
+        func editing(_ responder: NSResponder?) -> String {
+            // A secure field's editor is AppKit's own, which it doesn't name to Swift.
+            if responder?.className == "NSSecureTextView" { return "password" }
+            if let text = responder as? NSTextView, text.isFieldEditor { return "a field" }
+            return String(describing: responder.map { type(of: $0) })
+        }
+        XCTAssertEqual(editing(form.firstResponder), "a field", "the address has the keyboard as the sheet opens")
+
+        NSApp.sendEvent(try key("\t", 48))
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        XCTAssertEqual(editing(form.firstResponder), "password", "Tab goes down the sheet's fields")
+        XCTAssertTrue(window.firstResponder === behind, "and never through Settings' places behind it")
+
+        NSApp.sendEvent(try key("\u{1b}", 53))
+        for _ in 0..<20 where window.attachedSheet != nil {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        }
+        XCTAssertNil(window.attachedSheet, "Esc is the sheet's Cancel")
+        XCTAssertTrue(window.isVisible, "and Settings stays")
+    }
+
     /// A view in a window of its own, off the screen and see-through, as a sheet or a card shows it. A view that is
     /// read is drawn into a PDF too, whose text is what it says and where: SwiftUI builds no accessibility to read
     /// with no assistive app attached.
