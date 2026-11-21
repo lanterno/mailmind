@@ -145,12 +145,19 @@ The Mac app is `io.github.lanterno.mailmind`, version `MARKETING_VERSION` in `pr
   and under it WebKit runs no event listener or timer in any of the document's worlds, the app's own too, so the app
   puts no script in the frame. Its Swift asks the document short questions from outside (`FrameAsk`), in an isolated
   world of its own (`mailmind-frame`) that the mail's page can't see or reach: how tall the content is (as it loads,
-  for a few seconds after, at a new width, after a click or a key in it), the link at a click (a left click that
-  didn't drag, a middle click, Return on a focused link) and the href under the pointer (asked at most every few
-  frames, through a tracking area of the frame's own, and cleared as the pointer leaves). What comes back is the
-  mail's data, read only as `FrameMessage` reads it: a number for a height, an href of at most 8192 characters. The
-  shell checks a link with `LinkRisk` and opens it in the default browser, never in the frame. The frame's look and
-  the plain-text quote fold are written into the document's bytes before WebKit reads them, never by a script.
+  for a few seconds after, at a new width, after a click or a key in it, as Find in Message finds), the link at a
+  click (a left click that didn't drag, a middle click, Return on a focused link), the href under the pointer (asked
+  at most every few frames, through a tracking area of the frame's own, and cleared as the pointer leaves), where
+  Find's match and the focus Tab moved stand, and whether the focus is in a field. What comes back is the mail's
+  data, read only as `FrameMessage` reads it: a number for a height, four finite numbers for where something stands,
+  an href of at most 8192 characters. The shell checks a link with `LinkRisk` and opens it in the default browser,
+  never in the frame. The frame is as tall as its content and keeps no scroll of its own: each measure puts the
+  document's scroll back to its top (a fold opened or a match shown before the frame grew scrolls it inside itself),
+  and the reader scrolls to Find's match and Tab's focus. A key the frame's document gives back, as WebKit does one
+  it had nothing to scroll for (Space, the arrows, Home, End), pages or scrolls the reader as from the list, and so
+  do Page Up and Down, which WebKit keeps; while the focus is in a field, its keys are the mail's and move nothing.
+  The frame's look, the plain-text quote fold and the words on the core's quote toggle are written into the
+  document's bytes before WebKit reads them, never by a script; a printed copy's look opens every fold.
   `MailFrameTests` load the document under the core's own headers, so what the sandbox stops shows there.
 - **Links, images and files leave the frame only on a person's say.** A link opens after `LinkRisk`'s check (a
   warning asks first); remote images load only when asked, as the page's do; an attachment is saved through a save
