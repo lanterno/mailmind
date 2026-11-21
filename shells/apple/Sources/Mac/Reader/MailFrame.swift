@@ -38,8 +38,9 @@ struct FrameSource: Sendable {
 ///   world can't see. They ask as the frame loads, as its width changes, after a click or a key in it, and as the
 ///   pointer moves over it; what they return is the mail's data, read as `FrameMessage` reads it, and a link is
 ///   checked before anything opens it.
-/// - The frame is as tall as its content and never keeps a scroll of its own: the reader scrolls. Find's match is
-///   asked where it stands, and the reader scrolls to it.
+/// - The frame is as tall as its content and never keeps a scroll of its own: the reader scrolls. Find's match and
+///   the focus Tab moved are asked where they stand, and the reader scrolls to them; a key the document gives back,
+///   which had nothing to scroll, pages or scrolls the reader.
 struct MailFrame: NSViewRepresentable {
     let source: FrameSource
     let url: URL
@@ -222,6 +223,21 @@ enum FrameAsk {
         return null;
         """
 
+    /// Where the focus is, which Tab moved: nil for none, or the body's.
+    static let focus = """
+        const at = document.activeElement;
+        if (!at || at === document.body || at === document.documentElement) return null;
+        const r = at.getBoundingClientRect();
+        return { kind: "rect", x: r.left, y: r.top, width: r.width, height: r.height };
+        """
+
+    /// Whether the focus is in a field, where the keys typed are the mail's own. The core's sanitizer lets no field
+    /// through, and the frame doesn't lean on it.
+    static let typing = """
+        const at = document.activeElement;
+        return !!at && (at.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(at.tagName));
+        """
+
     /// Where the selection is, which Find in Message made.
     static let selection = """
         const s = window.getSelection();
@@ -264,8 +280,9 @@ extension WKWebView {
 }
 
 /// The frame's web view: the reader scrolls as one, so a wheel that would only move the page up or down goes to the
-/// reader's scroll view; its menu keeps only what reads or copies, never what opens or downloads. What a person does
-/// in it (a click, the pointer moving or leaving, a key, a new width) goes to its walls, which ask the document.
+/// reader's scroll view, as do the keys that page and scroll; its menu keeps only what reads or copies, never what
+/// opens or downloads. What a person does in it (a click, the pointer moving or leaving, a key, a new width) goes to
+/// its walls, which ask the document.
 final class FrameWebView: WKWebView {
     /// Off once the content is taller than the reader lets a frame grow: then the frame scrolls its own.
     var forwardsScroll = true
@@ -358,10 +375,51 @@ final class FrameWebView: WKWebView {
         }
     }
 
+    /// The key last handed to WebKit. One the document didn't take, WebKit gives back to the app
+    /// (`NSApp.sendEvent`), which brings it to `keyDown` again.
+    private var handed: NSEvent?
+
     override func keyDown(with event: NSEvent) {
+        if event === handed {
+            handed = nil
+            return givenBack(event)
+        }
+        handedOn(event)
         super.keyDown(with: event)
-        // Return or Enter on a focused link opens it, once however long it is held; any key may unfold a quote.
-        walls?.keyed(opens: [36, 76].contains(event.keyCode) && !event.isARepeat)
+    }
+
+    /// Page Up and Page Down, which WebKit keeps whether or not it had anything to page: they never come back.
+    private static let keptByWebKit: Set<Int> = [NSPageUpFunctionKey, NSPageDownFunctionKey]
+
+    private static func kept(_ event: NSEvent) -> Bool {
+        event.charactersIgnoringModifiers?.unicodeScalars.first.map { keptByWebKit.contains(Int($0.value)) } ?? false
+    }
+
+    /// A key that went to the document. Return or Enter on a focused link opens it, once however long it is held;
+    /// Tab or ⇧Tab moves the focus, which the reader then shows; any key may unfold a quote. Page Up and Down page
+    /// the reader as they go, as WebKit never gives them back.
+    private func handedOn(_ event: NSEvent) {
+        handed = event
+        walls?.keyed(opens: [36, 76].contains(event.keyCode) && !event.isARepeat, moved: event.keyCode == 48)
+        if Self.kept(event) { moveReader(event) }
+    }
+
+    /// A key the document didn't take. Space, the arrows, Home and End move the reader, as they do from the list;
+    /// any other key goes on now, as WebKit sends on one it gives back.
+    private func givenBack(_ event: NSEvent) {
+        guard ReaderPage.move(for: event) != nil, !Self.kept(event) else { return super.keyDown(with: event) }
+        moveReader(event)
+    }
+
+    /// Page or scroll the reader as `event` says: the frame is as tall as its content, so WebKit had nothing to
+    /// scroll. Not while the focus is in a field, whose keys are the mail's: there the key goes no further. (Handed
+    /// on once WebKit has finished giving it back, WebKit would take it again as new, and give it back again.)
+    private func moveReader(_ event: NSEvent) {
+        guard let move = ReaderPage.move(for: event), let walls else { return }
+        Task { @MainActor [weak self] in
+            guard let self, !(await walls.typing()), let scroll = self.enclosingScrollView else { return }
+            move(scroll)
+        }
     }
 
     override func setFrameSize(_ size: NSSize) {
@@ -602,14 +660,34 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate {
         }
     }
 
-    /// A key pressed in the frame: Return or Enter opens the link focused (`opens`); anything it unfolded is measured.
-    func keyed(opens: Bool) {
+    /// A key pressed in the frame: Return or Enter opens the link focused (`opens`); Tab moved the focus (`moved`),
+    /// which the reader shows; anything it unfolded is measured.
+    func keyed(opens: Bool, moved: Bool = false) {
         settle(for: .seconds(1))
+        if moved { showFocus() }
         guard opens else { return }
         Task { @MainActor [weak self] in
             guard let self, case .link(let link)? = await self.ask(FrameAsk.focused) else { return }
             self.told?(.link(link))
         }
+    }
+
+    /// Scroll the reader to where Tab put the focus. The key may still be on its way to the document when first
+    /// asked, so it is asked again a moment later; a focus already in sight moves nothing.
+    private func showFocus() {
+        Task { @MainActor [weak self] in
+            for pause in [Duration.milliseconds(40), .milliseconds(250)] {
+                try? await Task.sleep(for: pause)
+                guard let view = self?.view else { return }
+                if let rect = FrameMessage.rect(await FrameAsk.said(FrameAsk.focus, of: view)) { view.reveal(rect) }
+            }
+        }
+    }
+
+    /// Whether the focus is in a field of the document's.
+    func typing() async -> Bool {
+        guard let view else { return false }
+        return await FrameAsk.said(FrameAsk.typing, of: view) as? Bool == true
     }
 
     /// The pointer moved to `point`: the link under it is asked for, one question at a time and no more often than a

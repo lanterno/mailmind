@@ -952,24 +952,28 @@ enum ReaderPage {
     /// A key that scrolls a reader with nothing else to type in, as a message's own window has it: Space and ⇧Space,
     /// the arrows a line, Page Up and Down, Home and End. Whether it was one; with ⌘, ⌃ or ⌥ held, none is.
     static func scrolls(_ event: NSEvent, in window: NSWindow?) -> Bool {
-        guard event.modifierFlags.isDisjoint(with: [.command, .control, .option]),
-              let key = event.charactersIgnoringModifiers?.unicodeScalars.first.map({ Int($0.value) }) else {
-            return false
-        }
-        let up = event.modifierFlags.contains(.shift)
-        let move: (NSScrollView) -> Void
-        switch key {
-        case 0x20: move = { turn($0, down: !up) }
-        case NSDownArrowFunctionKey: move = { by($0, line) }
-        case NSUpArrowFunctionKey: move = { by($0, -line) }
-        case NSPageDownFunctionKey: move = { turn($0, down: true) }
-        case NSPageUpFunctionKey: move = { turn($0, down: false) }
-        case NSHomeFunctionKey: move = { by($0, -far) }
-        case NSEndFunctionKey: move = { by($0, far) }
-        default: return false
-        }
+        guard let move = move(for: event) else { return false }
         if let scroll = document(in: window?.contentView) { move(scroll) }
         return true
+    }
+
+    /// What `event` does to a reader when it is one of those keys; nil for any other.
+    static func move(for event: NSEvent) -> ((NSScrollView) -> Void)? {
+        guard event.modifierFlags.isDisjoint(with: [.command, .control, .option]),
+              let key = event.charactersIgnoringModifiers?.unicodeScalars.first.map({ Int($0.value) }) else {
+            return nil
+        }
+        let up = event.modifierFlags.contains(.shift)
+        switch key {
+        case 0x20: return { turn($0, down: !up) }
+        case NSDownArrowFunctionKey: return { by($0, line) }
+        case NSUpArrowFunctionKey: return { by($0, -line) }
+        case NSPageDownFunctionKey: return { turn($0, down: true) }
+        case NSPageUpFunctionKey: return { turn($0, down: false) }
+        case NSHomeFunctionKey: return { by($0, -far) }
+        case NSEndFunctionKey: return { by($0, far) }
+        default: return nil
+        }
     }
 
     /// What an arrow key scrolls by, and further than any message is long, for Home and End.
