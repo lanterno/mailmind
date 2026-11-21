@@ -45,6 +45,40 @@ final class MailListTests: XCTestCase {
         XCTAssertEqual(display.changes.last, IndexSet(integer: 5), "only the row that changed is redrawn")
     }
 
+    /// The server says how long ago a row's mail came ("just now", "12m ago") as the list is read. While a row on
+    /// screen says minutes, the list is read again once a minute, in place; while one says hours, every ten minutes;
+    /// never for rows that say days, nor for a row that says minutes off the screen.
+    func testTheRowsOnScreenThatSayMinutesAreReadAgainEachMinute() async {
+        let folder = Folder(count: 300)
+        await folder.stampAll(ago: 3 * 86_400)
+        await folder.stamp(250, ago: 3 * 60)
+        await folder.stamp(120, ago: 2 * 3600)
+        let list = MailListModel(load: folder.load)
+        list.start()
+        await until { list.total == 300 }
+        list.setVisible(0..<20)
+        await until { list.row(at: 250) != nil }
+        let later = { (seconds: TimeInterval) in Date().addingTimeInterval(seconds) }
+
+        XCTAssertFalse(list.refreshIfAging(now: later(61)), "the rows on screen say days")
+        XCTAssertFalse(list.refreshIfAging(now: later(3600)), "a row off the screen says minutes: none on it does")
+
+        list.setVisible(240..<260)
+        let shown = await folder.asked.count
+        XCTAssertFalse(list.refreshIfAging(now: later(30)), "read less than a minute ago")
+        XCTAssertTrue(list.refreshIfAging(now: later(61)), "a row on screen says minutes")
+        var again = shown
+        for _ in 0..<1000 where again == shown {
+            try? await Task.sleep(for: .milliseconds(5))
+            again = await folder.asked.count
+        }
+        XCTAssertGreaterThan(again, shown, "what is held is read again")
+
+        list.setVisible(110..<130)
+        XCTAssertFalse(list.refreshIfAging(now: later(61)), "hours: not each minute")
+        XCTAssertTrue(list.refreshIfAging(now: later(601)), "hours: every ten minutes")
+    }
+
     func testTheChosenCopyIsFoundByItsNameWhereverItMoved() async {
         let folder = Folder(count: 50)
         let selection = Selection()
@@ -131,6 +165,16 @@ private actor Folder {
 
     func rename(_ position: Int, _ subject: String) {
         rows[position].subject = subject
+    }
+
+    /// Every row's mail come `seconds` before now.
+    func stampAll(ago seconds: Int) {
+        for position in rows.indices { stamp(position, ago: seconds) }
+    }
+
+    /// The row at `position`'s mail come `seconds` before now.
+    func stamp(_ position: Int, ago seconds: Int) {
+        rows[position].ts = Int(Date().timeIntervalSince1970) - seconds
     }
 
     /// New mail at the top, as a sync brings it.
