@@ -318,18 +318,24 @@ export function fmtWhen(epoch: number, now = new Date()): string {
   return `${d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} ${t}`;
 }
 
+// This evening is offered only while 18:00 today is still ahead: once it has passed, the evening it would name is
+// tomorrow's, which isn't this evening, and tomorrow at 8 comes first anyway.
 export function sendLaterPresets(now = new Date()): [string, number][] {
   const sec = (d: Date) => Math.floor(d.getTime() / 1000);
   const evening = new Date(now);
   evening.setHours(18, 0, 0, 0);
-  if (evening <= now) evening.setDate(evening.getDate() + 1);
   const tomorrow = new Date(now);
   tomorrow.setDate(now.getDate() + 1);
   tomorrow.setHours(8, 0, 0, 0);
   const monday = new Date(now);
   monday.setDate(now.getDate() + (((8 - now.getDay()) % 7) || 7));
   monday.setHours(8, 0, 0, 0);
-  return [["In 1 hour", sec(new Date(now.getTime() + 3600e3))], ["This evening", sec(evening)], ["Tomorrow 8 AM", sec(tomorrow)], ["Monday 8 AM", sec(monday)]];
+  return [
+    ["In 1 hour", sec(new Date(now.getTime() + 3600e3))],
+    ...(evening > now ? [["This evening", sec(evening)] as [string, number]] : []),
+    ["Tomorrow 8 AM", sec(tomorrow)],
+    ["Monday 8 AM", sec(monday)],
+  ];
 }
 
 export const QUICK: { key: string; chip: string; line: string; ask: string }[] = [
