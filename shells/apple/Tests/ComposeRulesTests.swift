@@ -466,11 +466,36 @@ final class ComposeModelTests: XCTestCase {
         let monday = Date(timeIntervalSince1970: TimeInterval(presets[3].epoch))
         XCTAssertEqual(calendar.component(.weekday, from: monday), 2)
         XCTAssertEqual(calendar.component(.day, from: monday), 9, "the next Monday, not today")
-        let late = calendar.date(from: DateComponents(year: 2026, month: 11, day: 2, hour: 19))!
-        let evening = Date(timeIntervalSince1970: TimeInterval(SendTimes.presets(now: late, calendar: calendar)[1].epoch))
-        XCTAssertEqual(calendar.component(.day, from: evening), 3, "this evening is tomorrow once it has passed")
         XCTAssertTrue(SendTimes.words(Int(noon.timeIntervalSince1970) + 3 * 3600, now: noon, calendar: calendar).hasPrefix("today "))
         XCTAssertTrue(SendTimes.words(Int(noon.timeIntervalSince1970) + 20 * 3600, now: noon, calendar: calendar).hasPrefix("tomorrow "))
+    }
+
+    /// This evening is offered while 18:00 today is still ahead, and not once it has passed, whatever the zone: at
+    /// 20:26 it had named tomorrow at 18:00.
+    func testThisEveningIsOfferedOnlyWhileSixIsStillAhead() {
+        for zone in ["Europe/Berlin", "America/Los_Angeles", "Asia/Kolkata", "Pacific/Auckland"] {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = TimeZone(identifier: zone)!
+            // Friday 20 November 2026 at `hour`:`minute` on that zone's clock.
+            func at(_ hour: Int, _ minute: Int) -> Date {
+                calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: hour, minute: minute))!
+            }
+            for (hour, minute) in [(0, 1), (12, 0), (17, 0), (17, 59)] {
+                let presets = SendTimes.presets(now: at(hour, minute), calendar: calendar)
+                XCTAssertEqual(presets.map(\.label), ["In 1 hour", "This evening", "Tomorrow 8 AM", "Monday 8 AM"],
+                               "\(zone) at \(hour):\(minute)")
+                XCTAssertEqual(presets[1].epoch, Int(at(18, 0).timeIntervalSince1970), "today at 18:00, in \(zone)")
+            }
+            for (hour, minute) in [(18, 0), (18, 1), (19, 0), (20, 26), (23, 59)] {
+                let now = at(hour, minute)
+                let presets = SendTimes.presets(now: now, calendar: calendar)
+                XCTAssertEqual(presets.map(\.label), ["In 1 hour", "Tomorrow 8 AM", "Monday 8 AM"], "\(zone) at \(hour):\(minute)")
+                XCTAssertTrue(presets.allSatisfy { $0.epoch > Int(now.timeIntervalSince1970) }, "\(zone) at \(hour):\(minute)")
+                let tomorrow = Date(timeIntervalSince1970: TimeInterval(presets[1].epoch))
+                XCTAssertEqual(calendar.dateComponents([.day, .hour], from: tomorrow), DateComponents(day: 21, hour: 8),
+                               "\(zone) at \(hour):\(minute)")
+            }
+        }
     }
 
     func testAPicturesMark() {
