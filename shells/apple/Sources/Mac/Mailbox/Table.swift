@@ -882,7 +882,10 @@ final class MailboxTableView: NSTableView {
             return mailbox.file(.trash)
         }
         if key == "\u{1b}" {
-            // The shell's first: the drawer closes, or focus reading ends, while the list stands aside behind it.
+            // A file's Quick Look first, put up from the reader while the list has the keyboard: it goes, and the
+            // list keeps the keyboard.
+            if QuickLookShown.close() { return }
+            // The shell's next: the drawer closes, or focus reading ends, while the list stands aside behind it.
             if controller?.shell?.escape() == true { return }
             return escape()
         }

@@ -28,7 +28,7 @@ struct AttachmentsRow: View {
                 }
             }
         }
-        .quickLookPreview($looking)
+        .quickLookClosable($looking)
         .onChange(of: looking) { old, new in
             if new == nil, let old { Self.forget(old) }
         }

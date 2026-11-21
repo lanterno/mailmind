@@ -46,7 +46,7 @@ struct DocumentHub: View {
         }
         .padding(.horizontal, 10)
         .padding(.top, 6)
-        .quickLookPreview($looking)
+        .quickLookClosable($looking)
         .onChange(of: looking) { old, _ in
             if let old { PreviewFiles.remove(old) }
         }
