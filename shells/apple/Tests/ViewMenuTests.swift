@@ -69,4 +69,25 @@ final class ViewMenuTests: XCTestCase {
         XCTAssertFalse(try item(InboxTab.needs.title, in: items).isEnabled, "a folder has no tabs")
         XCTAssertTrue(try item("Organize by Conversation", in: items).isEnabled)
     }
+
+    /// The brief stands in the pane beside the Inbox's list, whose head shows the tabs: View's tabs are there too, and
+    /// act as the tabs do, the brief staying where it is. An answer stands in the list's place, with no tabs.
+    func testTheTabsStandBesideTheBrief() async throws {
+        let mailbox = await mailbox()
+        let app = try XCTUnwrap(mailbox.app)
+        app.place = .desk(.brief)
+        XCTAssertEqual(app.listed, .allInboxes, "the Inbox's list beside the brief")
+        let items = items(MailboxViewItems(mailbox: mailbox))
+        for tab in InboxTab.allCases {
+            XCTAssertTrue(try item(tab.title, in: items).isEnabled, "\(tab.title) beside the brief")
+        }
+        let unread = try item(InboxTab.unread.title, in: items)
+        _ = (unread.target as AnyObject?)?.perform(try XCTUnwrap(unread.action), with: unread)
+        await until { mailbox.tab == .unread }
+        XCTAssertEqual(app.place, .desk(.brief), "the brief stays")
+
+        app.place = .desk(.ask)
+        let asked = self.items(MailboxViewItems(mailbox: mailbox))
+        XCTAssertFalse(try item(InboxTab.needs.title, in: asked).isEnabled, "an answer has no tabs")
+    }
 }
