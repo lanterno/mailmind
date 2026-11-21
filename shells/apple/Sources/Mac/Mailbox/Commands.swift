@@ -206,8 +206,9 @@ struct MailboxMenuItems: View {
     ]
 }
 
-/// View's items for the list: conversations or messages, and the Inbox's tabs on ⌥⌘1, 2 and 3. Meadow's View group
-/// (`MeadowViewMenu`) holds them: a group placed before the sidebar's was dropped once Meadow replaced that group.
+/// View's items for the list: conversations or messages, and the Inbox's tabs on ⌥⌘1, 2 and 3 wherever the list's
+/// head shows them: an Inbox, and the brief, which stands beside the Inbox's list (`MailApp.listed`). Meadow's View
+/// group (`MeadowViewMenu`) holds them: a group placed before the sidebar's was dropped once Meadow replaced that group.
 struct MailboxViewItems: View {
     let mailbox: Mailbox?
 
@@ -222,7 +223,7 @@ struct MailboxViewItems: View {
                     .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: [.option, .command])
             }
         }
-        .disabled(mailbox?.app?.place?.isInbox != true)
+        .disabled(mailbox?.app?.listed?.isInbox != true)
     }
 }
 
