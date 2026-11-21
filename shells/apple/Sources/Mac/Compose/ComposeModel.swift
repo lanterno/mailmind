@@ -594,19 +594,20 @@ enum SendTimes {
         return "\(date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())) \(time)"
     }
 
-    /// The Later menu's times: in an hour, this evening, tomorrow at 8 and Monday at 8.
+    /// The Later menu's times: in an hour, this evening, tomorrow at 8 and Monday at 8. This evening is offered only
+    /// while 18:00 today is still ahead: once it has passed, the evening it would name is tomorrow's, which isn't this
+    /// evening, and tomorrow at 8 comes first anyway.
     static func presets(now: Date = Date(), calendar: Calendar = .current) -> [(label: String, epoch: Int)] {
         let seconds = { (date: Date) in Int(date.timeIntervalSince1970) }
-        var evening = calendar.date(bySettingHour: 18, minute: 0, second: 0, of: now) ?? now
-        if evening <= now { evening = calendar.date(byAdding: .day, value: 1, to: evening) ?? evening }
+        let evening = calendar.date(bySettingHour: 18, minute: 0, second: 0, of: now).flatMap { $0 > now ? $0 : nil }
         let tomorrow = calendar.date(bySettingHour: 8, minute: 0, second: 0,
                                      of: calendar.date(byAdding: .day, value: 1, to: now) ?? now) ?? now
         let weekday = calendar.component(.weekday, from: now)   // 1 is Sunday
         let ahead = ((9 - weekday) % 7 == 0) ? 7 : (9 - weekday) % 7
         let monday = calendar.date(bySettingHour: 8, minute: 0, second: 0,
                                    of: calendar.date(byAdding: .day, value: ahead, to: now) ?? now) ?? now
-        return [("In 1 hour", seconds(now) + 3600), ("This evening", seconds(evening)), ("Tomorrow 8 AM", seconds(tomorrow)),
-                ("Monday 8 AM", seconds(monday))]
+        return [("In 1 hour", seconds(now) + 3600)] + (evening.map { [("This evening", seconds($0))] } ?? [])
+            + [("Tomorrow 8 AM", seconds(tomorrow)), ("Monday 8 AM", seconds(monday))]
     }
 }
 #endif
