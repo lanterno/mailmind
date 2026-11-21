@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { addrOf, canQuickReply, chip, draftHash, DRAFT_TONES, fmtWhen, forwardSeed, guardSnapshot, guardView, isDraftTone, isPicture, placeholderAfter, placeholderBefore, snippetOffered, wordBefore, pictureMark, pictureParts, withoutMark, withPictures, looksLikeAddr, nearMisses, parseAddrs, quoteLabel, rcptAddr, redirectOf, rePrefix, replySeed, sendLaterPresets, splitChips, type Composer, type Person } from "./model";
 
 describe("addresses", () => {
@@ -136,9 +136,31 @@ describe("when", () => {
     expect(new Date(presets[3]![1] * 1000).getDate()).toBe(9);   // the next Monday, not today
   });
 
-  it("moves this evening to tomorrow once it has passed", () => {
-    const late = new Date(2026, 10, 2, 19, 0);
-    expect(new Date(sendLaterPresets(late)[1]![1] * 1000).getDate()).toBe(3);
+});
+
+// This evening is offered while 18:00 today is still ahead, and not once it has passed, whatever the zone: at 20:26 it
+// had named tomorrow at 18:00. As the Mac app's `testThisEveningIsOfferedOnlyWhileSixIsStillAhead` holds its own.
+describe("this evening, across six", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  // Friday 20 November 2026 at hour:minute on the zone's clock.
+  const at = (hour: number, minute: number) => new Date(2026, 10, 20, hour, minute);
+  const sec = (d: Date) => Math.floor(d.getTime() / 1000);
+
+  it.each([["Europe/Berlin", -60], ["America/Los_Angeles", 480], ["Asia/Kolkata", -330], ["Pacific/Auckland", -780]] as const)("is offered only while 18:00 is ahead, in %s", (zone, offset) => {
+    vi.stubEnv("TZ", zone);
+    expect(at(12, 0).getTimezoneOffset()).toBe(offset);   // the zone took
+    for (const [hour, minute] of [[0, 1], [12, 0], [17, 0], [17, 59]] as const) {
+      const presets = sendLaterPresets(at(hour, minute));
+      expect(presets.map((p) => p[0]), `${hour}:${minute}`).toEqual(["In 1 hour", "This evening", "Tomorrow 8 AM", "Monday 8 AM"]);
+      expect(presets[1]![1]).toBe(sec(at(18, 0)));
+    }
+    for (const [hour, minute] of [[18, 0], [18, 1], [19, 0], [20, 26], [23, 59]] as const) {
+      const now = at(hour, minute);
+      const presets = sendLaterPresets(now);
+      expect(presets.map((p) => p[0]), `${hour}:${minute}`).toEqual(["In 1 hour", "Tomorrow 8 AM", "Monday 8 AM"]);
+      expect(presets.every((p) => p[1] > sec(now))).toBe(true);
+      expect(presets[1]![1]).toBe(sec(new Date(2026, 10, 21, 8, 0)));
+    }
   });
 });
 
