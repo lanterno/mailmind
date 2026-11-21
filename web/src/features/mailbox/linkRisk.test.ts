@@ -24,8 +24,30 @@ describe("linkRisk", () => {
   });
   it("warns on a sign-in link that leaves the sender's domain", () => {
     expect(linkRisk("https://other.example.org/x", "Verify your account", "bank.example.test")).toMatch(/unfamiliar domain/);
-    expect(linkRisk("https://www.example.test/x", "Verify your account", "bank.example.test")).toBeNull();
+    expect(linkRisk("https://www.bank.example.test/x", "Verify your account", "bank.example.test")).toBeNull();
+    expect(linkRisk("https://login.bank.example.test/x", "Verify your account", "mail.bank.example.test")).toBeNull();
     expect(linkRisk("https://other.example.org/x", "Read more", "bank.example.test")).toBeNull();
+  });
+  it("reads the name in the link's words whole, however many labels it and its suffix have", () => {
+    for (const [href, text] of [
+      ["https://www.pellbank.example.test/statement", "www.pellbank.example.test"],
+      ["https://pellbank.example.test/", "Sign in at www.pellbank.example.test to see it."],
+      ["https://pellbank.example.test/", "accounts.pellbank.example.test"],
+      ["https://www.bank.co.uk/", "www.bank.co.uk"],
+      ["https://login.bank.co.uk/", "www.bank.co.uk"],
+      ["https://shop.com.au/cart", "Visit www.shop.com.au today"],
+    ]) expect(linkRisk(href!, text!, undefined)).toBeNull();
+    expect(linkRisk("https://pellbank-secure.example.test/login", "www.pellbank.example.test", undefined)).toMatch(/than the link text suggests \(pellbank\.example\.test\)/);
+    // Read as bank.co before, the last of these went through without a word.
+    for (const href of ["https://evil.co.uk/", "https://bank.co.uk.evil.example.test/", "https://www.bank.co/"]) {
+      expect(linkRisk(href, "www.bank.co.uk", undefined)).toMatch(/different domain/);
+    }
+  });
+  it("takes each name under example.test as an organisation of its own", () => {
+    expect(linkRisk("https://pellbank-secure.example.test/login", "Sign in to your account", "pellbank.example.test")).toMatch(/unfamiliar domain/);
+    expect(linkRisk("https://login.pellbank.example.test/", "Sign in", "notices.pellbank.example.test")).toBeNull();
+    expect(leavesOrganisation("desk@elsewhere.example.test", "bo@bank.example.test")).toBe(true);
+    expect(leavesOrganisation("desk@help.bank.example.test", "bo@bank.example.test")).toBe(false);
   });
 });
 
@@ -37,15 +59,21 @@ it("finds the hosts of a link and of any URL inside it", () => {
 describe("registrable", () => {
   it.each([
     ["example.test", "example.test"],
-    ["mail.example.test", "example.test"],
-    ["a.b.example.test", "example.test"],
+    ["mail.example.test", "mail.example.test"],
+    ["a.b.example.test", "b.example.test"],
+    ["www.pellbank.example.test", "pellbank.example.test"],
+    ["www.shop.com.au", "shop.com.au"],
+    ["station.police.uk", "station.police.uk"],
+    ["www.health.govt.nz", "health.govt.nz"],
+    ["guild.test", "guild.test"],
+    ["a.guild.test", "guild.test"],
     ["bank.co.uk", "bank.co.uk"],
     ["mail.bank.co.uk", "bank.co.uk"],
     ["shop.com.au", "shop.com.au"],
     ["t.co", "t.co"],
     ["x.t.co", "t.co"],
     ["co.uk", "co.uk"],
-    ["MAIL.Example.Test", "example.test"],
+    ["MAIL.Example.Test", "mail.example.test"],
   ])("%s is %s's", (host, domain) => {
     expect(registrable(host)).toBe(domain);
   });
