@@ -28,8 +28,10 @@ const letters = (s: string) => s.replace(/[^\p{L}]/gu, "");
 
 // Whether a name of several words is a person's. Never what an organisation's name has: a figure, an ampersand, a comma
 // ("Mori, Ren" is said whole), a word such as Service, Desk, Bank or The. Then, with an address, a person's mostly carries
-// their name (ren@, ren.mori@, rmori@) and a role's doesn't (news@, orders@, noreply@); with none, the name's shape: two to
-// four capitalised words.
+// their first name (ren@, ren.mori@), or their last with the first's initial beside it (rmori@, mori.r@), and a role's
+// doesn't (news@, orders@, noreply@). The last name alone isn't a person's sign: an organisation's address carries the
+// last word of its name as often ("Guild Gazette" <gazette@>), and a person's name said whole is never wrong. With no
+// address, the name's shape: two to four capitalised words.
 function isPerson(words: string[], address: string | null | undefined): boolean {
   const fold = words.map((w) => folded(w).replace(/^\p{P}+|\p{P}+$/gu, ""));
   if (/[\p{N}&+,/|:;()[\]!?]/u.test(words.join(""))) return false;
@@ -38,7 +40,11 @@ function isPerson(words: string[], address: string | null | undefined): boolean 
   if (!address || at < 0) return words.length <= 4 && words.every((w) => /^\p{Lu}[\p{L}\p{M}\-'’.]*$/u.test(w));
   const local = folded(address.slice(0, at));
   if (ROLE_ADDRESSES.has(letters(local)) || NO_REPLY.some((p) => local.startsWith(p))) return false;
-  return [fold[0]!, fold[fold.length - 1]!].map(letters).some((end) => end.length >= 2 && local.includes(end));
+  const carried = letters(local);
+  const first = letters(fold[0]!), last = letters(fold[fold.length - 1]!);
+  if (first.length >= 2 && carried.includes(first)) return true;
+  const initial = [...first][0];
+  return last.length >= 2 && initial !== undefined && (carried === initial + last || carried === last + initial);
 }
 
 // What a short line calls someone ("To Ren"): a person by their first name, and an organisation, or a name it can't tell,
