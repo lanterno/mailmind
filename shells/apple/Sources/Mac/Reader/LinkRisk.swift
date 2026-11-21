@@ -3,6 +3,10 @@ import Foundation
 
 /// Whether a link clicked in mail deserves a warning before it opens, as the page's `mailbox/linkRisk.ts` decides it,
 /// in the same words. Pure: it reads the link's href and text and the sender's domain, and nothing else.
+///
+/// It reads two things the page's doesn't yet: the whole name a link's words give, where the page's stops after three
+/// labels (`www.bank.co.uk` read as `bank.co`), and example.test, the fictional mail's own, as a suffix each
+/// organisation has a name under.
 enum LinkRisk {
     /// The labels under which a country gives organisations a second level of their own (`bank.co.uk`).
     private static let secondLevel: Set<String> = [
@@ -10,14 +14,24 @@ enum LinkRisk {
         "plc", "sch",
     ]
 
-    /// The domain an organisation registers: the last two labels of a host, or three under a country's own second
-    /// level (co.uk).
+    /// Suffixes of two labels the rule above misses, each as the public suffix list has it, and example.test, under
+    /// which every organisation of the fictional mail (tests, demos) has a name of its own. A label is kept here with
+    /// its country, not on its own: `ad.jp` is a suffix where `ad.nl` is a newspaper.
+    private static let twoLabels: Set<String> = [
+        "example.test", "nhs.uk", "police.uk", "govt.nz", "school.nz", "asn.au", "id.au", "ad.jp", "ed.jp", "gr.jp",
+        "lg.jp", "re.kr", "pe.kr", "gv.at", "in.th", "mi.th", "idv.hk", "idv.tw", "per.sg", "muni.il", "firm.in",
+        "gen.in", "ind.in", "nic.in", "res.in",
+    ]
+
+    /// The domain an organisation registers: the last two labels of a host, or three under a suffix of two labels
+    /// (co.uk, com.au, police.uk, example.test).
     static func registrable(_ host: String) -> String {
         let labels = host.lowercased().split(separator: ".", omittingEmptySubsequences: false).map(String.init)
         let tail = labels.suffix(2)
         let top = tail.count == 2 ? tail.last : nil
         let second = tail.count == 2 ? tail.first : nil
-        let keep = top?.count == 2 && second.map { secondLevel.contains($0) } == true ? 3 : 2
+        let underCountry = top?.count == 2 && second.map { secondLevel.contains($0) } == true
+        let keep = underCountry || twoLabels.contains(tail.joined(separator: ".")) ? 3 : 2
         return labels.suffix(keep).joined(separator: ".")
     }
 
@@ -55,8 +69,9 @@ enum LinkRisk {
     private static let sensitive = try! NSRegularExpression(
         pattern: #"\b(sign[ -]?in|log[ -]?in|verify|confirm|account|password|reset|unlock|billing|invoice|payment|suspend)\b"#,
         options: [.caseInsensitive])
+    /// A name in a link's words, whole: as many labels as it has, ending in letters.
     private static let named = try! NSRegularExpression(
-        pattern: #"\b([a-z0-9-]+\.[a-z]{2,}(?:\.[a-z]{2,})?)\b"#, options: [.caseInsensitive])
+        pattern: #"\b((?:[a-z0-9-]+\.)+[a-z]{2,})\b"#, options: [.caseInsensitive])
 
     private static func domain(of address: String) -> String {
         let after = address.lastIndex(of: "@").map { address[address.index(after: $0)...] } ?? Substring(address)
