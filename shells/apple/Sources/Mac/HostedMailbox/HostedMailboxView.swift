@@ -238,6 +238,7 @@ struct HostedMailboxView: View {
             }
         }
         .meadowPanel()
+        .accessibilityElement(children: .contain)
         .accessibilityLabel("Reading pane")
     }
 
