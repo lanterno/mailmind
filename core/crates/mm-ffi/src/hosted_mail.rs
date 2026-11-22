@@ -1,6 +1,7 @@
 //! Local-only MIME views for the encrypted HodHod mailbox.
 use mm_content::mime;
 
+#[allow(missing_debug_implementations, reason = "contains decrypted mailbox data")]
 #[derive(uniffi::Record)]
 pub struct HostedMailHeader {
     pub subject: String,
@@ -10,6 +11,7 @@ pub struct HostedMailHeader {
     pub references: String,
 }
 
+#[allow(missing_debug_implementations, reason = "contains decrypted mailbox data")]
 #[derive(uniffi::Record)]
 pub struct HostedAttachment {
     pub part_id: u32,
@@ -17,6 +19,7 @@ pub struct HostedAttachment {
     pub size: u64,
 }
 
+#[allow(missing_debug_implementations, reason = "contains decrypted mailbox data")]
 #[derive(uniffi::Record)]
 pub struct HostedMailReading {
     pub text: String,

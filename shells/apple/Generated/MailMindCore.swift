@@ -2051,9 +2051,9 @@ public struct HostedAttachment: Equatable, Hashable {
         self.size = size
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -2067,8 +2067,8 @@ public struct FfiConverterTypeHostedAttachment: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HostedAttachment {
         return
             try HostedAttachment(
-                partId: FfiConverterUInt32.read(from: &buf),
-                filename: FfiConverterString.read(from: &buf),
+                partId: FfiConverterUInt32.read(from: &buf), 
+                filename: FfiConverterString.read(from: &buf), 
                 size: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -2113,9 +2113,9 @@ public struct HostedMailHeader: Equatable, Hashable {
         self.references = references
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -2129,10 +2129,10 @@ public struct FfiConverterTypeHostedMailHeader: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HostedMailHeader {
         return
             try HostedMailHeader(
-                subject: FfiConverterString.read(from: &buf),
-                sender: FfiConverterString.read(from: &buf),
-                fromAddress: FfiConverterString.read(from: &buf),
-                messageId: FfiConverterString.read(from: &buf),
+                subject: FfiConverterString.read(from: &buf), 
+                sender: FfiConverterString.read(from: &buf), 
+                fromAddress: FfiConverterString.read(from: &buf), 
+                messageId: FfiConverterString.read(from: &buf), 
                 references: FfiConverterString.read(from: &buf)
         )
     }
@@ -2175,9 +2175,9 @@ public struct HostedMailReading: Equatable, Hashable {
         self.attachments = attachments
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -2191,8 +2191,8 @@ public struct FfiConverterTypeHostedMailReading: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HostedMailReading {
         return
             try HostedMailReading(
-                text: FfiConverterString.read(from: &buf),
-                replyTo: FfiConverterString.read(from: &buf),
+                text: FfiConverterString.read(from: &buf), 
+                replyTo: FfiConverterString.read(from: &buf), 
                 attachments: FfiConverterSequenceTypeHostedAttachment.read(from: &buf)
         )
     }

@@ -22,7 +22,10 @@ struct EncryptedMailboxProfile: Codable, Sendable {
     }
 
     static func readFile(_ url: URL) throws -> Self {
-        let data = try Data(contentsOf: url)
+        let properties = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+        guard properties.isRegularFile == true, let size = properties.fileSize,
+              size > 0, size <= 64_000 else { throw HostedMailboxIssue.profile }
+        let data = try Data(contentsOf: url, options: .mappedIfSafe)
         guard data.count <= 64_000 else { throw HostedMailboxIssue.profile }
         let profile = try JSONDecoder().decode(Self.self, from: data)
         guard profile.valid else { throw HostedMailboxIssue.profile }

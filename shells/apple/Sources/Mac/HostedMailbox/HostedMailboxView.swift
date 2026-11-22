@@ -1,4 +1,5 @@
 #if os(macOS)
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -38,7 +39,6 @@ struct HostedMailboxSettingsLink: View {
 struct HostedMailboxView: View {
     @Environment(\.meadow) private var meadow
     @State private var model = EncryptedMailboxModel()
-    @State private var profileImporter = false
     @State private var composing = false
     @State private var attachmentExporter = false
     @State private var attachmentDocument: HostedAttachmentExport?
@@ -55,7 +55,7 @@ struct HostedMailboxView: View {
                 }
             } else {
                 empty("Connect a mailbox", icon: .lock) {
-                    Button("Import mailbox profile…") { profileImporter = true }
+                    Button("Import mailbox profile…", action: chooseProfile)
                         .buttonStyle(MeadowButtonStyle(kind: .primary))
                 }
                 .meadowPanel()
@@ -74,12 +74,6 @@ struct HostedMailboxView: View {
         .frame(minWidth: 680, minHeight: 420)
         .background { MeadowSky().ignoresSafeArea() }
         .sheet(isPresented: $composing) { HostedCompose(model: model) }
-        .fileImporter(isPresented: $profileImporter, allowedContentTypes: [.json]) { result in
-            switch result {
-            case .success(let url): Task { await model.importProfile(url) }
-            case .failure: model.status = HostedMailboxIssue.profile.errorDescription
-            }
-        }
         .fileExporter(isPresented: $attachmentExporter, document: attachmentDocument, contentType: .data,
                       defaultFilename: attachmentName) { result in
             if case .failure = result { model.status = "The attachment could not be saved." }
@@ -93,6 +87,22 @@ struct HostedMailboxView: View {
                 do { try await Task.sleep(for: .seconds(30)) } catch { break }
                 await model.refresh()
             }
+        }
+    }
+
+    private func chooseProfile() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = String(localized: "Import")
+        let take = { (answer: NSApplication.ModalResponse) in
+            guard answer == .OK, let url = panel.url else { return }
+            Task { await model.importProfile(url) }
+        }
+        if let window = NSApp.keyWindow {
+            panel.beginSheetModal(for: window, completionHandler: take)
+        } else {
+            take(panel.runModal())
         }
     }
 

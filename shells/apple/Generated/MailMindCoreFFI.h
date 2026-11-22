@@ -777,19 +777,19 @@ uint16_t uniffi_mailmind_core_checksum_func_probe_rows(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_FUNC_HOSTED_ATTACHMENT
 #define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_FUNC_HOSTED_ATTACHMENT
 uint16_t uniffi_mailmind_core_checksum_func_hosted_attachment(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_FUNC_HOSTED_HEADERS
 #define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_FUNC_HOSTED_HEADERS
 uint16_t uniffi_mailmind_core_checksum_func_hosted_headers(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_FUNC_HOSTED_READING
 #define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_FUNC_HOSTED_READING
 uint16_t uniffi_mailmind_core_checksum_func_hosted_reading(void
-
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_METHOD_LISTVIEW_SET_VISIBLE
