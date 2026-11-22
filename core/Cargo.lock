@@ -975,6 +975,7 @@ name = "mm-ffi"
 version = "0.1.0"
 dependencies = [
  "mm-app",
+ "mm-content",
  "mm-fixtures",
  "mm-host",
  "uniffi",

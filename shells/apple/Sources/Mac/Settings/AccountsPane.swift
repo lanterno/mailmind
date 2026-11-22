@@ -52,6 +52,7 @@ struct AccountsPane: View {
                     }
                     .buttonStyle(.plain)
                     .help("Add a connection")
+                    HostedMailboxSettingsLink()
                 }
                 .padding(.horizontal, -8)
             }
