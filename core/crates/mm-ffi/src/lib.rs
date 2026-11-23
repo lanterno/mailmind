@@ -10,13 +10,6 @@ use zeroize::Zeroize;
 
 uniffi::setup_scaffolding!();
 
-#[cfg(feature = "host")]
-mod hosted_mail;
-#[cfg(feature = "host")]
-pub use hosted_mail::{
-    HostedAttachment, HostedMailHeader, HostedMailReading, hosted_attachment, hosted_headers, hosted_reading,
-};
-
 // The app in the shell's own process, which the Apple app runs: its routes answered, its events heard.
 #[cfg(feature = "host")]
 mod host;

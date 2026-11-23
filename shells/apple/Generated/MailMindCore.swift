@@ -519,22 +519,6 @@ fileprivate struct FfiConverterUInt32: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterUInt64: FfiConverterPrimitive {
-    typealias FfiType = UInt64
-    typealias SwiftType = UInt64
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt64 {
-        return try lift(readInt(&buf))
-    }
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        writeInt(&buf, lower(value))
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterInt64: FfiConverterPrimitive {
     typealias FfiType = Int64
     typealias SwiftType = Int64
@@ -2038,188 +2022,6 @@ public func FfiConverterTypeCoreHome_lower(_ value: CoreHome) -> RustBuffer {
 }
 
 
-public struct HostedAttachment: Equatable, Hashable {
-    public var partId: UInt32
-    public var filename: String
-    public var size: UInt64
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(partId: UInt32, filename: String, size: UInt64) {
-        self.partId = partId
-        self.filename = filename
-        self.size = size
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension HostedAttachment: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeHostedAttachment: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HostedAttachment {
-        return
-            try HostedAttachment(
-                partId: FfiConverterUInt32.read(from: &buf), 
-                filename: FfiConverterString.read(from: &buf), 
-                size: FfiConverterUInt64.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: HostedAttachment, into buf: inout [UInt8]) {
-        FfiConverterUInt32.write(value.partId, into: &buf)
-        FfiConverterString.write(value.filename, into: &buf)
-        FfiConverterUInt64.write(value.size, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHostedAttachment_lift(_ buf: RustBuffer) throws -> HostedAttachment {
-    return try FfiConverterTypeHostedAttachment.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHostedAttachment_lower(_ value: HostedAttachment) -> RustBuffer {
-    return FfiConverterTypeHostedAttachment.lower(value)
-}
-
-
-public struct HostedMailHeader: Equatable, Hashable {
-    public var subject: String
-    public var sender: String
-    public var fromAddress: String
-    public var messageId: String
-    public var references: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(subject: String, sender: String, fromAddress: String, messageId: String, references: String) {
-        self.subject = subject
-        self.sender = sender
-        self.fromAddress = fromAddress
-        self.messageId = messageId
-        self.references = references
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension HostedMailHeader: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeHostedMailHeader: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HostedMailHeader {
-        return
-            try HostedMailHeader(
-                subject: FfiConverterString.read(from: &buf), 
-                sender: FfiConverterString.read(from: &buf), 
-                fromAddress: FfiConverterString.read(from: &buf), 
-                messageId: FfiConverterString.read(from: &buf), 
-                references: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: HostedMailHeader, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.subject, into: &buf)
-        FfiConverterString.write(value.sender, into: &buf)
-        FfiConverterString.write(value.fromAddress, into: &buf)
-        FfiConverterString.write(value.messageId, into: &buf)
-        FfiConverterString.write(value.references, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHostedMailHeader_lift(_ buf: RustBuffer) throws -> HostedMailHeader {
-    return try FfiConverterTypeHostedMailHeader.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHostedMailHeader_lower(_ value: HostedMailHeader) -> RustBuffer {
-    return FfiConverterTypeHostedMailHeader.lower(value)
-}
-
-
-public struct HostedMailReading: Equatable, Hashable {
-    public var text: String
-    public var replyTo: String
-    public var attachments: [HostedAttachment]
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(text: String, replyTo: String, attachments: [HostedAttachment]) {
-        self.text = text
-        self.replyTo = replyTo
-        self.attachments = attachments
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension HostedMailReading: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeHostedMailReading: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HostedMailReading {
-        return
-            try HostedMailReading(
-                text: FfiConverterString.read(from: &buf), 
-                replyTo: FfiConverterString.read(from: &buf), 
-                attachments: FfiConverterSequenceTypeHostedAttachment.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: HostedMailReading, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.text, into: &buf)
-        FfiConverterString.write(value.replyTo, into: &buf)
-        FfiConverterSequenceTypeHostedAttachment.write(value.attachments, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHostedMailReading_lift(_ buf: RustBuffer) throws -> HostedMailReading {
-    return try FfiConverterTypeHostedMailReading.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHostedMailReading_lower(_ value: HostedMailReading) -> RustBuffer {
-    return FfiConverterTypeHostedMailReading.lower(value)
-}
-
-
 /**
  * Which messages a list shows.
  */
@@ -2710,30 +2512,6 @@ fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionData: FfiConverterRustBuffer {
-    typealias SwiftType = Data?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterData.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterData.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [String]
 
@@ -2776,31 +2554,6 @@ fileprivate struct FfiConverterSequenceTypeCoreHeader: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeCoreHeader.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterSequenceTypeHostedAttachment: FfiConverterRustBuffer {
-    typealias SwiftType = [HostedAttachment]
-
-    public static func write(_ value: [HostedAttachment], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeHostedAttachment.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HostedAttachment] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [HostedAttachment]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeHostedAttachment.read(from: &buf))
         }
         return seq
     }
@@ -2933,31 +2686,6 @@ public func probeRows(count: UInt32) -> [MessageRow]  {
     )
 })
 }
-public func hostedAttachment(raw: Data, partId: UInt32) -> Data?  {
-    return try!  FfiConverterOptionData.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_mailmind_core_fn_func_hosted_attachment(
-        FfiConverterData.lower(raw),
-        FfiConverterUInt32.lower(partId),uniffiCallStatus
-    )
-})
-}
-public func hostedHeaders(raw: Data) -> HostedMailHeader  {
-    return try!  FfiConverterTypeHostedMailHeader_lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_mailmind_core_fn_func_hosted_headers(
-        FfiConverterData.lower(raw),uniffiCallStatus
-    )
-})
-}
-public func hostedReading(raw: Data) -> HostedMailReading  {
-    return try!  FfiConverterTypeHostedMailReading_lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_mailmind_core_fn_func_hosted_reading(
-        FfiConverterData.lower(raw),uniffiCallStatus
-    )
-})
-}
 
 private enum InitializationResult {
     case ok
@@ -2987,15 +2715,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_mailmind_core_checksum_func_probe_rows() != 11024) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_mailmind_core_checksum_func_hosted_attachment() != 8127) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_mailmind_core_checksum_func_hosted_headers() != 16154) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_mailmind_core_checksum_func_hosted_reading() != 38326) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_mailmind_core_checksum_method_listview_set_visible() != 64917) {

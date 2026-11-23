@@ -29,6 +29,17 @@ impl MailServers for ImapServers {
     fn open(&self, account: &str, timeout_seconds: u64) -> Result<Box<dyn MailServer>, ServerError> {
         let failed = ServerError::Failed;
         let account = self.login.directory.get(account).map_err(failed)?.ok_or(failed(Fault::new("UnknownAccount")))?;
+        #[cfg(target_os = "macos")]
+        if account.kind == "hodhod" {
+            let connection = crate::hosted_mail::Session::open(
+                &account,
+                &self.login.directory,
+                self.login.outside.clone(),
+                Duration::from_secs(timeout_seconds),
+            )?;
+            let connection: Box<dyn MailServer> = Box::new(connection);
+            return Ok(if self.read_only { Box::new(ReadOnly(connection)) } else { connection });
+        }
         let session = self.login.open(&account, Duration::from_secs(timeout_seconds))?;
         session.keep_alive();
         let session: Box<dyn MailServer> = Box::new(session);

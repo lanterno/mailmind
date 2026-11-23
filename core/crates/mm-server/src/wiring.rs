@@ -125,6 +125,15 @@ impl MailSessions for ImapSessions {
     fn open(&self, account: &str) -> Result<Box<dyn MailSession>, SessionError> {
         let failed = SessionError::Failed;
         let account = self.login.directory.get(account).map_err(failed)?.ok_or(failed(Fault::new("UnknownAccount")))?;
+        #[cfg(target_os = "macos")]
+        if account.kind == "hodhod" {
+            return Ok(Box::new(crate::hosted_mail::Session::open(
+                &account,
+                &self.login.directory,
+                self.login.outside.clone(),
+                TIMEOUT,
+            )?));
+        }
         Ok(Box::new(self.login.open(&account, TIMEOUT)?))
     }
 }

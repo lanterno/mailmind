@@ -183,11 +183,12 @@ impl Drafting {
             return Ok(json!({"ok": true, "draft_id": asked.draft_id, "empty": true}));
         }
         let built = build_message(spec, true, self.parts.mint.minting()).map_err(Problem::refused)?;
-        let (id, version) = self.accept(asked, &composed, &built, &account.email)?;
+        let keep_here = account.local_drafts || !self.parts.writes;
+        let (id, version) = self.accept(asked, &composed, &built, &account.email, keep_here)?;
         let mut answer = json!({"ok": true, "draft_id": id, "version": version, "message_id": built.message_id,
                                 "pushed": false});
         if asked.autosave != Some(true)
-            && self.parts.writes
+            && !keep_here
             && let Some(uid) = self.try_push(id, Priority::Interactive, GateWait::For(PUSH_WAIT))
         {
             answer["pushed"] = json!(true);
@@ -209,6 +210,7 @@ impl Drafting {
         composed: &Composed,
         built: &Built,
         account: &str,
+        keep_here: bool,
     ) -> Result<(i64, i64), Failure> {
         let given = asked.draft_id.filter(|id| *id != 0);
         let key = draft::composer_key(asked.idempotency_key.as_deref());
@@ -270,10 +272,9 @@ impl Drafting {
                 &stamp,
                 answers.as_deref(),
             )?;
-            // A read-only process keeps the save here: no push of it waits for a full run.
+            // A local-only save stays in the journal so the composer can still reopen it.
             let pushed_at = prev.as_ref().and_then(|p| p.pushed_at);
-            let (due, attempts) =
-                draft_journal::after_save(autosave, now, waiting.as_ref(), pushed_at, !self.parts.writes);
+            let (due, attempts) = draft_journal::after_save(autosave, now, waiting.as_ref(), pushed_at, keep_here);
             book.journal_put(&Save {
                 draft_id: id,
                 version,

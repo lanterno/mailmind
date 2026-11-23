@@ -422,8 +422,10 @@ pub struct SendingAccount {
     pub email: String,
     /// The name From shows: its alias, else its address.
     pub name: String,
-    /// The server files sent mail itself (Gmail): no copy of ours goes in Sent.
+    /// The server files sent mail itself: no copy of ours goes in Sent.
     pub saves_sent: bool,
+    /// Keep drafts on this device when the transport does not support saving a draft remotely.
+    pub local_drafts: bool,
 }
 
 /// The accounts a message may be sent from.

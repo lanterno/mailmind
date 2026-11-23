@@ -58,3 +58,10 @@ rustls.workspace = true
 
 [lints]
 workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+base64 = "0.22.1"
+ring = "0.17.14"
+security-framework = "3.7.0"
+serde.workspace = true
+zeroize.workspace = true

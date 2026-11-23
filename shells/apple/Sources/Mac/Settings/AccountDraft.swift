@@ -16,13 +16,14 @@ import Foundation
 struct AccountDraft: Equatable {
     /// The types an account is saved as: Gmail, Proton through its Bridge, and any other IMAP server.
     enum Kind: String, CaseIterable, Identifiable, Sendable {
-        case gmail, imap, proton
+        case gmail, imap, proton, hodhod
         var id: String { rawValue }
         var label: String {
             switch self {
             case .gmail: "Gmail"
             case .imap: String(localized: "Other IMAP")
             case .proton: "Proton"
+            case .hodhod: "HodHod"
             }
         }
     }
@@ -129,7 +130,7 @@ struct AccountDraft: Equatable {
     /// The address the server is asked which preset it takes: one typed with an @ in it, only while adding, since a
     /// saved account's type is its own.
     var presetQuery: String? {
-        guard editing == nil else { return nil }
+        guard editing == nil, type != .hodhod else { return nil }
         let typed = email.trimmed
         return typed.contains("@") ? typed : nil
     }
@@ -174,9 +175,21 @@ struct AccountDraft: Equatable {
 
     /// A type picked by hand: what a preset filled in is no longer its.
     mutating func pick(_ picked: Kind) {
+        if type == .hodhod, picked != .hodhod { password = "" }
         kind = picked
         applied = nil
         trash = nil
+    }
+
+    mutating func importHodHod(_ profile: EncryptedMailboxProfile, address: String) throws {
+        guard editing == nil || (editing == address && type == .hodhod) else {
+            throw HostedMailboxIssue.unauthorized
+        }
+        pick(.hodhod)
+        email = address
+        found = nil
+        source = .keychain
+        password = String(decoding: try JSONEncoder().encode(profile), as: UTF8.self)
     }
 
     /// Whether the address is at a provider MailMind can't log in to yet (Microsoft's): nothing is asked of it.
@@ -254,7 +267,10 @@ struct AccountDraft: Equatable {
         if editing == nil, !address.contains("@") { return String(localized: "Type the account’s email address.") }
         if unsupported { return note ?? String(localized: "MailMind can’t log in to this account yet.") }
         if type == .imap, host.trimmed.isEmpty { return String(localized: "Type the incoming server’s name.") }
-        if editing == nil, credential == nil { return String(localized: "Type the account’s password.") }
+        if editing == nil, credential == nil {
+            return type == .hodhod ? String(localized: "Import a HodHod mailbox profile.")
+                : String(localized: "Type the account’s password.")
+        }
         if asksPassword, typesPassword, credential == nil {
             return fixing == .appPassword ? String(localized: "Paste the new app password.")
                 : String(localized: "Type the account’s password.")
@@ -345,6 +361,7 @@ struct AccountDraft: Equatable {
         case .gmail: keptElsewhere == nil ? Self.appPasswords.absoluteString : nil
         case .imap: keptElsewhere == nil ? link?.url : nil
         case .proton: link?.url
+        case .hodhod: nil
         }
     }
 

@@ -177,6 +177,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "base64"
+version = "0.22.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+
+[[package]]
 name = "basic-toml"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -975,7 +981,6 @@ name = "mm-ffi"
 version = "0.1.0"
 dependencies = [
  "mm-app",
- "mm-content",
  "mm-fixtures",
  "mm-host",
  "uniffi",
@@ -1101,6 +1106,7 @@ name = "mm-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "base64",
  "flate2",
  "futures-core",
  "getrandom 0.4.3",
@@ -1124,12 +1130,16 @@ dependencies = [
  "mm-smtp",
  "mm-store",
  "rcgen",
+ "ring",
  "rustls",
+ "security-framework",
+ "serde",
  "serde_json",
  "sha2",
  "tempfile",
  "tokio",
  "tower-service",
+ "zeroize",
 ]
 
 [[package]]

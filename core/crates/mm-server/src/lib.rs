@@ -61,6 +61,8 @@ mod outbox_worker;
 mod database_version;
 pub mod db_command;
 // Every session's login, which a login its server refused waits out.
+#[cfg(target_os = "macos")]
+mod hosted_mail;
 mod login_wiring;
 // IDLE's workers bound: the accounts, their sessions, and their news syncing those accounts.
 mod idle_wiring;

@@ -1,4 +1,5 @@
 #if os(macOS)
+import AppKit
 import SwiftUI
 
 /// Add an account or edit one, as a sheet drawn as Meadow's dialog (the page's `ConnectionForm`): its address first,
@@ -24,6 +25,7 @@ struct AccountForm: View {
 
     @State private var problem = ""
     @State private var saving = false
+    @State private var importingHodHod = false
     /// The account added from the first run whose test then failed: the sheet stays open on it until Done.
     @State private var added: String?
     /// The field the sheet was opened to fix (#51), focused as it opens and again when a fix didn't work.
@@ -52,7 +54,7 @@ struct AccountForm: View {
                                 .textContentType(.emailAddress)
                                 .meadowComposeField()
                                 .accessibilityLabel("Email")
-                                .disabled(draft.editing != nil)
+                                .disabled(draft.editing != nil || draft.type == .hodhod)
                             if draft.editing != nil {
                                 SettingHelp(String(localized:
                                     "Identity is fixed — remove and re-add to change the address."))
@@ -60,21 +62,31 @@ struct AccountForm: View {
                             presetWords
                             if let note = draft.note { NoteWords(text: note) }
                             if let taken = draft.alreadySetUp(among: known) { NoteWords(text: taken) }
+                            if draft.editing == nil, draft.type != .hodhod {
+                                Button("Import HodHod profile…", action: chooseHodHod)
+                                    .meadowButton(small: true)
+                                    .disabled(importingHodHod)
+                            }
                         }
                     }
-                    if draft.kind != nil, !draft.unsupported {
+                    if draft.kind != nil, !draft.unsupported, draft.type != .hodhod {
                         row("Type") {
                             MeadowSegmentedChoice(label: String(localized: "Type"),
                                                   selection: Binding(get: { draft.type }, set: { draft.pick($0) }),
-                                                  options: AccountDraft.Kind.allCases.map { ($0, $0.label) },
+                                                  options: AccountDraft.Kind.allCases.filter { $0 != .hodhod }.map { ($0, $0.label) },
                                                   fills: false)
                         }
                         if draft.type == .imap { servers }
                     }
                     if !draft.unsupported {
-                        row("Password") {
+                        row(draft.type == .hodhod ? "Profile" : "Password") {
                             VStack(alignment: .leading, spacing: 8) {
-                                if draft.type == .proton {
+                                if draft.type == .hodhod {
+                                    Button("Import HodHod profile…", action: chooseHodHod)
+                                        .meadowButton(small: true)
+                                        .disabled(importingHodHod)
+                                    SettingHelp(String(localized: "Cloud AI pauses while a HodHod account is connected."))
+                                } else if draft.type == .proton {
                                     SettingHelp(String(localized:
                                         "Proton accounts log in through Proton Bridge, with the Bridge’s password."))
                                     BridgePasswordView(status: status)
@@ -145,7 +157,7 @@ struct AccountForm: View {
                     }
                     .meadowButton(.primary)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(saving || draft.unsupported)
+                    .disabled(saving || importingHodHod || draft.unsupported)
                 }
             }
             .padding(.horizontal, 16)
@@ -268,6 +280,34 @@ struct AccountForm: View {
             SettingHelp(words)
         case nil:
             EmptyView()
+        }
+    }
+
+    private func chooseHodHod() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = String(localized: "Import")
+        let open = { (answer: NSApplication.ModalResponse) in
+            guard answer == .OK, let url = panel.url else { return }
+            importingHodHod = true
+            problem = ""
+            Task {
+                defer { importingHodHod = false }
+                do {
+                    let profile = try EncryptedMailboxProfile.readFile(url)
+                    let address = try await EncryptedMailboxAPI(profile: profile).account()
+                    try draft.importHodHod(profile, address: address)
+                    tested = nil
+                } catch {
+                    problem = String(localized: "Couldn’t import the HodHod profile or verify its mailbox.")
+                }
+            }
+        }
+        if let window = NSApp.keyWindow {
+            panel.beginSheetModal(for: window, completionHandler: open)
+        } else {
+            open(panel.runModal())
         }
     }
 

@@ -469,21 +469,6 @@ void uniffi_mailmind_core_fn_func_probe_noop(RustCallStatus *_Nonnull out_status
 RustBuffer uniffi_mailmind_core_fn_func_probe_rows(uint32_t count, RustCallStatus *_Nonnull out_status
 );
 #endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_FUNC_HOSTED_ATTACHMENT
-#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_FUNC_HOSTED_ATTACHMENT
-RustBuffer uniffi_mailmind_core_fn_func_hosted_attachment(RustBuffer raw, uint32_t part_id, RustCallStatus *_Nonnull out_status
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_FUNC_HOSTED_HEADERS
-#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_FUNC_HOSTED_HEADERS
-RustBuffer uniffi_mailmind_core_fn_func_hosted_headers(RustBuffer raw, RustCallStatus *_Nonnull out_status
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_FUNC_HOSTED_READING
-#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_FUNC_HOSTED_READING
-RustBuffer uniffi_mailmind_core_fn_func_hosted_reading(RustBuffer raw, RustCallStatus *_Nonnull out_status
-);
-#endif
 #ifndef UNIFFI_FFIDEF_FFI_MAILMIND_CORE_RUSTBUFFER_ALLOC
 #define UNIFFI_FFIDEF_FFI_MAILMIND_CORE_RUSTBUFFER_ALLOC
 RustBuffer ffi_mailmind_core_rustbuffer_alloc(uint64_t size, RustCallStatus *_Nonnull out_status
@@ -771,24 +756,6 @@ uint16_t uniffi_mailmind_core_checksum_func_probe_noop(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_FUNC_PROBE_ROWS
 #define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_FUNC_PROBE_ROWS
 uint16_t uniffi_mailmind_core_checksum_func_probe_rows(void
-    
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_FUNC_HOSTED_ATTACHMENT
-#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_FUNC_HOSTED_ATTACHMENT
-uint16_t uniffi_mailmind_core_checksum_func_hosted_attachment(void
-    
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_FUNC_HOSTED_HEADERS
-#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_FUNC_HOSTED_HEADERS
-uint16_t uniffi_mailmind_core_checksum_func_hosted_headers(void
-    
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_FUNC_HOSTED_READING
-#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_FUNC_HOSTED_READING
-uint16_t uniffi_mailmind_core_checksum_func_hosted_reading(void
     
 );
 #endif

@@ -21,11 +21,10 @@ path = "src/bin/uniffi-bindgen.rs"
 # The app in the shell's own process (mm-host), which the Apple app runs. Android's screens are still step 0's: its
 # library and its bindings leave the host out (`--no-default-features`).
 default = ["host"]
-host = ["dep:mm-host", "dep:mm-content"]
+host = ["dep:mm-host"]
 
 [dependencies]
 mm-app.workspace = true
-mm-content = { workspace = true, optional = true }
 mm-host = { workspace = true, optional = true }
 mm-fixtures.workspace = true
 uniffi.workspace = true

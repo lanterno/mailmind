@@ -66,7 +66,6 @@ struct MailMindApp: App {
 
         #if os(macOS)
         AcknowledgementsWindow()
-        HostedMailboxScene()
         // Settings (⌘,), MailMind Help, and the status's commands in the menu bar.
         StatusScenes()
         #endif
