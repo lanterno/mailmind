@@ -49,8 +49,9 @@ def stop(words: str) -> None:
 
 
 def metadata(target: str) -> dict:
+    # Metadata resolves the whole workspace, including crates the release build did not fetch.
     said = subprocess.run(
-        ["cargo", "metadata", "--format-version", "1", "--locked", "--offline", "--filter-platform", target],
+        ["cargo", "metadata", "--format-version", "1", "--locked", "--filter-platform", target],
         cwd=CORE,
         capture_output=True,
         text=True,
