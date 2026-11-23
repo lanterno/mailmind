@@ -215,6 +215,9 @@ impl Account {
             Some(Value::String(t)) => t.clone(),
             _ => "imap".to_owned(),
         };
+        if kind == "hodhod" && !cfg!(target_os = "macos") {
+            return None;
+        }
         Some(Account {
             email,
             kind,
@@ -339,8 +342,11 @@ pub fn validate_new(entry: &Map<String, Value>) -> Result<(), Problem> {
         Some(_) => None,
     };
     let Some(kind) = kind else {
-        return Err(Problem::refused("type must be gmail, imap, proton, or hodhod"));
+        return Err(Problem::refused("type must be gmail, imap, or proton"));
     };
+    if kind == "hodhod" && !cfg!(target_os = "macos") {
+        return Err(Problem::refused("HodHod accounts require macOS"));
+    }
     let host = match entry.get("host") {
         Some(v) if truthy(v) => match v {
             Value::String(s) => s.clone(),

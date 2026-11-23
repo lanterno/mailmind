@@ -133,8 +133,10 @@ impl LoginProbe for ServerProbe {
 
     /// Where the draft was typed: no hold is asked or told (`session_for`).
     fn draft(&self, draft: &Draft, timeout: Duration) -> Result<(), LoginTrouble> {
-        #[cfg(target_os = "macos")]
         if draft.hosted {
+            #[cfg(not(target_os = "macos"))]
+            return Err(LoginTrouble("HodHodRequiresMacOS"));
+            #[cfg(target_os = "macos")]
             return crate::hosted_mail::probe(
                 &draft.password,
                 &*self.login.outside,
