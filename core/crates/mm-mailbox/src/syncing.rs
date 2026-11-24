@@ -7,7 +7,8 @@
 //! asks, so mail heard of in the meantime is fetched now rather than at the next round.
 //!
 //! An Inbox's first scan stores its newest mail, which was there before, so it is no new mail: no `new-mail`, and no
-//! count in the round's result. Its older mail is read after, a few steps at a time, by the background's
+//! count in the round's result. What it kept is triaged at once all the same (`AroundSync::first_mail`), so an
+//! account just added doesn't wait out the summaries' interval to say what needs you. Its older mail is read after, a few steps at a time, by the background's
 //! `read_older` rounds; until it is all read, the account's status says how far the scan has got. A read of it that
 //! met trouble that may pass goes on as soon as the account's next sync works, rather than at the next round.
 //!
@@ -411,6 +412,10 @@ impl Syncing {
                     }
                     self.page(Topic::NewMail, said);
                 } else if synced.afresh && synced.kept + synced.junk > 0 {
+                    if synced.kept > 0 {
+                        // What it kept waits for its summaries: what needs you is known only once they come.
+                        self.around.first_mail();
+                    }
                     // What a first scan stored changes the rail's counts, though none of it is new.
                     self.folders.invalidate(Some(email))?;
                 }

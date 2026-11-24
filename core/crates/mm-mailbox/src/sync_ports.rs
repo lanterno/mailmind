@@ -191,6 +191,11 @@ pub trait AroundSync: Send + Sync + fmt::Debug {
     fn wake_due(&self);
     /// The round brought new mail: the job that triages it runs its next round now.
     fn new_mail(&self);
+    /// An Inbox's first scan kept mail, none of it new: the job that triages it runs its next round now all the same,
+    /// so an account just added says what needs you within moments, not at the next round minutes on.
+    fn first_mail(&self) {
+        self.new_mail();
+    }
     /// A first scan left older mail to read: the round that reads it runs now. Whether anything here reads it: the
     /// served suites start no rounds.
     fn older_to_read(&self) -> bool {
