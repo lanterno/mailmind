@@ -264,7 +264,7 @@ struct AccountListRow: View {
 
     var body: some View {
         let email = row.email ?? ""
-        let standing = StatusWords.standing(of: email, digest: status.digest, health: status.health)
+        let says = Self.says(email, digest: status.digest, health: status.health)
         Button(action: choose) {
             HStack(spacing: 10) {
                 MeadowAvatar(name: label, account: colour, chosen: chosen)
@@ -276,10 +276,10 @@ struct AccountListRow: View {
                 Spacer(minLength: 8)
                 if row.disabled {
                     MeadowChip(String(localized: "Disabled"), tone: .line)
-                } else if standing != .unknown {
+                } else if !says.words.isEmpty {
                     HStack(spacing: 6) {
-                        SettingDot(colour: standing.colour(meadow))
-                        Text(standing.words)
+                        SettingDot(colour: says.tryingAgain ? meadow.sun : says.standing.colour(meadow))
+                        Text(says.words)
                     }
                     .font(.meadow(.ui, 12))
                     .foregroundStyle(meadow.ink3)
@@ -303,6 +303,18 @@ struct AccountListRow: View {
     private var label: String {
         if let alias = row.alias, !alias.isEmpty { return alias }
         return StatusWords.short(row.email ?? "")
+    }
+
+    /// How the row says the account stands, as the status menu's row does: an account whose last sync failed, with
+    /// nothing louder said of it yet, is trying again in the sun's words, never connected, as the pill says it is.
+    static func says(_ account: String, digest: API.Digest?, health: [API.AccountStanding])
+        -> (standing: StatusWords.Standing, words: String, tryingAgain: Bool)
+    {
+        let standing = StatusWords.standing(of: account, digest: digest, health: health)
+        if standing == .connected || standing == .unknown, StatusWords.tryingAgain(account, digest: digest) {
+            return (standing, String(localized: "trying again"), true)
+        }
+        return (standing, standing.words, false)
     }
 }
 
