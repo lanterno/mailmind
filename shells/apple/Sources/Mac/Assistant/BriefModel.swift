@@ -64,6 +64,13 @@ final class BriefModel {
     /// AI was turned off in Settings: the brief shows only what the digest holds, with no word of the AI.
     var aiTurnedOff: Bool { digest?.ai.isTurnedOff ?? false }
 
+    /// The AI is reading mail that waits for its summary, as the digest last said: until it has, what needs you isn't
+    /// known, so the brief, its line over the Inbox and its tallies say so rather than that nothing does.
+    var summarizing: Bool { digest?.ai.isSummarizing ?? false }
+
+    /// What the brief's Needs you says with nothing in it.
+    var calm: String { summarizing ? AIWords.reading : String(localized: "Nothing needs you right now.") }
+
     /// The digest's rows still here.
     var items: [API.DigestItem] {
         (digest?.items ?? []).filter { !filing.contains(Self.copy(of: $0)) }
@@ -74,7 +81,8 @@ final class BriefModel {
     /// The line over the greeting: how the mail stands (`BriefWords.update`), from what needs you once the digest is
     /// read and the Inbox's unread the window counts, and the date until either is known.
     func line(unread: Int?, now: Date) -> String {
-        BriefWords.update(unread: unread, needs: digest == nil ? nil : needs.count) ?? BriefWords.dateLine(now)
+        BriefWords.update(unread: unread, needs: digest == nil ? nil : needs.count, reading: summarizing)
+            ?? BriefWords.dateLine(now)
     }
     /// What the AI rates as safe to file, which the brief offers to file and counts as able to wait. None while AI is
     /// turned off: the ratings are the AI's, so neither the offer nor its count shows then.

@@ -314,19 +314,27 @@ enum DayGroup {
 
 /// Today's brief as a row at the top of the Inbox (the mockup's `briefRowHTML()`, the page's `BriefRow`): the date,
 /// how many need you, wait and can wait, and who needs you. What can wait is the AI's rating, so with AI turned off
-/// (`canWait` nil) the line doesn't count it.
+/// (`canWait` nil) the line doesn't count it. While the AI reads mail that waits for its summary (`reading`), none
+/// needing you isn't known yet, so the line says it is reading rather than that nothing needs you, as the page's does.
 struct BriefLine: Equatable {
     let date: String
     let tally: String
     let gist: String
     let needs: Bool
 
-    init(needs: [API.DigestItem], waiting: Int, canWait: Int?, now: Date = Date(), locale: Locale = .current) {
+    init(needs: [API.DigestItem], waiting: Int, canWait: Int?, reading: Bool = false, now: Date = Date(),
+         locale: Locale = .current) {
         date = now.formatted(Date.FormatStyle(locale: locale).weekday(.abbreviated).day().month(.abbreviated))
-        tally = canWait.map { String(localized: "\(needs.count) need you · \(waiting) waiting · \($0) can wait") }
-            ?? String(localized: "\(needs.count) need you · \(waiting) waiting")
+        if reading, needs.isEmpty {
+            tally = canWait.map { String(localized: "\(AIWords.reading) · \(waiting) waiting · \($0) can wait") }
+                ?? String(localized: "\(AIWords.reading) · \(waiting) waiting")
+            gist = AIWords.reading
+        } else {
+            tally = canWait.map { String(localized: "\(needs.count) need you · \(waiting) waiting · \($0) can wait") }
+                ?? String(localized: "\(needs.count) need you · \(waiting) waiting")
+            gist = Self.who(needs)
+        }
         self.needs = !needs.isEmpty
-        gist = Self.who(needs)
     }
 
     /// Who needs you, by first name: "Ren needs you.", "Ren and Mira need you.", "Ren, Mira and 2 others need you."

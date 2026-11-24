@@ -116,11 +116,19 @@ extension API.AiStatus {
 
     /// A person turned AI off in Settings: nothing only AI can serve is shown, and nothing asks them to turn it on.
     var isTurnedOff: Bool { off == .turnedOff }
+
+    /// The AI is reading mail that waits for its summary, as after an account's first sync, and nothing holds it back:
+    /// until it has, what needs you isn't known, so nothing says that nothing does. Never while AI is off.
+    var isSummarizing: Bool { isOn && summarizing == true }
 }
 
 /// What the app says of AI, from what the digest says of it: in Settings, in the brief and wherever an AI card would
 /// be. Plain functions, so the tests hold the words.
 enum AIWords {
+    /// What the brief, its line over the Inbox and the Inbox's emptied Needs you say while the AI reads mail that waits
+    /// for its summary (`isSummarizing`), in place of nothing needing you, in the page's words.
+    static let reading = String(localized: "Reading your new mail…")
+
     /// Whether a service's URL is on this Mac: http or https at 127.0.0.1, ::1 or localhost, as the core holds a
     /// model on this Mac to.
     static func onThisMac(_ url: String) -> Bool {

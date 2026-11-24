@@ -30,6 +30,9 @@ final class Mailbox {
     private(set) var ai: API.AiStatus?
     /// AI was turned off in Settings: what only AI serves isn't offered, and nothing asks to turn it on.
     var aiTurnedOff: Bool { ai?.isTurnedOff == true }
+    /// The AI is reading mail that waits for its summary, so an emptied Needs you says so rather than that nothing
+    /// needs you.
+    var summarizing: Bool { ai?.isSummarizing == true }
 
     // The preferences the list reads (/api/preferences), as the server holds them.
     private(set) var grouped = true
@@ -298,11 +301,13 @@ final class Mailbox {
     /// doesn't list yet (one just added) reads the accounts first, so its folders are read with the rest; and when the
     /// accounts the digest names have changed, their folders and counts are read again. Summaries landing change what
     /// rows say and which need you, and no folder's count: a lane on screen and the message open from outside are read
-    /// again, the list by the window (`MailApp.heard`) and the rail's count with the brief's (the desk's `heard`).
+    /// again, the list by the window (`MailApp.heard`) and the rail's count with the brief's (the desk's `heard`), and
+    /// the digest, whose AI says whether mail still waits to be read (`summarizing`).
     func heard(_ event: CoreEvent) {
         if event.name == MailApp.summarized {
             lane?.refresh()
             rereadOutside()
+            digestAgain()
         }
         if MailApp.mailChanged.contains(event.name) || event.name == "folder-synced" {
             lane?.refresh()

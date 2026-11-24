@@ -173,10 +173,11 @@ struct PaneEmptyWords: Equatable {
     let everything: Bool
 
     /// With the Inbox's Needs you emptied, with mail to pick from, or with none. With the search field holding the
-    /// keyboard, as Return leaves it, J would be typed there: ↓ goes from it to the list's first row.
-    static func of(needsDone: Bool, hasMail: Bool, inSearchField: Bool = false) -> PaneEmptyWords {
+    /// keyboard, as Return leaves it, J would be typed there: ↓ goes from it to the list's first row. While the AI
+    /// reads mail that waits for its summary (`reading`), an emptied Needs you doesn't say that nothing needs you.
+    static func of(needsDone: Bool, hasMail: Bool, inSearchField: Bool = false, reading: Bool = false) -> PaneEmptyWords {
         if needsDone {
-            return PaneEmptyWords(title: String(localized: "Nothing needs you."),
+            return PaneEmptyWords(title: reading ? AIWords.reading : String(localized: "Nothing needs you."),
                                   line: String(localized: "Everything else can wait."), everything: true)
         }
         if hasMail {
@@ -211,7 +212,8 @@ struct PaneEmptyWords: Equatable {
         default: break
         }
         let needsDone = loaded && !hasMail && inInbox && mailbox.tab == .needs
-        return of(needsDone: needsDone, hasMail: hasMail, inSearchField: mailbox.inSearchField)
+        return of(needsDone: needsDone, hasMail: hasMail, inSearchField: mailbox.inSearchField,
+                  reading: mailbox.summarizing)
     }
 
     /// Several rows marked: how many, as the bulk bar counts them ("4 selected"), and what that bar over the list

@@ -210,6 +210,9 @@ struct BriefScreen: View {
             quiet("The brief isn’t available right now (\(model.failing ?? why)).", button: "Try again")
         } else if model.missing, model.aiOn == true {
             quiet("Today’s brief isn’t written yet.", button: "Write it")
+        } else if model.summarizing {
+            // Nothing summarized to brief from yet, and the AI is reading what waits: it is read again once it has.
+            DeskThinking(saying: "Reading your new mail…")
         } else {
             Text("Nothing to brief yet.")
                 .font(.meadow(.ui, 15))
@@ -284,7 +287,7 @@ struct BriefScreen: View {
                         note: needs.isEmpty ? nil : String(localized: "click a title to read it here"),
                         inTopic: topic != nil)
             if needs.isEmpty {
-                Text("Nothing needs you right now.")
+                Text(model.calm)
                     .font(.meadow(.ui, 14.5))
                     .foregroundStyle(meadow.ink3)
             }

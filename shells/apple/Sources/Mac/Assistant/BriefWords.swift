@@ -36,10 +36,11 @@ enum BriefWords {
     /// The line over the greeting: how the mail stands, from counts the window already has. What needs you, once the
     /// digest is read (`needs`), then every account's Inbox unread, once each account's counts are read (`unread`):
     /// "2 need you · 5 unread", and "Nothing unread" with neither. Nil while neither is known, so the line says the
-    /// date (`dateLine`) rather than a count that is still coming. Nothing here needs the AI.
-    static func update(unread: Int?, needs: Int?, locale: Locale = .current) -> String? {
+    /// date (`dateLine`) rather than a count that is still coming. Nothing here needs the AI. While the AI reads mail
+    /// that waits for its summary (`reading`), none needing you isn't known yet, so the line says it is reading.
+    static func update(unread: Int?, needs: Int?, reading: Bool = false, locale: Locale = .current) -> String? {
         var parts: [String] = []
-        if let needs, needs > 0 { parts.append(needsNote(needs)) }
+        if let needs, needs > 0 || reading { parts.append(needsNote(needs, reading: reading)) }
         if let unread, unread > 0 {
             let count = unread.formatted(.number.locale(locale))
             parts.append(String(localized: "\(count) unread"))
@@ -255,9 +256,11 @@ enum BriefWords {
         let uid: Int
     }
 
-    static func needsNote(_ count: Int) -> String {
-        count == 0 ? String(localized: "Nothing needs you") : count == 1 ? String(localized: "1 needs you")
-            : String(localized: "\(count) need you")
+    /// How many need you; none, while the AI reads mail that waits for its summary (`reading`), isn't known yet, as
+    /// the page's `needsNote` says.
+    static func needsNote(_ count: Int, reading: Bool = false) -> String {
+        count == 0 ? (reading ? AIWords.reading : String(localized: "Nothing needs you"))
+            : count == 1 ? String(localized: "1 needs you") : String(localized: "\(count) need you")
     }
 
     /// The link under who you're waiting on, once there are more than its card shows: it opens Waiting, which holds

@@ -67,7 +67,7 @@ struct MailboxTable: View {
         let there = { (item: API.DigestItem) in account == nil || item.account == account }
         let waiting = account.map { mailbox.folders[$0]?.waiting ?? 0 } ?? mailbox.across?.waiting ?? 0
         return BriefLine(needs: brief.needs.filter(there), waiting: waiting,
-                         canWait: brief.aiTurnedOff ? nil : brief.tidy.filter(there).count)
+                         canWait: brief.aiTurnedOff ? nil : brief.tidy.filter(there).count, reading: brief.summarizing)
     }
 
     /// The rows checked are in Trash, where the bulk bar restores them.
@@ -222,7 +222,7 @@ struct EmptyList: View {
             if let problem = list.problem {
                 failed(searching ? "Search failed." : "Couldn’t load messages.", problem)
             } else if place?.isInbox == true, mailbox.tab != .all, (facts.read ?? 0) > 0 {
-                said(mailbox.tab == .needs ? Words.needsYou : Words.unread) {
+                said(mailbox.tab == .needs ? (mailbox.summarizing ? AIWords.reading : Words.needsYou) : Words.unread) {
                     HStack(spacing: 0) {
                         Text("Everything else is in ")
                         Button("Everything") { mailbox.tab = .all }.buttonStyle(MeadowLinkStyle(inline: true))
