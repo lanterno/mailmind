@@ -422,11 +422,16 @@ final class Desk {
     }
 
     /// An Undo is asked, from the mailbox's toast or the desk's notice: what it puts back in an Inbox is never new
-    /// mail, so the pill leaves it out.
+    /// mail, so the pill leaves it out. Curate, open, reads its senders and rules again once it lands, as a cleanup
+    /// undone floods the Inbox again.
     func undoing() -> @MainActor (API.Undone?) -> Void {
         since.undoing()
         return { [weak self] done in
-            self?.since.undone(account: done?.account, folder: done?.folder, count: done.map { $0.reversed ?? 1 } ?? 0)
+            guard let self else { return }
+            since.undone(account: done?.account, folder: done?.folder, count: done.map { $0.reversed ?? 1 } ?? 0)
+            if done != nil, case .curate? = sheet {
+                Task { await self.curate.load() }
+            }
         }
     }
 
