@@ -616,6 +616,94 @@ final class ListKeysTests: XCTestCase {
         XCTAssertEqual(mailbox.toast?.text, "No more messages above", "outside the Inbox no brief is above")
     }
 
+    // MARK: Moving on
+
+    /// The rows a server lists, which a verb's route takes rows out of, as the real one files them.
+    private final class Listed: @unchecked Sendable {
+        private let lock = NSLock()
+        private var held: [API.FolderRow]
+
+        init(_ rows: [API.FolderRow]) {
+            held = rows
+        }
+
+        var rows: [API.FolderRow] {
+            lock.withLock { held }
+        }
+
+        func take(_ key: Int) {
+            lock.withLock { held.removeAll { $0.key == key } }
+        }
+
+        /// A row come back to the top, as a snoozed message wakes.
+        func put(_ row: API.FolderRow) {
+            lock.withLock { held.insert(row, at: 0) }
+        }
+    }
+
+    /// A server over `listed`, whose filing, moving and snoozing routes take the row they name out of it.
+    private func shrinking(_ listed: Listed) -> FakeServer {
+        let server = Fixture.server(rows: listed.rows)
+        server.on("GET", API.Get.Inboxes.path) { asked in
+            let rows = listed.rows
+            return FakeServer.ok(API.InboxesListing(folder: "INBOX", grouped: asked.query["group"] != nil, hasMore: false,
+                                                    items: rows, offset: 0, ok: true, total: rows.count))
+        }
+        let one = API.Filed(msg: "ok", ok: true, status: nil, undoable: true)
+        for path in [API.Post.Archive.path, API.Post.Trash.path, API.Post.Move.path] {
+            server.on("POST", path) { asked in
+                let body = try! JSONDecoder().decode(API.MoveBody.self, from: asked.body)
+                listed.take(body.key)
+                return FakeServer.ok(one)
+            }
+        }
+        let whole = API.ManyFiled(count: 3, failed: 0, filed: [], msg: "", ok: true, queued: 0, undoable: true)
+        for path in [API.Post.ThreadArchive.path, API.Post.ThreadTrash.path, API.Post.ThreadMove.path] {
+            server.on("POST", path) { asked in
+                let body = try! JSONDecoder().decode(API.MoveBody.self, from: asked.body)
+                listed.take(body.key)
+                return FakeServer.ok(whole)
+            }
+        }
+        return server
+    }
+
+    // MARK: Two windows
+
+    /// Every mail window draws the process's one list in a table of its own. With a second window closed, the table
+    /// left still hears the list: a message that woke shows at its top, and one filed elsewhere goes, with no other
+    /// folder chosen and the Inbox again. The list once told only the last table to open, and not one of the others
+    /// once that one closed. Closed in the other order, the second hears it too.
+    func testATableStillOpenHearsTheListOnceAnotherWindowsTableCloses() async throws {
+        for closesSecond in [true, false] {
+            let listed = Listed(Array(Fixture.inbox.prefix(6)))
+            let (app, first) = try await table(server: shrinking(listed))
+            let list = try XCTUnwrap(app.list)
+            let second = MailboxTableController(list: list, mailbox: app.mailbox, look: first.look, sections: true)
+            second.scrollView.frame = NSRect(x: 0, y: 0, width: 420, height: 800)
+            second.table.reloadData()
+            XCTAssertEqual(first.table.numberOfRows, 6)
+            XCTAssertEqual(second.table.numberOfRows, 6)
+            let (closes, stays) = closesSecond ? (second, first) : (first, second)
+            closes.stop()
+
+            listed.put(Fixture.row(90, seen: false, from: "Lin Mori", subject: "Woke"))
+            list.refresh()
+            await until { list.total == 7 }
+            XCTAssertEqual(stays.table.numberOfRows, 7, "the message that woke shows in the window left")
+            let top = try XCTUnwrap(stays.table.view(atColumn: 0, row: 0, makeIfNecessary: true) as? MailRowCell)
+            XCTAssertEqual(top.row?.key, 90, "at the top")
+            XCTAssertEqual(closes.table.numberOfRows, 6, "the closed window's table is told nothing")
+
+            listed.take(3)
+            list.refresh()
+            await until { list.total == 6 }
+            XCTAssertEqual(stays.table.numberOfRows, 6, "a message gone goes from the window left")
+            first.stop()
+            second.stop()
+        }
+    }
+
     // MARK: A row's clock
 
     func testARowsClockIsWhereItsSnoozeChooserHangs() async throws {

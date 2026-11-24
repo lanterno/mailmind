@@ -79,7 +79,7 @@ final class ListModelTests: XCTestCase {
         let display = FakeDisplay()
         let model = ListModel()
         model.attach(view, firstScreen: 40)
-        model.display = display
+        model.displays.add(display)
         model.apply(batch(held: 0..<100, carrying: [0..<100]))
         XCTAssertEqual(display.changes.last, Change(positions: IndexSet(0..<100), totalChanged: false))
 

@@ -36,7 +36,7 @@ final class MailListTests: XCTestCase {
         let folder = Folder(count: 300)
         let display = Recorder()
         let list = MailListModel(load: folder.load)
-        list.display = display
+        list.displays.add(display)
         list.start()
         await until { list.total == 300 }
         await folder.rename(5, "Plan, again")
