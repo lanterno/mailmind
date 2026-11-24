@@ -436,7 +436,15 @@ impl Drafting {
             }
             Ok(())
         })?;
+        // A list of the folder on screen loads again, and shows the new copy, as it does when one leaves: a first push
+        // removes none.
+        let mut changed = vec![(j.account.as_str(), folder.as_str())];
         for (account, in_folder, _) in &gone {
+            if !changed.contains(&(account.as_str(), in_folder.as_str())) {
+                changed.push((account.as_str(), in_folder.as_str()));
+            }
+        }
+        for (account, in_folder) in changed {
             self.parts.screen.list_changed(account, in_folder);
         }
         self.parts.screen.stats_changed();

@@ -451,7 +451,8 @@ pub trait Screen: Send + Sync + fmt::Debug {
     fn plays_drafts(&self, account: &str, folder: &str) -> bool;
     /// MailMind put mail in the folder: its next open catches it up at once.
     fn touched(&self, account: &str, folder: &str);
-    /// A copy left the folder and its row went with it: a list of it on screen loads again.
+    /// A copy MailMind saved came to the folder, or one left it and its row went with it: a list of it on screen loads
+    /// again, and its catch-up shows the copy that came.
     fn list_changed(&self, account: &str, folder: &str);
     /// The outbox tray changed.
     fn outbox_changed(&self);
