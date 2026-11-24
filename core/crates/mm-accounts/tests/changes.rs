@@ -120,7 +120,7 @@ fn an_account_added_keeps_its_typed_password_in_the_keychain_and_names_the_item_
     assert_eq!(
         file.accounts()[1],
         json!({"email": DEE, "type": "imap", "alias": "Dee", "host": "imap.example.test", "port": 993,
-               "credential": {"keychain": "account:dee@example.test", "version": 1}})
+               "credential": {"keychain": "account:dee@example.test", "version": 1}, "colour": 1})
     );
     assert_eq!(keychain.holds()["account:dee@example.test"], "dee-password");
     assert!(!serde_json::to_string(&file.accounts()).unwrap().contains("dee-password"));
@@ -341,8 +341,25 @@ fn removing_an_account_takes_its_entry_and_its_own_item_out() {
     let bea = json!({"email": "bea@example.test", "type": "proton"});
     let (directory, file, keychain) = directory(json!([ada(), bea]), keychain);
     assert_eq!(directory.remove_account(" Ada@Example.test").unwrap().as_deref(), Some("ada@example.test"));
-    assert_eq!(file.accounts(), json!([bea]));
+    // Bea keeps the colour she wore beside Ada.
+    assert_eq!(file.accounts(), json!([{"email": "bea@example.test", "type": "proton", "colour": 1}]));
     assert_eq!(keychain.holds().into_keys().collect::<Vec<_>>(), ["account:bea@example.test"]);
+}
+
+#[test]
+fn an_account_removed_moves_no_other_accounts_colour_and_one_added_takes_the_place_it_left() {
+    let bea = json!({"email": "bea@example.test", "type": "proton"});
+    let cy = json!({"email": "cy@example.test", "type": "proton"});
+    let (directory, file, _) = directory(json!([ada(), bea, cy]), Kept::default());
+    let places = |directory: &Directory| directory.faces().unwrap().colours;
+    let named = |list: &[(&str, i64)]| list.iter().map(|(e, p)| ((*e).to_owned(), *p)).collect::<Vec<_>>();
+    // A file that keeps none colours the accounts by their order.
+    assert_eq!(places(&directory), named(&[("ada@example.test", 0), ("bea@example.test", 1), ("cy@example.test", 2)]));
+    directory.remove_account("bea@example.test").unwrap();
+    assert_eq!(places(&directory), named(&[("ada@example.test", 0), ("cy@example.test", 2)]));
+    assert_eq!(file.accounts()[1]["colour"], 2);
+    directory.add_account(&dee(typed("dee-password"))).unwrap();
+    assert_eq!(places(&directory), named(&[("ada@example.test", 0), ("cy@example.test", 2), (DEE, 1)]));
 }
 
 #[test]
@@ -362,4 +379,25 @@ fn a_port_reads_as_a_number_and_a_flag_only_as_true_or_false() {
     )
     .unwrap();
     assert_eq!(Value::Object(entry), json!({"port": 143, "smtp_port": 587, "disabled": true}));
+}
+
+#[test]
+fn an_accounts_own_colour_stands_unless_another_before_it_holds_it_or_it_is_no_place() {
+    let entries = [
+        json!({"email": "ada@example.test", "colour": 3}),
+        json!({"email": "bea@example.test", "colour": 3}),
+        json!({"email": "cy@example.test", "colour": -1}),
+        json!({"email": "dee@example.test", "colour": "1"}),
+        json!({"email": "eve@example.test", "colour": true}),
+        json!({"colour": 0}),
+    ];
+    let places: Vec<(String, i64)> = account::colour_places(&entries);
+    let want = [
+        ("ada@example.test", 3),
+        ("bea@example.test", 0),
+        ("cy@example.test", 1),
+        ("dee@example.test", 2),
+        ("eve@example.test", 4),
+    ];
+    assert_eq!(places, want.iter().map(|(e, p)| ((*e).to_owned(), *p)).collect::<Vec<_>>());
 }
