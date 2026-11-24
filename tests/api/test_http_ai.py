@@ -240,6 +240,38 @@ def test_the_weeks_numbers_count_all_that_needs_you_and_all_you_wait_on_not_only
     assert app.get("/api/review").json["stats"] == review["stats"]          # as it was kept
 
 
+def sent_in(world, account, folder, n):
+    """One more message `account` sent this week, filed in `folder`, and that folder synced."""
+    world.server.add_folder(account, folder)
+    world.deliver(account, folder, w.variant("ada-sent-01-lunch-reply.eml", Message_ID=f"<sent-{n}@example.test>",
+                                             From=f"<{account}>", Date=f"Sun, 01 Nov 2026 09:0{n}:00 +0000"))
+
+
+def test_the_week_counts_what_each_accounts_sent_folder_holds_by_the_part_its_server_gives_it(app, world, ai):
+    """Sent mail is counted in the folder the server's LIST says is Sent, its \\Sent attribute, whatever its name: Proton's
+    Sent, Gmail's [Gmail]/Sent Mail and Dovecot's Sent Messages. A folder merely named so, or whose name holds "sent", isn't."""
+    world.server.mailbox(w.ADA, "Sent").special = ""             # Ada's server files her sent mail elsewhere,
+    world.server.add_folder(w.ADA, "Sent Messages", "\\Sent")     # where Dovecot does
+    for n, (account, folder) in enumerate([(w.ADA, "Sent Messages"), (w.ADA, "Consent forms"), (w.ADA, "Sent"),
+                                           (w.BEA, "Sent"), (w.CY, "[Gmail]/Sent Mail")]):
+        sent_in(world, account, folder, n)
+    for account in (w.ADA, w.BEA, w.CY):
+        assert app.get(f"/api/folders?account={account}").status == 200       # the rail's LIST says which is Sent
+    # Ada's in Sent Messages, Bea's, and Cy's two in [Gmail]/Sent Mail, the world's one beside this week's.
+    assert app.post("/api/review", {}).json["stats"]["sent"] == 4
+
+
+def test_a_review_kept_today_counts_what_was_sent_since_it_was_written(app, world, ai):
+    """Its prose is as the AI wrote it, and says the mail changed since; what the week did is counted as it stands."""
+    kept = app.post("/api/review", {}).json
+    sent_in(world, w.BEA, "Sent", 1)
+    world.deliver(w.BEA, "INBOX", w.variant("bea-inbox-01-client.eml", Message_ID="<one-more@harbor.example.test>",
+                                            Date="Sun, 01 Nov 2026 10:00:00 +0000"))
+    again = app.get("/api/review").json
+    assert (again["cached"], again["stale"], again["narrative"]) == (True, True, kept["narrative"])
+    assert (again["stats"]["sent"], again["stats"]["received"]) == (kept["stats"]["sent"] + 1, kept["stats"]["received"] + 1)
+
+
 def test_since_you_last_looked(app, golden, world, ai):
     triaged(app, ai)
     import time
