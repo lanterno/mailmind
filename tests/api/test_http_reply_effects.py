@@ -1,8 +1,10 @@
 """What a reply's delivery tells the rest at once, over HTTP: the thread that waited on the reply leaves Waiting, and the
-open tabs hear `followup`, with no minute's round of the follow-ups between.
+open tabs hear `followup`, with no minute's round of the follow-ups between; and the lists showing the original's folder
+hear `flags-changed` as its \\Answered is stored, so its ↩ shows without waiting for the next refresh.
 
 No worker runs on its own here: the test lets the Undo Send window pass and has the server run one outbox pass, and
 never the `follow-ups` job."""
+import json
 from datetime import timedelta
 from urllib.parse import urlencode
 
@@ -60,3 +62,15 @@ def test_a_reply_takes_its_thread_out_of_waiting_at_once(app, world):
     heard(stream, "followup")
     stream.close()
     assert waiting(app) == []
+
+
+def test_a_reply_tells_the_lists_its_original_is_answered(app, world):
+    stream = Stream(app)
+    stream.frame()
+    reply_delivered(app, world)
+    said = heard(stream, "flags-changed")
+    stream.close()
+    assert json.loads(said["flags-changed"]) == {"account": w.BEA, "folder": "INBOX", "count": 1}
+    original = world.row(CLIENT)
+    thread = app.get("/api/thread?" + urlencode({"account": w.BEA, "thread_id": original["thread_id"]})).json["items"]
+    assert [m["answered"] for m in thread if m["key"] == original["message_key"]] == [True]
