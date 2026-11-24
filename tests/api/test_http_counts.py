@@ -129,7 +129,11 @@ def test_what_needs_you_is_the_inboxs_and_the_brief_is_written_from_it(app, worl
 
 
 def test_mail_that_needs_you_at_the_lowest_importance_is_never_called_quiet(app, world):
-    with_server_stopped(app, assessed(world, CONFIRM, 1, action="Confirm the table for four"))
+    # Every other message read and rated as nothing to glance at: mail still waiting for its summary isn't quiet either.
+    read_rest = ("INSERT OR IGNORE INTO assessments(message_key, summary, importance, category, action, model, created_at) "
+                 "SELECT DISTINCT message_key, 'A summary.', 1, 'info', '', 'stub', '2026-11-02T11:00:00+00:00' "
+                 "FROM messages WHERE message_key IS NOT NULL", ())
+    with_server_stopped(app, assessed(world, CONFIRM, 1, action="Confirm the table for four"), read_rest)
     assert needs_you(app.get("/api/digest").json) == [world.key(CONFIRM)]
     assert app.get("/api/briefing").json["narrative"] != QUIET
     assert app.post("/api/mute", world.copy(CONFIRM)).status == 200
