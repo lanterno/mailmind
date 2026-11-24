@@ -129,7 +129,8 @@ enum Lists {
 /// A list read whole up to a reach, as the page's list reads one (200 rows, and 200 more each time a person asks), and
 /// served to the window a page at a time: a search, whose pages say only whether more follow, and an inbox's Needs you
 /// and Unread, which keep the rows read that are in the tab. Each read starts again from the top, so what the window
-/// holds is always one reading of the list.
+/// holds is always one reading of the list. A search keeps the row open where it stood until a person leaves it, as
+/// the tabs keep it: read, it would leave an `is:unread` search while it is read, and the list's keys with it.
 actor Gathered {
     typealias Read = @Sendable (_ offset: Int, _ limit: Int) async throws -> Sheet
 
@@ -137,16 +138,23 @@ actor Gathered {
     private let keep: @Sendable (API.FolderRow, MailCopy?) -> Bool
     private let opened: @Sendable () async -> MailCopy?
     private let report: @Sendable (ListFacts) async -> Void
+    /// How the row open stands now, read on its own, for a list that keeps it where the last reading had it once the
+    /// list no longer does (a search's); nil for one that doesn't.
+    private let standing: (@Sendable (MailCopy) async -> API.FolderRow?)?
+    /// The last reading's rows, where the row open stood.
+    private var last: [API.FolderRow] = []
     /// How many rows of the list to read.
     private(set) var reach = Lists.pageSize
 
     init(read: @escaping Read, keep: @escaping @Sendable (API.FolderRow, MailCopy?) -> Bool = { _, _ in true },
          opened: @escaping @Sendable () async -> MailCopy? = { nil },
+         standing: (@Sendable (MailCopy) async -> API.FolderRow?)? = nil,
          report: @escaping @Sendable (ListFacts) async -> Void = { _ in })
     {
         self.read = read
         self.keep = keep
         self.opened = opened
+        self.standing = standing
         self.report = report
     }
 
@@ -176,6 +184,14 @@ actor Gathered {
             at += Lists.pageSize
         } while hasMore && at < reach
         let open = await opened()
+        // The row open, gone from this reading but in the last, stays where it stood, as it stands now; one its folder
+        // no longer lists goes.
+        if let standing, let open, !rows.contains(where: { MailCopy($0) == open }),
+           let at = last.firstIndex(where: { MailCopy($0) == open }), let row = await standing(open)
+        {
+            rows.insert(row, at: min(at, rows.count))
+        }
+        last = rows
         let kept = rows.filter { keep($0, open) }
         var facts = first ?? ListFacts()
         facts.hasMore = hasMore

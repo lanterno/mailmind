@@ -398,7 +398,12 @@ final class Mailbox {
                 return nil
             }
             read = { offset, limit in try await Lists.search(calls, search, scope: scope, offset: offset, limit: limit) }
-            let gathered = Gathered(read: read, report: report)
+            // The row open stays until a person leaves it, as the Inbox's tabs keep it.
+            let gathered = Gathered(read: read, opened: { [weak self] in await self?.openCopy() },
+                                    standing: { copy in
+                                        await Lists.row(calls, account: copy.account, folder: copy.folder, uid: copy.uid,
+                                                        key: copy.key)
+                                    }, report: report)
             self.gathered = gathered
             load = gathered.load
             return gathered.load
