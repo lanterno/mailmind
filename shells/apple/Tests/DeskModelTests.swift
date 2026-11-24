@@ -854,6 +854,33 @@ final class DeskModelTests: XCTestCase {
         XCTAssertEqual(line("none", ticked: false), .none)
     }
 
+    /// Unticked for a sender, the unsubscribe box stays unticked as that sender's cleanup opens again, after Cancel
+    /// or an Undo brought them back, so an unsubscribe Undo can't take back never comes back ticked. Another sender
+    /// opens as ever. Changing it asks for the second press again.
+    func testTheUnsubscribeBoxKeepsWhatThePersonChoseForThatSender() async {
+        var other = DeskFixture.senderPreview
+        other.fromAddr = "deals@loom.example.test"
+        routes.answer("GET", "/api/cleanup/sender", DeskFixture.senderPreview)
+        routes.answer("GET", "/api/cleanup/sender", DeskFixture.senderPreview)
+        routes.answer("GET", "/api/cleanup/sender", other)
+        let model = CurateModel(link: link, notices: notices)
+
+        await model.previewCleanup("news@shop.example.test")
+        XCTAssertEqual(model.cleaning?.unsubscribe, true, "ticked by default")
+        await model.pressCleanup()
+        XCTAssertEqual(model.cleaning?.armed, true)
+        model.chooseUnsubscribe(false)
+        XCTAssertEqual(model.cleaning?.unsubscribe, false)
+        XCTAssertEqual(model.cleaning?.armed, false, "what it does changed: the second press is asked again")
+        model.cleaning = nil
+
+        await model.previewCleanup("News@Shop.example.test")
+        XCTAssertEqual(model.cleaning?.unsubscribe, false, "as the person left it for this sender")
+        model.cleaning = nil
+        await model.previewCleanup("deals@loom.example.test")
+        XCTAssertEqual(model.cleaning?.unsubscribe, true, "another sender opens as ever")
+    }
+
     func testASweepIsPlannedThenRunOnConfirm() async {
         let going = [API.SweepBucket(bucket: "newsletters/marketing", count: 12, senders: [
             API.SweepSender(count: 9, fromAddr: "news@loom.example.test"),
