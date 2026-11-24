@@ -3,11 +3,13 @@ close, on an explicit save and at most once a minute while someone types, and a 
 waiting. The journal holds one row a draft, the newest save, and the copy a try may have left never stays behind. Here the
 server is the fake IMAP server and a send goes out through the fake SMTP server; what Drafts decides of each save is
 tests/unit/compose/test_draft_journal.py's."""
+import threading
 import time
 from datetime import timedelta
 
 import gate
 from fixtures import world as w
+from waiting import wait_until
 from mailmind.bootstrap import mailbox
 from mailmind.bootstrap.compose import book
 from mailmind.bootstrap import compose
@@ -261,3 +263,40 @@ def test_a_send_scheduled_for_later_lets_its_draft_catch_up(app, world):
     assert len(world.smtp.messages) == 1 and live_copies(world) == [] and row(did) is None
 
 
+# -- the job, the gate and the lists ----------------------------------------------------------
+
+def test_a_close_and_the_job_pushing_at_once_leave_one_copy(app, world):
+    did = save(app, autosave=True, text="One.")["draft_id"]
+    a_minute_on(app)
+    with gate.held_elsewhere(w.ADA):
+        job = threading.Thread(target=compose.drafts.push_round, daemon=True)
+        job.start()
+        assert wait_until(lambda: gate.waits_for_a_gate(job))
+        closed = threading.Thread(target=lambda: save(app, draft_id=did, text="Two."), daemon=True)
+        closed.start()
+        assert wait_until(lambda: gate.waiting_for_a_gate() == 2)
+    job.join(10)
+    closed.join(10)
+    assert holds(world, "Two.") and waiting(did) is None
+
+
+def notes_in_drafts(world):
+    """The copies of Thunderbird's "Notes for the review" in Ada's Drafts on the server."""
+    with world.server.lock:
+        return [m.raw for m in world.server.mailbox(w.ADA, "Drafts").messages.values()
+                if "\\Deleted" not in m.flags and b"Notes for the review" in m.raw]
+
+
+def test_a_draft_another_app_saved_twice_has_one_copy_once_saved_here(app, world):
+    # Thunderbird left two saves of it under one Message-ID: two copies of the one message, by its key.
+    assert len(notes_in_drafts(world)) == 2
+    opened = app.post("/api/draft/resume", world.copy("ada-drafts-02-thunderbird-v2.eml")).json
+    r = app.post("/api/draft", {"account": w.ADA, "mode": "new", "to": ["noor@studio.example.test"],
+                                "subject": "Notes for the review", "text": "Settled on the wider grid.",
+                                "draft_id": opened["draft_id"], "version": opened["version"]})
+    assert r.status == 200 and r.json["pushed"] is True, r.json
+    [left] = notes_in_drafts(world)
+    assert b"Settled on the wider grid." in left
+    items = [i for i in app.get(f"/api/messages?account={w.ADA}&folder=Drafts").json["items"]
+             if i["subject"] == "Notes for the review"]
+    assert len(items) == 1

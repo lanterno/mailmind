@@ -67,7 +67,7 @@ def recorders(monkeypatch):
         calls.appended.append({"account": acct["email"], "raw": raw, "prev_uid": prev_uid,
                                "prev_uidvalidity": prev_uidvalidity, "prev_msgid": prev_msgid,
                                "prev_folder": prev_folder})
-        return "Drafts", (uid if calls.appenduid else None), calls.uidv, None
+        return "Drafts", (uid if calls.appenduid else None), calls.uidv, []
 
     def delete(acct, folder, uid, uidvalidity=None):
         calls.deleted.append((acct["email"], folder, uid, uidvalidity))

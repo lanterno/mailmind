@@ -44,7 +44,8 @@ class _Session:
         if criteria[0] == "UID":
             return [int(criteria[1])] if int(criteria[1]) in self.found.values() else []
         mid = criteria[-1].strip('"')
-        return [self.found[mid]] if mid in self.found else []
+        found = self.found.get(mid, [])
+        return list(found) if isinstance(found, list) else [found]
 
     def append(self, folder, raw, *, flags=(), when=None):
         self._call("append", folder, tuple(flags))
@@ -119,7 +120,7 @@ def test_whether_a_message_is_in_sent(found, there):
 
 def test_a_draft_goes_in_drafts_and_the_copy_before_it_goes_by_its_uid_alone():
     s = _Session()
-    assert copies(s).append_to_drafts(ACCT, b"raw", prev_uid=42, prev_uidvalidity=5) == ("Brouillons", 100, 5, 42)
+    assert copies(s).append_to_drafts(ACCT, b"raw", prev_uid=42, prev_uidvalidity=5) == ("Brouillons", 100, 5, [42])
     assert s.said == [("select", "Brouillons", False), ("append", "Brouillons", ("\\Seen", "\\Draft")),
                       ("flag", [42], ["\\Deleted"]), ("expunge", [42]), ("logout",)]
 
@@ -127,18 +128,35 @@ def test_a_draft_goes_in_drafts_and_the_copy_before_it_goes_by_its_uid_alone():
 def test_a_draft_saved_before_a_renumber_is_found_by_its_message_id():
     s = _Session(found={"<d1@example.test>": 43})
     out = copies(s).append_to_drafts(ACCT, b"raw", prev_uid=42, prev_uidvalidity=4, prev_msgid="<d1@example.test>")
-    assert out == ("Brouillons", 100, 5, 43)
+    assert out == ("Brouillons", 100, 5, [43])
+
+
+def test_every_copy_under_the_message_id_the_draft_was_saved_with_goes_once_the_new_one_is_there():
+    # Another app saved it more than once under one Message-ID, and the list showed the copies as the one draft opened.
+    s = _Session(found={"<d1@example.test>": [41, 42]})
+    out = copies(s).append_to_drafts(ACCT, b"raw", prev_uid=42, prev_uidvalidity=5, prev_msgid="<d1@example.test>")
+    assert out == ("Brouillons", 100, 5, [42, 41])
+    assert kinds(s) == ["select", "search", "append", "flag", "expunge", "flag", "expunge", "logout"]
+    assert s.said[1] == ("search", "UNDELETED", "HEADER", "Message-ID", '"<d1@example.test>"')
+    assert [said for said in s.said if said[0] == "expunge"] == [("expunge", [42]), ("expunge", [41])]
+
+
+def test_a_copy_under_the_message_id_that_is_the_one_an_earlier_try_landed_stays():
+    s = _Session(found={"<d1@example.test>": [41, 77]})
+    out = copies(s).append_to_drafts(ACCT, b"raw", prev_msgid="<d1@example.test>", message_id="<d1@example.test>",
+                                     tried="<d1@example.test>")
+    assert out == ("Brouillons", 41, 5, [77]) and "append" not in kinds(s)
 
 
 def test_a_draft_that_cant_be_found_again_is_left_beside_the_new_one():
     s = _Session()
-    assert copies(s).append_to_drafts(ACCT, b"raw", prev_uid=42, prev_uidvalidity=4) == ("Brouillons", 100, 5, None)
+    assert copies(s).append_to_drafts(ACCT, b"raw", prev_uid=42, prev_uidvalidity=4) == ("Brouillons", 100, 5, [])
     assert "expunge" not in kinds(s)
 
 
 def test_a_search_for_the_old_copy_that_fails_leaves_it():
     s = _Session(refuse={"search"})
-    assert copies(s).append_to_drafts(ACCT, b"raw", prev_msgid="<d1@example.test>")[3] is None
+    assert copies(s).append_to_drafts(ACCT, b"raw", prev_msgid="<d1@example.test>")[3] == []
     assert "append" in kinds(s) and "expunge" not in kinds(s)
 
 
@@ -146,12 +164,12 @@ def test_a_draft_whose_copy_is_in_another_folder_deletes_nothing_here():
     s = _Session(found={"<d1@example.test>": 43})
     out = copies(s).append_to_drafts(ACCT, b"raw", prev_uid=42, prev_uidvalidity=5, prev_msgid="<d1@example.test>",
                                      prev_folder="Drafts (old)")
-    assert out == ("Brouillons", 100, 5, None) and "expunge" not in kinds(s)
+    assert out == ("Brouillons", 100, 5, []) and "expunge" not in kinds(s)
 
 
 def test_a_drafts_folder_that_wont_open_still_takes_the_draft_and_deletes_nothing():
     s = _Session(refuse={"select"})
-    assert copies(s).append_to_drafts(ACCT, b"raw", prev_uid=42, prev_uidvalidity=5) == ("Brouillons", 100, None, None)
+    assert copies(s).append_to_drafts(ACCT, b"raw", prev_uid=42, prev_uidvalidity=5) == ("Brouillons", 100, None, [])
     assert "expunge" not in kinds(s)
 
 
@@ -166,20 +184,20 @@ def test_this_very_draft_left_by_an_earlier_try_stands_and_none_is_added():
     s = _Session(found={"<d2@example.test>": 77})
     out = copies(s).append_to_drafts(ACCT, b"raw", prev_uid=42, prev_uidvalidity=5, message_id="<d2@example.test>",
                                      tried="<d2@example.test>")
-    assert out == ("Brouillons", 77, 5, 42) and "append" not in kinds(s)
+    assert out == ("Brouillons", 77, 5, [42]) and "append" not in kinds(s)
 
 
 def test_another_draft_left_by_an_earlier_try_goes_once_the_new_one_is_there():
     s = _Session(found={"<d1@example.test>": 76})
     out = copies(s).append_to_drafts(ACCT, b"raw", message_id="<d2@example.test>", tried="<d1@example.test>")
-    assert out == ("Brouillons", 100, 5, None)
+    assert out == ("Brouillons", 100, 5, [])
     assert kinds(s) == ["select", "search", "append", "flag", "expunge", "logout"]
     assert s.said[4] == ("expunge", [76])
 
 
 def test_an_old_copy_that_wont_go_is_left_and_the_save_still_stands():
     s = _Session(refuse={"expunge"})
-    assert copies(s).append_to_drafts(ACCT, b"raw", prev_uid=42, prev_uidvalidity=5) == ("Brouillons", 100, 5, None)
+    assert copies(s).append_to_drafts(ACCT, b"raw", prev_uid=42, prev_uidvalidity=5) == ("Brouillons", 100, 5, [])
 
 
 def test_a_search_for_what_a_try_left_lost_on_the_way_raises():

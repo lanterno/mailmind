@@ -232,7 +232,7 @@ def test_deleting_a_draft_copy_never_bulk_expunges(home, connected):
 def test_replacing_a_draft_copy_never_bulk_expunges(home, connected):
     M = connected(_ScriptedIMAP(EXPUNGE=_BAD))
     out = mailbox.copies.append_to_drafts({"email": ACCT}, b"Subject: hi\r\n\r\nbody", prev_uid=41, prev_uidvalidity=7)
-    assert out == ("Drafts", 42, 7, None)                        # the EXPUNGE was refused: it is still there
+    assert out == ("Drafts", 42, 7, [])                          # the EXPUNGE was refused: it is still there
     assert ("STORE", "41", "+FLAGS", "(\\Deleted)") in M.calls
     assert "EXPUNGE-ALL" not in M.cmds()
 

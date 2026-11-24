@@ -47,7 +47,7 @@ class Server:
             prev_uid = None
         uid = next(self._uids)
         self.live[uid] = raw
-        removed = prev_uid if self.live.pop(prev_uid, None) is not None else None
+        removed = [prev_uid] if self.live.pop(prev_uid, None) is not None else []
         return "Drafts", uid, 777, removed
 
     def delete_draft_uid(self, acct, folder, uid, uidvalidity=None):
