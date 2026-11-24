@@ -300,6 +300,7 @@
    "accounts": [
     {
      "alias": "Ada",
+     "colour": 0,
      "credential": {
       "keychain": "account:ada@example.test"
      },
@@ -314,6 +315,7 @@
     },
     {
      "alias": "Bea",
+     "colour": 1,
      "credential": {
       "keychain": "account:bea@example.test"
      },
@@ -328,6 +330,7 @@
     },
     {
      "alias": "Cy",
+     "colour": 2,
      "credential": {
       "keychain": "account:cy@example.test"
      },
@@ -342,6 +345,7 @@
     },
     {
      "alias": "Dee Q.",
+     "colour": 3,
      "credential": {
       "keychain": "account:dee@example.test",
       "version": 1

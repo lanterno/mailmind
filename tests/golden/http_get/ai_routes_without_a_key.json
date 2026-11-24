@@ -187,6 +187,11 @@
     "bea@example.test": "Bea",
     "cy@example.test": "Cy"
    },
+   "colours": {
+    "ada@example.test": 0,
+    "bea@example.test": 1,
+    "cy@example.test": 2
+   },
    "generated": "2026-11-02T12:00:00+00:00",
    "items": [],
    "profile": "full",
