@@ -313,8 +313,8 @@ class Folders:
 
 
     def list_changed(self, account: str, folder: str) -> None:
-        """A copy left `folder` and its row went with it: a list of that folder on screen loads again,
-        and through its catch-up shows the copy that replaced it."""
+        """A copy MailMind saved came to `folder`, or one left it and its row went with it: a list of that folder on screen
+        loads again, and through its catch-up shows the copy that came."""
         sse.publish("reconcile", {"account": account, "folder": folder, "pruned": 1})
 
 

@@ -246,7 +246,9 @@ class Drafts:
             self._book.journal_settled(c, prev["id"], j["version"])
             for account, in_folder, old_uid in gone:
                 self._mail.remove_copies(c, account, in_folder, [old_uid])
-        for account, in_folder, _ in gone:
+        # A list of the folder on screen loads again, and shows the new copy, as it does when one leaves: a first push
+        # removes none.
+        for account, in_folder in dict.fromkeys([(j["account"], folder), *((a, f) for a, f, _ in gone)]):
             self._screen.list_changed(account, in_folder)
         self._screen.stats_changed()
         self._screen.outbox_changed()
