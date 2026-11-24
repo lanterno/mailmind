@@ -183,6 +183,59 @@ final class MenuKeysTests: XCTestCase {
         XCTAssertEqual(door.reopened, 5, "an open window isn't opened again")
     }
 
+    /// AppKit keeps the menu bar's items as SwiftUI last drew them, and runs the one a key or a click chooses before
+    /// SwiftUI draws them again. Drawn with no mail window open (as MailMind opens, before its window has counted
+    /// itself, or once the window was closed and SwiftUI still handed on its mailbox) and pressed once the window is
+    /// open, the palette (⌘K) and a search (⌘F) go to the window open now and never open a second one: their
+    /// actions once took the door as it stood when they were drawn, shut, and opened another mail window.
+    func testAMenuDrawnWithNoWindowOpenGoesToTheWindowOpenedSince() async throws {
+        let app = MailApp()
+        self.app = app
+        let mailbox = app.mailbox
+        mailbox.wire = Fixture.server(rows: Array(Fixture.inbox.prefix(6))).wire
+        await mailbox.refresh()
+        // The window's desk, which hangs its hooks on the mailbox as the window opens.
+        let desk = Desk()
+        desk.use(app, routes: DeskRoutes())
+        let k: CGKeyCode = 40, f: CGKeyCode = 3, b: CGKeyCode = 11
+        for handed in [nil, mailbox] as [Mailbox?] {
+            desk.sheet = nil
+            app.place = .allInboxes
+            let status = AppStatus(newMail: NewMailAlerts(notifier: SystemNotifier.Silent(), isActive: { true },
+                                                          badge: { _ in }, announce: { _ in }))
+            let door = Door()
+            let doors = MailWindowDoor(isOpen: { status.mailWindows > 0 }, mailbox: { mailbox },
+                                       reopen: { door.reopened += 1 })
+            mailbox.paletteOpen = false
+            mailbox.searchFocus = false
+            let bar = bar(mailbox: handed, window: nil, writing: nil, door: doors)
+            // The window opens, and the keys come before SwiftUI draws the menus again.
+            status.mailWindows = 1
+            let fired = Fired()
+            let token = NotificationCenter.default.addObserver(forName: NSMenu.didSendActionNotification, object: nil,
+                                                               queue: nil) { note in
+                if let item = note.userInfo?["MenuItem"] as? NSMenuItem { fired.titles.append(item.title) }
+            }
+            _ = bar.performKeyEquivalent(with: try Self.press(k, .maskCommand))
+            _ = bar.performKeyEquivalent(with: try Self.press(f, .maskCommand))
+            _ = bar.performKeyEquivalent(with: try Self.press(b, [.maskAlternate, .maskCommand]))
+            NotificationCenter.default.removeObserver(token)
+            let said = handed == nil ? "drawn as MailMind opens" : "drawn with the window closed"
+            XCTAssertEqual(fired.titles, ["Command Palette…", "Search", "Today’s Brief"], said)
+            XCTAssertTrue(mailbox.paletteOpen, "\(said): the palette opens over the window open")
+            XCTAssertTrue(mailbox.searchFocus, said)
+            XCTAssertEqual(app.place, .desk(.brief), "\(said): the brief opens in the window open")
+            // A panel, which hangs on the window, opens over the window open, by its desk.
+            let assistant = try XCTUnwrap(bar.item(withTitle: "Assistant")?.submenu)
+            let commitments = assistant.indexOfItem(withTitle: "Commitments and Tasks")
+            XCTAssertGreaterThanOrEqual(commitments, 0)
+            assistant.performActionForItem(at: commitments)
+            XCTAssertEqual(desk.sheet?.id, "commitments", "\(said): Commitments opens over the window open")
+            XCTAssertTrue(Desk.asked.isEmpty, "\(said): nothing is left waiting for another window")
+            XCTAssertEqual(door.reopened, 0, "\(said): no second mail window opens")
+        }
+    }
+
     /// The items `event` fires in a menu bar `make` draws afresh, by their titles.
     private func fired(_ event: NSEvent, in make: () -> NSMenu) -> [String] {
         let bar = make()
