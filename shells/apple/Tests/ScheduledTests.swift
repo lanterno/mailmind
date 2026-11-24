@@ -96,7 +96,7 @@ final class ScheduledTests: XCTestCase {
 
         XCTAssertTrue(cancelled)
         XCTAssertEqual(routes.calls(to: API.Post.OutboxCancel.path).last?.body["id"], .number(9))
-        XCTAssertEqual(composing.notice, ToastWords(text: "Send cancelled"))
+        XCTAssertEqual(composing.notice, ToastWords(text: "Send cancelled — kept in Drafts"), "says where its words are")
         XCTAssertTrue(routes.calls(to: API.Post.Draft.path).isEmpty, "the draft stays in Drafts")
         await eventually("the outbox read again") { composing.scheduled.isEmpty }
     }

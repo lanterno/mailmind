@@ -106,6 +106,21 @@ final class OutboxButtonTests: XCTestCase {
         XCTAssertEqual(composing.notice?.text, "Too late to cancel")
     }
 
+    /// A cancelled send says where its words are when MailMind keeps its draft: in Drafts, to send another time.
+    func testACancelledSendSaysItsDraftIsKeptInDrafts() throws {
+        func item(draft: Int?) throws -> API.OutboxItem {
+            try JSONDecoder().decode(API.OutboxItem.self, from: Data(#"""
+                {"id": 1, "account": "ada@example.test", "to": ["bo@example.test"], "cc": [], "bcc_count": 0,
+                 "subject": "Later", "state": "queued", "attempts": 0, "next_attempt_at": 1900000000,
+                 "scheduled": true, "retrying": false, "unsure": false, "created_at": "2026-11-02 12:00:00",
+                 "draft_id": \#(draft.map(String.init) ?? "null")}
+                """#.utf8))
+        }
+        XCTAssertEqual(OutboxTray.cancelled(try item(draft: 4)), "Send cancelled — kept in Drafts")
+        XCTAssertEqual(OutboxTray.cancelled(try item(draft: nil)), "Send cancelled", "no draft MailMind keeps")
+        XCTAssertEqual(OutboxTray.cancelled(nil), "Send cancelled")
+    }
+
     /// Reads in flight together answer in any order: the tray shows the newest one's.
     func testAnOlderReadThatAnswersLateIsLetGo() async {
         let routes = FakeRoutes()
