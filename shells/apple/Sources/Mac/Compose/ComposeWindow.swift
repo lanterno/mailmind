@@ -300,9 +300,9 @@ struct ComposerForm: View {
         Spacer(minLength: 0)
     }
 
-    /// An account's colour, by its place in the config.
+    /// An account's colour, the one it keeps wherever it shows (`AccountPlaces`).
     private func colour(of address: String) -> Color {
-        meadow.account(accounts.firstIndex(of: address) ?? 0)
+        meadow.account(of: address, among: accounts)
     }
 
     /// An account's name as the window shows it: its alias, or the part before the @.
