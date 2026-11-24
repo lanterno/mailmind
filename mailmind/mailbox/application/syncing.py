@@ -106,7 +106,8 @@ class Syncing:
         """Sync the given account emails (or all when None). Emits realtime events. Caller
         must hold the _sync single-flight guard (sync_once / sync_guarded).
         An Inbox's first scan stores mail that was there before, so it is no new mail: it counts
-        none and says no new-mail. Of `tries`, a sync that fails by trouble that may pass changes nothing (`try_unreached`)."""
+        none and says no new-mail, but what it kept is triaged at once all the same, so an account just added doesn't
+        wait out the assess job's interval to say what needs you. Of `tries`, a sync that fails by trouble that may pass changes nothing (`try_unreached`)."""
         new = 0
         for a in self._accounts.accounts():
             if emails is not None and a["email"] not in emails:
@@ -135,6 +136,8 @@ class Syncing:
                         one = {"uid": newest} if arrived == 1 else {}
                         sse.publish("new-mail", {"account": a["email"], "folder": "INBOX", "count": arrived, **one})
                     elif kept or junk:
+                        if first and kept:     # what it kept waits for its summaries: what needs you is known once they come
+                            self._kick("assess")
                         self._folders.invalidate(a["email"])   # what the first scan stored changes the rail's counts
                 except AccountGone:
                     self._forget(a["email"])
