@@ -260,7 +260,7 @@ and the AI provider you chose (Claude by default).
   the like until you open it, which fetches it. It keeps only the text of a message over 256 KB, whose
   attachments come when you open it, and asks for nothing you opened, moved or deleted while it waited its turn.
 - **A safe operator grammar:** `from:` `to:` `cc:` `subject:` `body:` `label:`,
-  `is:unread|read|flagged|answered|junk|newsletter|receipt|notification|snoozed`,
+  `is:unread|read|starred|answered|junk|newsletter|receipt|notification|snoozed` (`is:flagged` is `is:starred`),
   `bucket:` `category:`, `has:attachment`, `in:` `account:`,
   `before:`/`after:`, `"phrases"` and `-exclusion`. `to:`/`cc:` hit real indexed
   recipients rather than the body text. A date means midnight where you are. Snoozed
