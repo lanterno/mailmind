@@ -44,7 +44,9 @@ Ingest keeps a message's unsubscribe headers (`messages.list_unsub_raw` and `lis
 `mime.list_unsub`), `none` included. `Unsubscribing.resolve` answers for a sender from the newest message
 that can say: those columns, a stored body, or for older mail the two headers read off the server, within
 `UNSUB_READ_WAIT` on the account's gate. `sender_unsub` (migration 34) keeps the answer past the sender's mail,
-so a second try after a cleanup's sweep still knows the way.
+so a second try after a cleanup's sweep still knows the way. The senders list names each sender's way out
+(`unsub_method`: `one-click`, `mailto`, `http-page`, or none) from the newest of its stored mail whose columns say one,
+before any preview, and a sender none of whose headers were read names none.
 
 An account's sweep (`Sweeps.sweep`, `mm_curation::sweeping`) reads the Inbox off the server, flags and all, and classifies
 it as it is now. Junk that is starred (`\Flagged`) or unread (no `\Seen`, or flags the server didn't say) stays, and
