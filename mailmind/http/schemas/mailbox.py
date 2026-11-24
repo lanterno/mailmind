@@ -438,6 +438,7 @@ class Digest(Answer):
     accounts: list[str]
     send_accounts: list[str]
     aliases: dict[str, str | None]
+    colours: dict[str, int]                 # each account's place among the palette's colours, kept as accounts come and go
     signatures: dict[str, str]
     signature_default: str
     status: dict[str, AccountSync]

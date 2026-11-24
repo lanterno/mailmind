@@ -70,6 +70,10 @@ class Directory:
         return {e["email"]: ((e.get("alias") or "").strip() or None)
                 for e in self._raw().get("accounts", []) if e.get("email")}
 
+    def colour_map(self) -> dict[str, int]:
+        """email -> the place of its colour among the palette's (`account.colour_places`), for ALL accounts, as alias_map."""
+        return account.colour_places([e for e in self._raw().get("accounts", []) if isinstance(e, dict)])
+
     def signature_default(self) -> str:
         """The global default signature (used when an account has no per-account one)."""
         return account.clean_signature(self._raw().get("signature_default") or "")
@@ -217,6 +221,7 @@ class Directory:
             account.validate_new(entry)
             entry["credential"] = self._kept(account_item(entry["email"]), _typed_for(entry, cred), None)
             raw["accounts"].append(entry)
+            account.keep_colours(raw["accounts"])          # the first colour no account wears, and each other's kept
             self.save(raw)
         bus.publish(events.AccountAdded(entry["email"]))
         return account.masked_row(entry)
@@ -251,6 +256,7 @@ class Directory:
                 return False
             self._let_go(entry["email"])
             self._secrets.evict(entry.get("credential"))
+            account.keep_colours(raw["accounts"])          # as they are with it, so no other account's colour moves
             raw["accounts"] = [e for e in raw["accounts"] if e is not entry]
             self.save(raw)
         bus.publish(events.AccountRemoved(entry["email"]))

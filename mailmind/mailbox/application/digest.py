@@ -51,7 +51,7 @@ class Digest:
         # to send from (the compose From list and reply-all's own addresses).
         accounts = [a["email"] for a in self._accounts.accounts()]
         return {"items": items, "stats": st, "accounts": accounts, "send_accounts": accounts,
-                "aliases": amap, "signatures": self._accounts.signature_map(),
+                "aliases": amap, "colours": self._accounts.colour_map(), "signatures": self._accounts.signature_map(),
                 "signature_default": self._accounts.signature_default(),
                 "status": self._syncing.status, "sync": self._syncing.sync, "ai": self._ai_status(), "profile": profile.current().value,
                 "generated": now_iso()}

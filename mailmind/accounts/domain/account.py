@@ -132,6 +132,31 @@ def find(raw: Entry, email: str | None) -> Entry | None:
     return None
 
 
+def colour_places(entries: list[Entry]) -> dict[str, int]:
+    """Which of the palette's colours each account wears, by address: a place both clients take modulo their palette. An
+    entry's own `colour`, a whole number no entry before it took, stands; every other takes the first place free, in the
+    file's order, so a file that keeps none colours the accounts by their order. `keep_colours` writes them down, so that
+    removing an account leaves every other's as it was."""
+    places: dict[str, int] = {}
+    for e in entries:
+        own, email = e.get("colour"), e.get("email")
+        if email and email not in places and type(own) is int and own >= 0 and own not in places.values():
+            places[email] = own
+    for e in entries:
+        if (email := e.get("email")) and email not in places:
+            taken = set(places.values())
+            places[email] = next(n for n in range(len(entries) + 1) if n not in taken)
+    return places
+
+
+def keep_colours(entries: list[Entry]) -> None:
+    """Write each account's place into its entry, as it is now: added or removed, an account moves no other's colour."""
+    places = colour_places(entries)
+    for e in entries:
+        if e.get("email") in places:
+            e["colour"] = places[e["email"]]
+
+
 def clean_alias(a: object) -> str | None:
     if a is None:
         return None

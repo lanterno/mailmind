@@ -223,6 +223,9 @@ class _Accounts:
     def webmail_map(self):
         return accounts.config.webmail_map()
 
+    def colour_map(self):
+        return accounts.config.colour_map()
+
     def signature_map(self):
         return accounts.config.signature_map()
 
