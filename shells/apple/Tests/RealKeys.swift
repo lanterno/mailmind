@@ -55,7 +55,8 @@ enum RealKeys {
     }
 
     /// A key pressed in `window`: posted into the app's queue and taken out as the app's run takes it, offered as a
-    /// key equivalent to the window's views where ⌘, ⌃ or fn is held, then sent through the app to the window.
+    /// key equivalent to the window's views where ⌘, ⌃ or fn is held, then sent to the window, as the app sends a key
+    /// to the key window. A window another test left key would take it from the app, so it goes to `window` itself.
     static func press(_ typed: String, _ code: UInt16, held: NSEvent.ModifierFlags = [], in window: NSWindow) throws {
         NSApp.postEvent(try XCTUnwrap(NSEvent.keyEvent(
             with: .keyDown, location: .zero, modifierFlags: held, timestamp: ProcessInfo.processInfo.systemUptime,
@@ -66,6 +67,6 @@ enum RealKeys {
         if !key.modifierFlags.isDisjoint(with: [.command, .control, .function]), window.performKeyEquivalent(with: key) {
             return
         }
-        NSApp.sendEvent(key)
+        window.sendEvent(key)
     }
 }
