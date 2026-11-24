@@ -101,6 +101,30 @@ final class ScheduledTests: XCTestCase {
         await eventually("the outbox read again") { composing.scheduled.isEmpty }
     }
 
+    /// Cancel in the outbox's tray: the draft's row and the reader stop saying it is scheduled at once, not at the
+    /// outbox's next change.
+    func testCancelInTheOutboxTrayClearsTheScheduledLine() async throws {
+        let routes = FakeRoutes()
+        routes.answer(API.Get.Outbox.path, Self.outbox([Self.item()]))
+        routes.answer(API.Get.Pending.path, #"{"ok": true, "items": [], "waiting": 0, "stuck": 0}"#)
+        routes.answer(API.Post.OutboxCancel.path, #"{"ok": true}"#)
+        let composing = await composing(routes)
+        var redrawn = 0
+        composing.scheduledChanged = { redrawn += 1 }
+        let tray = try XCTUnwrap(composing.outbox)
+        await tray.load()
+        XCTAssertNotNil(composing.scheduledWhen(Fixture.row(1, folder: "Drafts", subject: "Second try")))
+        routes.answer(API.Get.Outbox.path, Self.outbox([]))
+
+        await tray.cancel(9)
+
+        XCTAssertEqual(routes.calls(to: API.Post.OutboxCancel.path).last?.body["id"], .number(9))
+        await eventually("what waits for later read again") { composing.scheduled.isEmpty }
+        XCTAssertNil(composing.scheduledWhen(Fixture.row(1, folder: "Drafts", subject: "Second try")),
+                     "the draft's row no longer says Scheduled")
+        XCTAssertEqual(redrawn, 1, "the list's rows are drawn again")
+    }
+
     func testEditCancelsTheSendFirstAndOneTooLateOpensNothing() async throws {
         let routes = FakeRoutes()
         routes.answer(API.Get.Outbox.path, Self.outbox([Self.item()]))
