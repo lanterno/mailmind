@@ -213,11 +213,14 @@ enum Addresses {
         return !to.isEmpty && !from.isEmpty && to != from ? Redirect(to: to, sender: from) : nil
     }
 
-    /// A subject with a reply's or forward's prefix, once.
+    /// A subject with a reply's or forward's prefix, once. Only a prefix of the same kind gives way: a reply to
+    /// "Fwd: Fabric samples" is "Re: Fwd: Fabric samples", and a forward of "Re: Plans" is "Fwd: Re: Plans", as
+    /// Mail has them.
     static func prefixed(_ subject: String?, _ prefix: String) -> String {
         let trimmed = (subject ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.range(of: #"^(re|fwd?|fw)\s*:"#, options: [.regularExpression, .caseInsensitive]) != nil {
-            let rest = trimmed.replacingOccurrences(of: #"^(re|fwd?|fw)\s*:\s*"#, with: "",
+        let same = prefix.lowercased().hasPrefix("re") ? "re" : "fwd?|fw"
+        if trimmed.range(of: #"^(\#(same))\s*:"#, options: [.regularExpression, .caseInsensitive]) != nil {
+            let rest = trimmed.replacingOccurrences(of: #"^(\#(same))\s*:\s*"#, with: "",
                                                     options: [.regularExpression, .caseInsensitive])
             return "\(prefix) \(rest)"
         }
