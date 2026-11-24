@@ -228,7 +228,7 @@ struct CleanupSheet: View {
                         Text("Sweeps the most recent \(preview.sweepCount) — run again for the rest.")
                     }
                 }
-                Text("Block + sweep undo with Undo.\(asked.method == "none" ? "" : " Unsubscribing can’t be undone.")")
+                Text(asked.undoNote)
                     .font(.meadow(.ui, 13, .semibold))
                     .foregroundStyle(meadow.rust)
                 HStack(spacing: 8) {

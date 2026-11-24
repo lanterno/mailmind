@@ -17,6 +17,16 @@ final class CurateModel {
         var armed = false
 
         var method: String { preview.unsub.method }
+
+        /// Whether the cleanup sends an unsubscribe, which can't be undone: one the box asks for, by one click or an
+        /// email. A page opened in the browser sends nothing; the person unsubscribes there or not.
+        var sendsUnsubscribe: Bool { unsubscribe && (method == "one-click" || method == "mailto") }
+
+        /// The sheet's note on what Undo takes back.
+        var undoNote: String {
+            String(localized: "Block + sweep undo with Undo.")
+                + (sendsUnsubscribe ? " " + String(localized: "Unsubscribing can’t be undone.") : "")
+        }
     }
 
     /// Several senders' cleanup, previewed, with why each is here once the AI has said.
