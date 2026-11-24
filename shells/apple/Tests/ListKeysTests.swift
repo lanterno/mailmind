@@ -336,6 +336,35 @@ final class ListKeysTests: XCTestCase {
         window.contentView = nil
     }
 
+    /// Esc out of a search, with a message chosen there that stands far down its Inbox: back in the Inbox the message
+    /// stays chosen, and its row is scrolled into view as the Inbox's rows come.
+    func testLeavingASearchShowsTheRowOfTheMessageStillChosen() async throws {
+        let rows = (1...60).map { Fixture.row($0) }
+        let app = MailApp()
+        self.app = app
+        app.mailbox.wire = Fixture.server(rows: rows).wire
+        await app.mailbox.refresh()
+        app.mailbox.tab = .all
+        app.place = .search(Search(q: "budget"))
+        let far = rows[50]
+        app.mailbox.chose([far])
+        app.mailbox.leaveSearch()
+        XCTAssertEqual(app.place, .allInboxes)
+        let list = try XCTUnwrap(app.list)
+        let look = RowLook(inks: RowInks.of(.day, light: .day, highContrast: false), measure: RowMeasure(.comfortable),
+                           accounts: app.mailbox.accounts)
+        let controller = MailboxTableController(list: list, mailbox: app.mailbox, look: look, sections: true)
+        defer { controller.stop() }
+        controller.scrollView.frame = NSRect(x: 0, y: 0, width: 420, height: 400)
+        controller.table.reloadData()
+        await until { list.position(of: MailCopy(far)) != nil }
+
+        XCTAssertEqual(app.selection.copy, MailCopy(far), "the message stays open")
+        let row = controller.table.selectedRow
+        XCTAssertGreaterThan(row, 20, "its row is chosen, far down")
+        XCTAssertTrue(controller.table.visibleRect.intersects(controller.table.rect(ofRow: row)), "and in view")
+    }
+
     /// Ask, then Esc: back to where the question was asked, as the page's Esc stops asking, whether Esc comes from the
     /// window (the answer has no list to take it), the search field, or the palette that asked. A message the answer
     /// cites, opened from the palette, keeps the answer beside it. The list placed again takes the keyboard.
