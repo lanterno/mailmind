@@ -1,5 +1,5 @@
-# The served suites on one commit, against both servers: the Python app's (tests/api, and tests/e2e/browser but
-# in_process/), and the Rust server's ledger (tests/support/rust_ledger.txt) through `just test-rust`. A test moves to
+# The served suites on one commit, against both servers: the Python app's (tests/api and tests/e2e/browser), and the
+# Rust server's ledger (tests/support/rust_ledger.txt) through `just test-rust`. A test moves to
 # the Rust server only by passing against both. Each server has a job of its own, side by side, so a failure against one
 # never keeps the other from running, and each fits the time a job has. One that fails keeps the output of every server
 # it started, and the run's page has it.
@@ -96,8 +96,7 @@ jobs:
       - name: The served suites against the Python app
         if: matrix.server == 'python'
         run: >-
-          uv run pytest -n 4 --browser tests/api tests/e2e/browser --ignore=tests/e2e/browser/in_process
-          --basetemp="$RUNNER_TEMP/pytest"
+          uv run pytest -n 4 --browser tests/api tests/e2e/browser --basetemp="$RUNNER_TEMP/pytest"
 
       - name: The ledger's tests against the Rust server
         if: matrix.server == 'rust'
