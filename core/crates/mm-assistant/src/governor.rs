@@ -198,7 +198,7 @@ impl CostGovernor {
         }
         let now = self.now();
         {
-            let mut state = self.state();
+            let state = self.state();
             if state.running > 0 || state.last_interactive.is_some_and(|last| now - last < YIELD_SECONDS) {
                 return Some("yielding");
             }
@@ -208,9 +208,15 @@ impl CostGovernor {
             if kind == Kind::Scheduled && now - state.last_seen > SCHEDULED_PRESENCE_SECONDS {
                 return Some("away");
             }
-            if is_open(&mut state, now, feature, model, instance) {
-                return Some("breaker");
-            }
+        }
+        self.stopped(feature, model, instance)
+    }
+
+    /// What stops background calls for `feature` until it passes, whoever is using the app: the breaker ("breaker") or
+    /// today's limit ("limit"), or None. Neither waits on someone asking, as yielding does.
+    pub fn stopped(&self, feature: &str, model: &str, instance: &Arc<dyn LanguageModel>) -> Option<&'static str> {
+        if is_open(&mut self.state(), self.now(), feature, model, instance) {
+            return Some("breaker");
         }
         // A ledger that can't be read stops work, not starts it.
         (self.room() <= 0).then_some("limit")

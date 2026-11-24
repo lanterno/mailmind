@@ -60,12 +60,19 @@ impl Status {
         made
     }
 
+    /// Whether the background reads what waits for a summary, now or at its next round, which a kick brings when mail
+    /// comes: neither today's limit nor the breaker holds its summaries back. Someone asking the AI something only
+    /// has them wait a moment.
+    fn reading(&self) -> bool {
+        self.gateway.stopped("triage", Some(&self.gateway.background_model())).is_none()
+    }
+
     /// What the page says of AI, with no call made: the engine ("api", or "none" while AI is off), the provider
     /// chosen and why AI is off (null while it is on), the model in force, whether the model chosen for a server on this
     /// Mac runs in a cloud (`providers::cloud_model`, said on or off), where the key came from, how the most
     /// recent call went, what today's calls cost so far in micro-dollars (null when the ledger can't be read) beside
     /// the daily limit, how many messages a batch out holds, when one does, and while AI is on how many messages from
-    /// the last 30 days wait for a summary.
+    /// the last 30 days wait for a summary, and whether they are being read (`summarizing`).
     pub fn report(&self) -> Result<Value, Fault> {
         let in_force = self.gateway.in_force();
         let on = in_force.on();
@@ -105,6 +112,7 @@ impl Status {
             match backlog.summaries_waiting(recent(self.clock.now().whole_seconds())) {
                 Ok(waiting) => {
                     report.insert("summaries_waiting".into(), json!(waiting));
+                    report.insert("summarizing".into(), json!(waiting > 0 && self.reading()));
                 }
                 Err(fault) => log::warning("ai", "what waits for a summary can't be read", &[], Some(fault.class)),
             }

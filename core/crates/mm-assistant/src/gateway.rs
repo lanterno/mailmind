@@ -175,6 +175,17 @@ impl Gateway {
         }
     }
 
+    /// What stops background calls for `feature` until it passes, the breaker ("breaker") or today's limit ("limit"),
+    /// or None: not someone using the AI now, which only has them wait a moment.
+    pub fn stopped(&self, feature: &str, model: Option<&str>) -> Option<&'static str> {
+        let force = self.in_force();
+        let name = model.filter(|m| !m.is_empty()).unwrap_or(&force.model);
+        match &force.lm {
+            Ok(lm) => self.governor.stopped(feature, name, lm),
+            Err(_) => None,
+        }
+    }
+
     /// The AI in force and its language model, for a batch: `AiOff` with AI off, and `NoBatches` for a provider that
     /// takes none. Nothing is sent.
     fn batching(&self) -> Result<(InForce, Arc<dyn LanguageModel>), CallError> {
