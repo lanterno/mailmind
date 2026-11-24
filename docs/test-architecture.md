@@ -1,63 +1,60 @@
 # The end-to-end test framework
 
 [test-strategy.md](test-strategy.md) says what to test and at which ring. This document is the framework that runs
-the whole-app rings (R3 to R5): its parts, how they connect, the protocol between them, and what a test looks like.
-Lower rings keep the tools they have (`cargo test`, pytest's unit and served suites, XCTest, Vitest).
+the whole-app rings (R3 to R5): its parts, how they connect, how it keeps time and knows when the app is quiet, how it
+stays away from a person's data, and what a test looks like. Lower rings keep the tools they have (`cargo test`,
+pytest's unit and served suites, XCTest, Vitest).
+
+It is written for the people who will use it most: coding agents working in parallel worktrees on a Mac someone is
+using, and the owner. So it puts three things first. The framework is safe by construction, not by a brief. It can be
+driven by hand, a command at a time, as well as by tests. And it answers in text first.
 
 ## 1. The shape
 
-One test, written once in Python, drives either client: the Mac app or the page. It runs against a fictional world of
-fake servers, it acts the way a person does, and after every step the framework checks that what the app shows agrees
-with what the server holds.
-
 ```mermaid
 flowchart LR
-    subgraph Runner["pytest + mmtest (the runner)"]
-        T[Scenario test] --> S[Screens<br/>rail, list, reader,<br/>composer, brief…]
+    subgraph Runner["mmtest: pytest plugin and the mm command"]
+        T[Scenario] --> S[Screens]
+        CLI[mm shell] --> S
         S --> C{Client}
-        C -->|MacClient| MD[Driver protocol]
+        C -->|MacClient| MD[Driver link]
         C -->|PageClient| PW[Playwright]
-        O[Oracle] --- C
+        O[Oracle]
         TR[Trace]
     end
 
-    subgraph World["World controller"]
-        W[World] --> IMAP[Fake IMAP]
-        W --> SMTP[Fake SMTP]
-        W --> DNS[Fake DNS]
-        W --> AI[Fake Claude / OpenAI]
+    subgraph World["World"]
+        W[World controller] --> F[Fake IMAP, SMTP,<br/>DNS, Claude, OpenAI]
         W --> CLK[Test clock]
     end
 
-    subgraph Mac["MailMind.app (Testing build)"]
-        DRV[Test driver] --> UI[AppKit + SwiftUI]
-        UI --> CORE[Core, in process]
-        DRV --> CORE
+    subgraph Mac["MailMind Dev.app"]
+        DRV[Driver] --> UI[AppKit + SwiftUI]
+        UI --> SEAMS[AppSeams:<br/>clock, pasteboard, links,<br/>notifications, layout]
+        UI --> CORE[Core in process,<br/>test clock, paused jobs]
     end
 
-    subgraph Web["Browser"]
-        PAGE[The page] --> SRV[Server: Python or Rust,<br/>as a program]
+    subgraph Web["Chromium"]
+        PAGE[The page] --> SRV[mailmind-server]
     end
 
-    MD <-->|Unix socket, JSON lines| DRV
+    MD <-->|socket, JSON lines| DRV
     PW --> PAGE
-    T --> W
-    CORE --> IMAP & SMTP & DNS & AI
-    SRV --> IMAP & SMTP & DNS & AI
-    CLK -.-> CORE & SRV & PAGE
+    T & CLI --> W
+    CORE & SRV --> F
 ```
 
-The parts:
-
-| Part | What it is | Where it lives |
+| Part | What it is | Where |
 | --- | --- | --- |
-| `mmtest` | The framework: a pytest plugin with the world, the clients, the screens, the oracle and the trace | `tests/framework/mmtest/` |
-| Scenarios | The tests, grouped by feature | `tests/scenarios/<feature>/test_*.py` |
-| World controller | The fake servers, the corpus, delivery, faults and the clock, behind one object | `tests/framework/mmtest/world.py`, over `tests/fakes/` |
-| Mac test driver | A module compiled only into the Testing build that carries out the runner's commands inside the app | `shells/apple/Sources/TestDriver/` |
-| `MailMindTestKit` | Swift: real input (keys under a layout, mouse, menus), element lookup and settling. The driver and the hosted XCTest target both use it | `shells/apple/TestKit/` |
-| Page client | Playwright on the real build, served by either server | `tests/framework/mmtest/page.py` |
-| Element names | One vocabulary of names for what a person can see and act on, given to both clients | `tests/framework/names.toml` |
+| `mmtest` | The framework: the world, the clients, the screens, settling, the oracle and the trace, as a pytest plugin | `tests/framework/mmtest/` |
+| `mm` | The same framework as a command, for driving a live app by hand (section 3) | `tests/framework/mm`, `just mm` |
+| Scenarios | The tests, by feature | `tests/scenarios/<feature>/test_*.py` |
+| World controller | The fake servers, the corpus, delivery, faults and the test clock | `tests/framework/mmtest/world.py`, over `tests/fakes/` |
+| MailMind Dev | The Debug build of the Mac app, with its own identity and the driver compiled in (section 6) | `shells/apple`, Debug configuration |
+| Driver | Carries out the runner's commands inside the app | `shells/apple/Sources/Dev/Driver/` |
+| `AppSeams` | Every way the Mac app reaches the system, behind one seam, as the core's `Seams` does | `shells/apple/Sources/Seams/` |
+| `MailMindTestKit` | Real input (keys under a layout, mouse, menus), lookup and settling in Swift, shared by the driver and the XCTest targets | `shells/apple/TestKit/` |
+| Page client | Playwright on the real build, served by `mailmind-server` | `tests/framework/mmtest/page.py` |
 
 ## 2. A test
 
@@ -65,278 +62,310 @@ The parts:
 from mmtest import clients, mail
 
 @clients("mac", "page")
-def test_reply_all_to_many_keeps_the_words_above_the_signature(world, app):
+def test_words_typed_in_a_reply_all_go_above_the_signature(world, app):
     world.account("ada").signature = "Ada at the Guild"
     note = world.deliver(mail.from_("lin").to(6).cc(4).subject("Venue"))
 
-    app.open("inbox")
-    app.list.row(subject="Venue").open()
+    app.inbox.row(subject="Venue").open()
     composer = app.reader.reply_all()
     composer.type("Got it, thanks.")
-
     assert composer.send_button.visible
     composer.send()
-    app.wait_for(world.smtp.received(1))
 
-    sent = world.smtp.last()
+    sent = world.smtp.wait_for_one()
     assert sent.text.startswith("Got it, thanks.\n\n-- \nAda at the Guild")
     assert sent.recipients == note.reply_all_recipients(me="ada")
 ```
 
-What the test doesn't say is what the framework does around each line:
+Around each line the framework:
 
-- `@clients("mac", "page")` runs the test twice, once on each client. A test that holds only one says so and why
-  (`@clients("mac", reason="the page has no own windows")`).
-- `world` is a fresh fictional world for each run: three accounts, the `tiny` corpus, every fake on loopback, and the
-  clock frozen at the world's noon.
-- Each action (`open`, `type`, `send`) goes through the client as real input, then **settles** (section 5), then runs
-  the **oracle** (section 6). A failed invariant fails the test at the step that broke it, not at the end.
-- `app.wait_for(...)` waits for a condition, never for time.
-- A failure keeps a **trace** (section 7): every step, every request the fakes saw, every event the core published, a
-  picture and the accessibility tree at each step.
+1. Turns the action into real input through the client (section 5).
+2. Settles: waits until the app, the core and the world are quiet, moving the test clock through short delays (section 7).
+3. Runs the oracle, which fails the test at the step that broke an invariant (section 8).
+4. Adds a step to the trace, written out only when the test fails (section 9).
 
-## 3. The world controller
+`@clients("mac", "page")` runs the test on both. Only a scenario that holds a rule both clients share runs on both;
+where the two are meant to differ (own windows, menus, the page's tabs), each client has its own scenarios.
 
-`World` is the one object a test talks to for everything outside the app. It is built on today's fakes and fixtures,
-which already run under the tripwire.
+**Why plain Python, not Gherkin.** pytest-bdd would put feature files and step patterns between the test and the
+screens. A failure would then point into a step function matched by a pattern, and agents would hunt for the pattern
+before the bug. It would also give up the loops, helpers and Hypothesis the scenarios need. The readability Gherkin
+promises comes another way: each test is named as a sentence, each screen method carries the phrase a person would use,
+and `just e2e catalogue` writes the readable list from what actually ran (section 9), so it never goes stale.
+
+## 3. `mm`: driving a live app by hand
+
+The review found its bugs by exploring the app, a command at a time, through a probe it had to build itself. The
+framework gives that to everyone, with the same verbs the tests use:
+
+```
+$ just mm up mac --world daily          # a world, MailMind Dev on it, and a prompt
+mm> shown                               # what's on screen, as text
+window "Inbox — All accounts" (key)
+  rail: [Inbox 9] [Needs you 4] [Waiting 2] …
+  list.tab: Needs you* · Everything · Unread
+  list: 4 rows, chosen 1
+    > Lin Mori — Venue · 2m ago · needs you
+      Pell Bank — Your statement · 1h ago
+  reader: "Venue" from Lin Mori, 3 in thread
+  keyboard: list
+mm> press e
+mm> shown --diff                        # only what changed
+mm> deliver long --from noor
+mm> clock +7h
+mm> truth digest
+mm> picture                             # a PNG path
+mm> save-step "archive the first row"   # appends the step to a draft scenario
+```
+
+- `mm up mac|page` starts a world and a client and leaves them running; `mm down` stops them. `mm attach` reconnects.
+- Every test takes `--keep`: when it fails, it leaves the world and the app up and prints the `mm attach` line.
+- Every failure prints a one-line repro: `just e2e tests/scenarios/compose/test_reply.py::test_words_… --client mac`.
+- `mm` replaces the review's file-polled probe and its control scripts. Review passes and scenarios use one driver.
+
+## 4. The world
 
 ```python
 class World:
-    accounts: dict[str, Account]          # ada (IMAP), bea (Proton Bridge), cy (Gmail)
+    accounts: dict[str, Account]      # ada (IMAP), bea (Proton Bridge), cy (Gmail)
     imap: FakeIMAP; smtp: FakeSMTP; dns: FakeDNS; ai: FakeAI
     clock: TestClock
 
     def deliver(self, message, to="ada", folder="INBOX") -> Delivered
-    def corpus(self, name: str)           # tiny | daily | large | huge | a named shape
-    def fault(self, script: Fault)        # imap.down(), imap.drop_after("UID MOVE"), smtp.refuse(), ai.slow(12)...
-    def restart_app(self)                 # the same home, a new process
+    def corpus(self, name)            # tiny | daily | large, or a named shape
+    def fault(self, script)           # imap.down(), imap.drop_after("UID MOVE"), smtp.refuse(), ai.slow(12)…
+    def restart_app(self, zone=None)  # the same home, a new process; a new time zone is a restart, never a system change
 ```
 
-- **One clock.** `TestClock` is the time for the world, the server and the client. The server reads it through the
-  core's `Clock` seam (the served protocol's `clock` line today; the driver's `clock` command for the Mac's
-  in-process core). The page reads it through Playwright's `page.clock`. The Mac's Swift code reads it through one
-  `AppClock`, which the Testing build lets the driver set. A test moves time with `world.clock.advance(hours=7)` or
-  `world.clock.set("23:59", zone="Pacific/Auckland")`.
-- **Faults are scripts.** A fault names what fails, when and how: on a command, after N bytes, for a duration of test
-  time. Deterministic tests script them; the chaos ring draws them at random from the same vocabulary.
-- **Corpora are generated.** `mail.from_(...).to(6).cc(4)` builds a message; named corpora (`daily`, `large`) are made by
-  one generator, in Rust once `mm-world` exists, so both servers start from the same bytes.
+- **A world is a home.** A run's data directory, its keychain stand-in, its database key and its preferences live in
+  one temp folder. A named corpus is built once per build and copied, so a scenario starts in a second, not after a
+  sync.
+- **Faults are scripts:** what fails, when, how, for how long on the test clock. Deterministic scenarios script them;
+  chaos runs draw them at random from the same list.
+- **The page's server is `mailmind-server`.** The Mac app runs only the Rust core, and the Python server is retired
+  after the flip, so scenarios don't run twice for two servers. The served suites (`tests/api` and the ledger) keep the
+  Python server honest until it goes.
 
-## 4. The clients
+## 5. The clients
 
-Both clients implement one interface. A screen object calls only this interface, so a scenario never knows which client
-it drives.
+Both clients implement one interface. Screens call only this interface.
 
 ```python
 class Client(Protocol):
-    # input, as a person gives it
     def press(self, keys: str, layout: str = "us") -> None   # "e", "cmd+shift+f", "pagedown"
     def type(self, text: str) -> None
-    def click(self, target: Element, button="left", count=1) -> None
+    def click(self, target: Element, count: int = 1) -> None
     def drag(self, source: Element, onto: Element) -> None
-    def choose_menu(self, *path: str) -> None                 # ("Message", "Archive")
-    # looking
-    def find(self, name: str, **where) -> Element            # by element name, filtered by text, row key…
-    def shown(self) -> Shown                                  # what the person sees, in one shape (section 6)
-    def picture(self) -> bytes
-    # time and quiet
+    def choose_menu(self, *path: str) -> None
+    def find(self, role: str, label: str | None = None, within: str | None = None, **where) -> Element
+    def shown(self) -> Shown          # what a person sees (section 8)
+    def truth(self) -> Truth          # what the core holds (section 8)
+    def picture(self) -> Path
     def settle(self) -> None
-    def truth(self) -> Truth                                  # what the server holds (section 6)
 ```
 
-### 4.1 The Mac client and its driver
+### 5.1 Finding things
 
-The Mac app's **Testing** build configuration compiles `Sources/TestDriver/` with the `TESTING` flag. Release and Debug
-builds never contain it, and `release-check` fails if the driver's symbols are in the shipped app.
+Elements are found the way a person and VoiceOver find them: by **role and label, within a named region**.
+`find("button", "Send", within="composer")`, `find("row", within="list", subject="Venue")`. Both clients already carry
+most labels: about 270 accessibility labels in the Mac's sources and about 110 `aria-label`s in the page.
 
-When `MAILMIND_TEST_DRIVER` names a socket path in the run's home, the driver listens there. The runner speaks JSON
-lines to it:
+Only about thirty structural anchors get an identifier: the regions (`rail`, `list`, `reader`, `composer`, `brief`,
+`toast`, `sheet`), the list's rows, the tabs, and parts nothing labels. They're kept in `tests/framework/anchors.toml`,
+as `accessibilityIdentifier` on the Mac and `data-mm` on the page. A lint holds them once they stop changing. Every
+other lookup is by role and label, so adding a test seldom means changing the app. And when a control has no label, the
+fix is the one VoiceOver needed anyway.
+
+### 5.2 The Mac client
+
+The runner makes a socket in a short temp path (a Unix socket path can't exceed 104 bytes, and agents' homes are
+longer). It starts MailMind Dev with `MAILMIND_TEST_DRIVER` naming the socket, and the driver connects out to it. The
+link speaks JSON lines:
 
 ```json
 {"id": 7, "do": "press", "keys": "e", "layout": "us"}
-{"id": 7, "ok": true}
-{"id": 8, "do": "find", "name": "list.row", "where": {"subject": "Venue"}}
-{"id": 8, "ok": true, "element": {"ref": "ax:41", "frame": [0, 212, 640, 52], "visible": true}}
+{"id": 7, "ok": true, "settled_at": "run-4:212"}
 ```
 
 | Command | What the driver does |
 | --- | --- |
-| `press`, `type` | Builds a `CGEvent` from a key code under the named layout and posts it to its own process, so AppKit routes it: menus first, then the key window's responder chain |
-| `click`, `drag`, `scroll` | Posts real mouse events at the element's frame |
-| `menu` | Finds the item in the real menu bar, validates it as AppKit would, and performs it; it fails if the item is disabled |
-| `find`, `ax` | Walks the app's own accessibility tree by element name |
-| `shown` | Builds the `Shown` snapshot from the accessibility tree (section 6) |
-| `picture` | Draws a window through the window server |
-| `settle` | Answers once the app is quiet (section 5) |
-| `core` | Passes `clock`, `work`, `settle`, `check` and route reads to the in-process core, as the served protocol does for a server |
+| `press`, `type` | Builds the key from a key code with `UCKeyTranslate` under the named layout (the layout seam, section 6), posts it to the app's own queue and lets AppKit route it: menus first, then the key window's responder chain |
+| `click`, `drag`, `scroll` | Posts mouse events at the element's visible frame |
+| `menu` | Finds the item in the real menu bar, validates it, performs it; fails if it's disabled |
+| `find`, `shown` | Reads the app's own accessibility tree, plus visibility (section 8) |
+| `picture` | ScreenCaptureKit in a real session; otherwise the app draws itself, marked approximate |
+| `settle` | Section 7 |
+| `core` | The core's test clock, its paused jobs (`work`, `kicked`), `check`, and reads for `truth` |
 
-The driver is built on `MailMindTestKit`, which the hosted XCTest target (R3) uses too, so the in-process tests and the
-launched-app tests send input the same way.
+The driver runs its own work off the main thread, except for accessibility reads and posting events. `MailMindTestKit`
+holds the input code, so the hosted XCTest target sends keys exactly as the driver does.
 
-**It needs a real session.** The app must be able to become active, its screen must be unlocked, and WebKit must draw.
-The runs happen in a macOS VM (section 8), never on a person's session. No swizzling, forced key windows or private
-selectors: what the review's probe needed those for, the VM gives for free.
+### 5.3 The page client
 
-### 4.2 The page client
+Playwright on the real build, in Chromium, served by `mailmind-server`. `find` maps to `get_by_role` within a
+`data-mm` region, `shown` reads the same text snapshot from the DOM (Playwright's aria snapshot, trimmed to the same
+shape), and the page's timers run on `page.clock`, driven by the same test clock. WebKit runs nightly: Playwright's
+WebKit isn't the Mac's `WKWebView`, so the Mac's own frame is held by its hosted target and the session lane.
 
-`PageClient` wraps Playwright on the real build, served by the Python or the Rust server through today's served
-protocol. It runs in WebKit and Chromium. `find` maps an element name to `page.get_by_test_id(name)` (Playwright's test
-id attribute set to `data-mm`), `shown` reads the same snapshot from the DOM, and `settle` waits for the network and a
-quiet animation frame.
+## 6. Safe by construction
 
-### 4.3 Element names
+Every rule agents had to be told becomes something the code enforces.
 
-A screen object finds things by name, and each client carries the names:
-
-- On the Mac, as `accessibilityIdentifier`.
-- On the page, as `data-mm`.
-
-Names read `area.element`, with a part after a colon where there are several: `rail.place:inbox`, `list.tab:needs`,
-`list.row`, `reader.verb:archive`, `composer.field:cc`, `composer.send`, `toast`, `empty.title`. The vocabulary is one
-file, `tests/framework/names.toml`. A check on each side (an ESLint rule for the page, a Swift test walking the app's
-views for the Mac) fails on a name that isn't in it, and the runner fails on a name a screen uses that a client
-doesn't carry.
-
-Today the Mac sets one identifier and the page none; the browser tests find elements by CSS about 1,250 times. Adding
-names is mechanical work, done area by area as each area's scenarios are written.
-
-### 4.4 Screens
-
-A screen is a class per area of the app, written once against `Client`:
-
-```python
-class List(Screen):
-    def tab(self, which: str) -> Tab: ...            # "needs", "everything", "unread"
-    def row(self, *, subject=None, key=None) -> Row: ...
-    def chosen(self) -> Row | None: ...
-
-class Row(Element):
-    def open(self): self.client.click(self)          # choosing a row opens it in the reader
-    def archive(self): self.open(); self.app.press("e")
-```
-
-Screens are the only place that knows how a person does a thing. When both clients do it differently (a double-click
-in a Mac window, a click on the page), the screen says so once.
-
-## 5. Settling
-
-A step ends when the app is quiet, never after a fixed time. Quiet means all of:
-
-| Part | Quiet when |
+| Rule agents were told | What enforces it |
 | --- | --- |
-| The world | No fake has a command in flight; deliveries are stored |
-| The server or core | Its `settle` answers: no request in flight, no job running that a request started |
-| The Mac app | No `RouteCaller`, `Wire` or `Routes` request in flight; the main run loop has turned twice with nothing queued; no window is mid-animation (the Testing build sets animations to zero length) |
-| The page | No request in flight; two animation frames with no DOM change |
+| Never touch the person's MailMind, its preferences or its saved state | The Debug build is **MailMind Dev**, `io.github.lanterno.mailmind.dev`, executable `MailMindDev`: its own preferences, saved state, login item, notification permission and `mailto:` registration. Release keeps the real identity |
+| Launch only with a temp home, a keychain stand-in and a key of its own | The driver refuses to start unless the home is under the system's temp folder, the keychain is the stand-in, and the identity is Dev's |
+| Kill only your own processes | The runner starts the app and the fakes in its own process group, writes their pids into the home, and stops only those |
+| Never change the clock or the time zone | The app reads time through `AppSeams.clock`; a zone is set with `TZ` at launch |
+| Never change the keyboard layout | `AppSeams.layout`: `SingleKey` asks the seam, not the system, which layout is current |
+| Save and restore the clipboard | `AppSeams.pasteboard`: a named pasteboard per run |
+| Never open a link in a real browser | `AppSeams.links`: recorded, never opened; the oracle can read them |
+| Never post a notification as the person's app | `AppSeams.notifications` and `AppSeams.loginItems`: recorded |
+| Never reach a real server, AI or model server | The tripwire and the fakes, as today, in every process the runner starts |
 
-`settle` has a long ceiling (30 s, as `wait_until` has), and reaching it fails the step with what was still busy.
+`AppSeams` mirrors the core's `Seams`. The shipped app gets the system's versions; MailMind Dev under a driver gets the
+test ones. The Mac sources hold about 45 `Date()` calls, 36 `Task.sleep`s, 5 uses of the general pasteboard and 11
+`NSWorkspace` opens today; moving them behind the seam is work of its own, done once (section 11, step 2).
 
-## 6. The oracle
+`release-check` fails if the shipped app holds the driver, the test seams, or the Dev identity.
 
-After every step, the runner takes two readings and checks them against each other.
+## 7. Time and settling
 
-- **`Shown`** is what the person sees, read from the accessibility tree or the DOM by element name, never from the app's
-  models: the place and scope, each count on screen (the rail's badge, the tab's, the brief's tally), the rows in
-  view with their key, subject and marks, the row chosen, the message open, where the keyboard is, any toast,
-  empty-state sentence or sheet, and each open window.
-- **`Truth`** is what the server holds, read through its routes: the digest, the list of the place shown, the message,
-  the outbox, the drafts.
+**One test clock.** The world, the core, the Mac app and the page read one clock, frozen until a test moves it:
 
-The invariants are functions over the two readings and the step history:
+- The core reads it through its `Clock` seam. In the Mac's in-process core that needs `mm-host` to take a test clock and
+  expose `mm-served`'s job pumping (`work`, `kicked`, `settle`, `check`), moved into a crate both use.
+- The Mac app reads it through `AppSeams.clock`, which also schedules every delay: `after(seconds) { … }` in place of
+  `Task.sleep`.
+- The page reads it through `page.clock`.
+
+**Background jobs are paused by default**, as in the served suites: a scenario pumps them (`world.run("sync")`) or opts
+in to free running (`@free_running`), which the chaos and soak runs use.
+
+**Delays have two kinds.** A short delay, two seconds or less (a debounce, coalescing events, the 400 ms wait before a
+digest is read again), counts as the app being busy, and `settle` moves the test clock through it at once. A long one
+(a toast's life, autosave, Undo Send's window, a snooze) moves only when the test says `world.clock.advance(...)`. So a
+test never waits for a short delay and never misses a long one.
+
+**Settled means all of these hold at once, checked until they stay true:**
+
+1. Every client subscription has applied every core event up to the core's high-water id. The core's events already
+   carry ids (`run-n`, in `mm-server/src/events.rs`), and each subscriber reports the last one it applied.
+2. Nothing is in flight: no route call from the Mac's `RouteCaller`, `Wire` or `Routes`, no request on the page.
+3. No short delay is pending.
+4. No paused job was kicked and left unpumped, unless the scenario is free running.
+5. The world's fakes have no command in flight.
+
+`Truth` is read at that same mark. A step that can't settle within its ceiling fails with what was still busy.
+
+## 8. The oracle
+
+After every step the runner takes two readings:
+
+- **`Shown`**, what a person sees, read from the accessibility tree or the DOM, never from the app's models: the
+  window and place, the counts on screen, the rows in view, the row chosen, the message open, where the keyboard is, any
+  toast, sheet or empty-state sentence. **Visible** means the element's frame meets the window's visible content and
+  nothing covers it. For a mail body, it also means the document's height fits what its view can scroll to, which is
+  what "a long message cut off" broke.
+- **`Truth`**, what the core holds, read at the settled mark through one adapter. Today it reads routes; when the
+  page's step 5 moves views into the core, only the adapter changes.
+
+It starts with three invariants, each sharp enough never to need relaxing:
 
 ```python
-@invariant
-def counts_agree(shown, truth):
-    for place, badge in shown.counts.items():
-        expect(badge == truth.count(place), f"{place} shows {badge}, the server says {truth.count(place)}")
-
 @invariant
 def the_keyboard_is_somewhere(shown):
-    expect(shown.focus is not None and shown.focus.visible, "no visible element has the keyboard")
+    expect(shown.focus is not None and shown.focus.visible, "nothing visible has the keyboard")
 
 @invariant
 def typed_words_are_kept(shown, truth, history):
     for words in history.typed:
         expect(words in shown.composers or words in truth.drafts or words in truth.sent, f"{words!r} is nowhere")
+
+@invariant
+def the_open_message_is_where_it_says(shown, truth):
+    if shown.open:
+        expect(shown.open.key in truth.place_rows or shown.reader.says_where, "the reader holds a message the list doesn't")
 ```
 
-The first set:
+**Counts agree** (the rail, the tabs, the brief and the core) joins once its rules are written down exactly: which
+counts are of messages and which of conversations, which follow the scope and which don't. A vague version would train
+everyone to switch it off. After it come "no sentence contradicts the state" and "nothing shows a message the core has
+moved".
 
-- Counts agree across the rail, the tabs, the brief and the server.
-- The chosen row is the open message, or the reader says where the open message lives.
-- No surface shows a message the server has moved away, once its event has landed.
-- No list shows a `pending_removal` row.
-- The keyboard is on a visible element a person can type into or act on.
-- No sentence contradicts the state it describes ("Nothing needs you" over rows that need you).
-- Typed words are in a composer, a draft or a sent message.
-- No toast stays past its time.
+An invariant can be relaxed for one step that is about a lag on purpose, never for a whole test.
 
-An invariant can be relaxed for one step (`with app.expecting(counts_lag=True):`) when a test is about a lag on
-purpose, never for a whole test.
+## 9. Output
 
-## 7. The trace
+- **Text first.** `shown` is a text tree. A failed invariant prints both readings and the difference. The trace is
+  JSON lines with a text summary per step: the step, its phrase, the requests the fakes saw, the core events, the
+  diff of `Shown`. Pictures and the HTML viewer come second.
+- **Where.** A failing test writes `build/traces/<test>/`; CI uploads it.
+- **Budgets per step.** Settling and the oracle are timed per step, and the slowest are reported, as the slowest
+  tests are.
+- **The catalogue.** `just e2e catalogue` writes `build/catalogue.md` from the tests that ran: each test's sentence and
+  its steps' phrases, by feature. That is the readable specification, and it can't drift from the tests.
+- **By feature.** Scenarios are marked by feature (`-m compose`), matching [test-strategy.md](test-strategy.md)
+  section 8, so a change runs its own area first.
 
-Every step adds to a trace: the step's name and arguments, the time on the test clock, the requests each fake received,
-the events the core published, `Shown` and `Truth`, a picture of each window, and the accessibility tree. A passing test
-keeps nothing. A failing one writes the trace to `build/traces/<test>/`, with an HTML page that steps through it, and
-CI uploads the folder.
+## 10. Where it runs: two lanes
 
-## 8. Where it runs
+A Mac app needs a real, active session for some things (the real menu bar as AppKit validates it, activation,
+drag and drop, notifications, ScreenCaptureKit) and not for the rest. Only one app is active in a session at a time,
+and this Mac has neither the disk nor the use for a VM per agent. So there are two lanes.
 
 ```mermaid
 flowchart TB
-    subgraph Host["A Mac: the owner's, CI's, or a spare one"]
-        subgraph VM["macOS VM (tart), its own user, no network out"]
-            R[pytest + mmtest] --> F[Fakes on loopback]
-            R --> A[MailMind.app, Testing build]
-            R --> B[WebKit / Chromium] --> P[Server as a program]
-            A & P --> F
-        end
-        H[just e2e] -->|starts, copies the build in, collects traces| VM
+    subgraph A["Lane A: on the host, in parallel, never takes focus"]
+        A1[Agent worktree 1: MailMind Dev, world, runner]
+        A2[Agent worktree 2: …]
+        A3[The page: Chromium, mailmind-server]
     end
+    subgraph B["Lane B: a real session, one app at a time"]
+        B1[CI: GitHub's macOS runners, sharded]
+        B2[Optional: a local VM or a spare Mac, behind a lock]
+    end
+    A -->|"@needs_session scenarios"| B
 ```
 
-Everything runs inside the VM: the runner, the fakes, the app and the browsers. The host only starts it, copies the
-build in and takes the traces out. Locally `just e2e` does that; CI's merge tier runs the same image on a macOS runner.
-The page's scenarios can also run without a VM (`just e2e --page`), on Linux in CI, since a browser needs no session of
-its own.
+- **Lane A, the default.** Runs on the person's Mac beside their work, any number at once. MailMind Dev runs as an
+  accessory app with its windows off-screen. In Dev under a driver, an `NSApplication` subclass answers `isActive` and
+  `keyWindow` from the window the driver made key through AppKit's own `makeKeyWindow`. That's what the review's probe
+  did, without swizzling. A result from lane A says it can't vouch for activation, the real menu bar or a drag.
+- **Lane B, the gate.** Scenarios marked `@needs_session` (menus, activation, drag and drop, notifications, pictures)
+  and the whole catalogue on merges. It runs on GitHub's macOS runners, which are throwaway VMs with an unlocked
+  session, and free for a public repository, so the catalogue is sharded across several. They can't run a VM inside
+  themselves, so the app runs on them directly. Locally, a VM (`tart`) or a spare Mac can serve lane B behind a lock;
+  `just e2e --session` waits its turn and says where it is in the queue.
+- **The page** runs in lane A anywhere, Linux in CI included.
+- **Builds are reused.** One Debug build per worktree serves every run; `just e2e` rebuilds only what changed and never
+  makes a DerivedData of its own.
 
-Inside the VM the app can be active, the screen is never locked, WebKit draws, drag and drop and notifications are
-real, and each run picks its keyboard layout. No test can reach the host's data, its Keychain or its running MailMind.
+## 11. Building it
 
-## 9. The rings on this framework
+Each step is useful on its own, and the first ones pay off before the Mac driver exists.
 
-| Ring | Uses |
-| --- | --- |
-| R3, the Mac in process | `MailMindTestKit` in a hosted XCTest target, inside the VM |
-| R3, the page | Playwright on the real build (today's browser suite), moving to `data-mm` names |
-| R4, scripted | Scenarios through both clients, the oracle after every step |
-| R5, model-based | A Hypothesis `RuleBasedStateMachine` whose rules are screen actions, run against either client, with the oracle as its invariant |
-| R5, chaos | Scenarios with faults drawn at random from the world's fault vocabulary |
-| R5, soak | One long scenario delivering mail for hours, with the driver sampling memory, handles and threads |
-| R6, release | The scenario catalogue on a Testing build of the release commit, built with the Release configuration's settings and only the driver added; the upgrade matrix; the update from the previous release |
+1. **`mm` and the page.** `mmtest` with the world over today's fakes, the page client on `mailmind-server`, the text
+   `shown`, settling on event ids and network quiet, the trace, `--keep`, and `mm up page`. Port a handful of browser
+   scenarios.
+2. **The Mac's seams.** `AppSeams` with the clock and its scheduler first (every `Date()` and `Task.sleep`), then the
+   pasteboard, links, notifications, login items and the layout. The Debug build becomes MailMind Dev.
+3. **The core's test clock and jobs in process.** `mm-host` takes a test clock and pauses and pumps jobs, from a crate
+   shared with `mm-served`.
+4. **The driver, lane A.** `MailMindTestKit` from `Tests/RealKeys.swift` and `MailFrameTests.press`; the driver's link,
+   input, `find`, `shown`, `settle`, `core`; `mm up mac`. The first scenarios are the review's findings in the list,
+   triage, the composer and the reader.
+5. **The oracle's three invariants**, run after every step.
+6. **Lane B on CI**, sharded, with `@needs_session` scenarios and the catalogue on merges.
+7. **Anchors and screens, area by area**, porting the review's findings as scenarios as each area gets its screen.
+8. **Then:** the counts invariant once its rules are written; a model-based machine over screens; chaos with random
+   faults; the soak; a local lane B.
 
-## 10. Building it
+**Decisions this takes.** It answers the first three questions in [test-strategy.md](test-strategy.md) section 10:
 
-1. **The skeleton.** `mmtest` with `World` over today's fakes, `PageClient` over today's browser fixtures, settle and
-   trace, and three scenarios ported from the browser suite. The page needs no new names to start: its first screens
-   use roles.
-2. **The Mac driver and test kit.** The Testing configuration, `MailMindTestKit` from `Tests/RealKeys.swift` and
-   `MailFrameTests.press`, the socket, `press`, `click`, `menu`, `find`, `settle`, and the core passthrough. The
-   `AppClock` seam in Swift.
-3. **The VM.** One `tart` image with Xcode's runtime, Python and the browsers; `just e2e`.
-4. **Names and screens, area by area.** Start with the areas the review found most in: the list and triage, the
-   composer, the reader, windows and menus. For each area, add the names to both clients, write its screen, and port
-   the review's findings into scenarios.
-5. **The oracle.** The first set of invariants, run after every step, with relaxations named.
-6. **Model-based and chaos runs.** The state machine over screens; faults at random; the soak.
+- Lane A on the host for everyday work, and lane B on CI's macOS runners, rather than a VM for every run. A local VM is
+  optional.
+- An in-app driver, not XCUITest: XCUITest needs the app active, can't read the core at the settled mark, and is slow.
+- Scenarios in plain Python on pytest, not Gherkin, for the reasons in section 2.
 
-**Decisions this takes.** It answers the open questions in [test-strategy.md](test-strategy.md) section 10:
-
-- A VM rather than a spare logged-in Mac, because it is the same image locally and in CI.
-- An in-app driver rather than XCUITest, because XCUITest can't read the app's state for the oracle, needs the app
-  active from outside, and is slow. A handful of XCUITest runs in the VM can check that real activation still works.
-- Scenarios in Python on pytest rather than YAML, because the fakes, the fixtures and the served protocol are already
-  Python and pytest, and a test can then use loops, helpers and Hypothesis.
-
-The fourth decision, whether a missed wall-time budget blocks a release, stays with the owner.
+Whether a missed wall-time budget blocks a release stays with the owner.

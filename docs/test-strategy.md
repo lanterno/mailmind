@@ -52,7 +52,7 @@ so a test could have changed a person's settings. And CI ran far less than `just
 7. **Performance and security are features.** Every budget in `budgets.toml` is read by a check, and every claim in
    [security.md](security.md) names the test that holds it.
 8. **No test reaches a person's data.** The tripwire, the keychain stand-in and the kept-apart preferences hold for every
-   ring, including the launched app. UI rings that need the screen run in a session of their own (section 4.5).
+   ring, including the launched app. The Mac app under test is a build of its own, MailMind Dev, and what it would do to the system goes through seams that record it ([test-architecture.md](test-architecture.md) section 6).
 
 ## 3. The rings
 
@@ -65,7 +65,7 @@ what a lower ring already holds.
 | R1 Core contracts | What any MailMind server answers over HTTP; how the core talks to IMAP, SMTP, DNS and the AI providers | Served suites on both servers (`tests/api`), adapter contracts against the fakes and against Dovecot | Every PR (served), nightly (Dovecot, all-Rust) |
 | R2 Client logic | A client's models and words over a stand-in server | Swift tests over `FakeServer`, `DeskRoutes`, `FakeRoutes`; Vitest over stubs | Every PR |
 | R3 Client UI in process | Views, keys, focus, menus and windows, through the toolkit's own dispatch | A hosted Mac test target with the real app scene and menu bar; Playwright on the real build | Every PR (page), every merge (Mac) |
-| R4 Whole app, scripted | A person's flows end to end against a fake world, with the consistency oracle after each step | The Mac app launched with an in-app test driver; Playwright on the page; one scenario catalogue for both | Every merge, in a macOS VM |
+| R4 Whole app, scripted | A person's flows end to end against a fake world, with the consistency oracle after each step | The Mac app launched with an in-app test driver; Playwright on the page; one scenario catalogue for both | Lane A on any Mac; lane B on every merge (section 4.5) |
 | R5 Hostile and long | Real latency, outages, renumbering, a long session, big worlds, fuzzed mail, exploratory review passes | Chaos and soak runs, the performance lab, agent-driven review passes | Nightly and before a release |
 | R6 Release | The built artefact: signing, the update feed, upgrading from every shipped version, the oldest macOS | `release-check`, `mac-floor`, an upgrade matrix | Each release candidate |
 
@@ -120,8 +120,8 @@ itself and runs with no host app, so the real `MailMindApp` scenes and menu bar 
 active. `Tests/RealKeys.swift` and `MailFrameTests.press` already emulate AppKit's key-equivalent step; that is the seed.
 
 - **A hosted test target**, `MailMindAppTests`, whose host is the app itself. The app's real `Commands` build the real
-  menu bar, its scenes open real windows, and tests reach them through `NSApp`. This target runs where the app can be
-  active: in the VM (section 4.5), not on a person's Mac.
+  menu bar, its scenes open real windows, and tests reach them through `NSApp`. This target needs an active session, so
+  it runs in lane B (section 4.5), not on a person's Mac.
 - **A small test kit**, `MailMindTestKit`, shared by the hosted target and the in-app driver:
   - `press(_:)` makes a `CGEvent` from a key code under a named keyboard layout (US, Arabic, Swiss French, German),
     posts it to the app's queue and lets AppKit route it: menus first, then the key window's responder chain.
@@ -132,39 +132,25 @@ active. `Tests/RealKeys.swift` and `MailFrameTests.press` already emulate AppKit
 - **Production-shaped web content.** Every test that loads mail does it through the core's `mailmind-frame:` scheme with
   the headers the app serves. A test that sets up WebKit any other way fails a lint.
 - **The page** already has this ring: Playwright on the real build, with console errors and CSP violations failing a test.
-  It gains Playwright traces and screenshots on failure, and runs in WebKit as well as Chromium, since the Mac shows mail
-  through WebKit.
+  It gains Playwright traces and screenshots on failure, and a nightly run in WebKit. Playwright's WebKit isn't the
+  Mac's `WKWebView`, so the Mac's own frame is held by its hosted target.
 
 ### 3.5 R4: the whole app, scripted
 
 The review passes found what they did by driving the launched app with a probe injected into it. That probe can't be
-kept as it is: it swizzles private selectors, polls files with sleeps, and has hard-coded paths. What it showed
-can be kept.
+kept as it is: it swizzles private selectors, polls files with sleeps, and has hard-coded paths. What it showed is kept
+in the framework [test-architecture.md](test-architecture.md) lays out:
 
-- **An in-app test driver.** A `TESTING` build flavour compiles in a driver that listens on a Unix socket in the run's
-  home and speaks a small JSON protocol: press, click, type, choose a menu item, read the accessibility tree, read a
-  window's picture, wait for an event from the core, and read the app's model state for the oracle. It is compiled out of
-  Release builds; `release-check` asserts the symbol isn't there.
-- **The world as a service.** `demo_home.py` and the review's `world.py` become one world controller. It starts the fake
-  servers and the fake AI, populates a named world, and accepts the commands the review used: deliver a message, a long
-  one, an invite or a thread; stop and start IMAP or SMTP; delay the AI; rename or remove a folder; restart the app over
-  the same home.
-- **One scenario catalogue for both clients.** A scenario is a list of steps in a person's terms ("open the Inbox",
-  "press e", "reply all and type 'Thanks'", "wait for summaries") plus assertions, kept in `tests/scenarios/`. A step
-  maps to the Mac driver's actions and to Playwright's. A scenario either runs on both clients or says why one of them
-  differs. This is how twin bugs stop drifting: the scenario that caught one holds the other.
-- **The consistency oracle.** After every step, the runner reads both what the app shows and what the server holds, and
-  checks the invariants:
-  - every count of a place agrees: rail, tab, brief tally, digest, the list's own total;
-  - the open message is the row chosen in the list, or the reader says where it lives;
-  - no list holds a `pending_removal` row, and no surface shows a message the server has filed away once its event has
-    landed;
-  - the keyboard is somewhere a person can see;
-  - no toast or empty-state sentence contradicts the state it describes ("Nothing needs you" with needs-you rows, "Saved"
-    with no draft);
-  - what a person typed is in the composer, the draft or the sent message, never nowhere.
-
-  An invariant that can't be checked in the Mac app is checked on the page, and the other way round.
+- **MailMind Dev**, the Debug build with an identity of its own and a driver compiled in, which the runner speaks to
+  over a socket. What the app would do to the system (time, the pasteboard, links, notifications, the keyboard layout)
+  goes through `AppSeams`, which records it in Dev.
+- **A world controller** over today's fakes: deliver mail, script faults, move one test clock, restart the app.
+- **Scenarios in plain Python**, named as sentences, through screens shared by the Mac and the page where a rule is
+  shared, and their own where the two differ.
+- **`mm`**, the same framework as a command, so a person or an agent can drive a live app step by step, and turn what
+  they did into a scenario.
+- **The consistency oracle** after every step, comparing what a person sees with what the core holds, starting with
+  three invariants and growing as each is specified exactly.
 
 ### 3.6 R5: hostile and long
 
@@ -185,7 +171,7 @@ macOS. Added:
 
 - **An upgrade matrix.** A database made by each shipped version (kept as fictional fixtures) opens in the new build,
   migrates, and passes the oracle. `db check-upgrade` runs the same over a copy, as an owner step.
-- **An update from the previous release** through Sparkle, in the VM: the old app finds the new appcast, installs it and
+- **An update from the previous release** through Sparkle, in lane B: the old app finds the new appcast, installs it and
   relaunches.
 - **The launched-app scenarios on the release build**, not only the Debug one.
 
@@ -206,24 +192,27 @@ literals, `NO`/`BAD`/`BYE` at any command, UIDVALIDITY changes, untagged EXPUNGE
 SMTP throttling, AI rate limits and partial streams. Deterministic tests use them with fixed scripts; R5 draws them at
 random.
 
-### 4.3 The scenario runner
+### 4.3 The framework
 
-A small runner in `tests/scenarios/` reads a scenario, starts a world, launches a client (the Mac app with its driver, or
-the page in Playwright), runs the steps, runs the oracle after each, and records a trace: the steps, the server's
-requests, the events, and a picture per step. A failure keeps the trace.
+[test-architecture.md](test-architecture.md) is the framework for R3 to R5: the world, the clients, `mm`, settling,
+the oracle and the trace.
 
 ### 4.4 Twin fixtures
 
 Every rule both clients compute has one fixture file of cases. Each client's test suite reads it. A new case goes in
 the fixture, not in one client's test.
 
-### 4.5 Where UI rings run: a macOS VM
+### 4.5 Where UI rings run: two lanes
 
-The hosted Mac target (R3) and the launched-app scenarios (R4) need an app that can be active, a screen that isn't
-locked, WebKit that draws, real drag and drop and real notifications. None of that can happen on the owner's Mac while
-they use it, and the review spent much of its effort working around exactly this. They run in a macOS virtual machine
-instead (`tart`, on Apple silicon): the same image locally and in CI, with a fixed keyboard layout per run, its own
-user, and nothing of the owner's inside it. A test can then click, drag, activate and post notifications freely.
+Some of what the Mac app does needs a real, active session (the menu bar as AppKit validates it, activation, drag and
+drop, notifications); the rest doesn't. So the whole-app rings run in two lanes
+([test-architecture.md](test-architecture.md) section 10):
+
+- **Lane A** on any Mac, a person's included, many at once, never taking focus: MailMind Dev as an accessory app with
+  its windows off-screen, its key window made through AppKit's own path.
+- **Lane B** in a real session, one app at a time: GitHub's macOS runners (throwaway VMs, sharded), and optionally a
+  local VM or a spare Mac behind a lock. Scenarios that need a session are marked, and the whole catalogue runs here on
+  every merge.
 
 ### 4.6 Traces and artefacts
 
@@ -256,7 +245,7 @@ per route, bytes read per sync, allocations, the number of AI calls and tokens, 
 their limit in `budgets.toml`, and they catch the slow paths the review found (a move that also SELECTs, SEARCHes and LISTs;
 a first scan reading 64 KiB a message).
 
-**Wall time on a quiet machine.** Times run nightly in the performance lab: the VM's host, nothing else running,
+**Wall time on a quiet machine.** Times run nightly in the performance lab: a Mac with nothing else running,
 median of seven. Results go into a history file per measure; a regression of more than the noise band against the last
 fortnight's median opens an issue rather than failing a PR. Before a release, every shell budget in `budgets.toml` must
 pass there.
@@ -279,7 +268,7 @@ an owner in the table below.
 | Secrets stay secret | Keychain through stdin; scrubbed errors; logging tests | Canary secrets in every world (a password, an API key, a body phrase); a check over every log, error, crash report and request to the AI that no canary appears where it mustn't |
 | The database is encrypted at rest | `test_db_encryption`, `database_version.rs` | Migrations over a corrupt, truncated or hostile database; a backup after an account is removed holds none of its mail (ROADMAP #60) |
 | What goes to the AI is what the docs say | The governor and ledger tests; prompt wording | A prompt-injection corpus: mail that asks the assistant to file, send, forward or reveal other mail. The fake provider returns the injected action, and the test asserts nothing happens without the person and nothing outside the asked messages goes out |
-| The app updates only to what the owner signed | `release-check`: the appcast and feed signatures, a tampered feed | An update from the previous release in the VM (R6) |
+| The app updates only to what the owner signed | `release-check`: the appcast and feed signatures, a tampered feed | An update from the previous release in lane B (R6) |
 | The FFI boundary holds | Nothing of its own | Tests of `mm-ffi`: bad UTF-8, huge strings, calls after close, from many threads |
 | The supply chain | `just audit`; `cargo deny`; pinned actions and hashes | Run `audit` in CI; secret scanning (gitleaks) in CI and as a pre-commit hook; a check that no real address or count enters the repo |
 
@@ -301,7 +290,7 @@ The target:
 | Tier | When | What | Time |
 | --- | --- | --- | --- |
 | PR | Every push to a PR | `lint`, `audit`, `check-web`, `core-verify`, `just test`, the Mac unit tests (R2), served suites on both servers, deterministic budgets | Under 20 min, in parallel jobs |
-| Merge | Every push to main | The PR tier, plus the browser suite in WebKit, the hosted Mac target (R3) and the scenario catalogue (R4) in the VM | Under 45 min |
+| Merge | Every push to main | The PR tier, plus the browser suite in WebKit, the hosted Mac target (R3) and the scenario catalogue (R4) in lane B | Under 45 min |
 | Nightly | Once a day | Fuzzing, mutation sample, Hypothesis with fresh seeds, Dovecot, `test-rust-all`, chaos, the performance lab, a soak once a week | Hours |
 | Release | Each candidate | R6, every shell budget, every scenario on the release build | — |
 
@@ -333,7 +322,7 @@ Each feature lists the rings that must hold it. A change to a feature runs at le
 | The assistant: summaries, the brief, Your Week, ask and do | • | • | • | • | • | Injection corpus; cost |
 | Menus, keys, windows, focus | | | | • | • | Every layout |
 | Settings | | • | • | • | • | |
-| Notifications, Dock badge, open at login | | | • | • | • | VM only |
+| Notifications, Dock badge, open at login | | | • | • | • | Lane B |
 | Updates, packaging | | | | | | R6 |
 
 ## 9. Building it
@@ -348,10 +337,11 @@ In order, each step useful on its own:
    run in the performance lab before a release.
 3. **The Mac test kit and hosted target (R3).** Move `RealKeys` and `MailFrameTests.press` into the kit, add layouts,
    mouse events and `keyboardIsSomewhere`. Turn every key, menu and focus finding of the review into a hosted test.
-4. **The VM.** One macOS image, scripts to start it locally and in CI, the hosted target running there.
-5. **The driver, the world controller and the scenario catalogue (R4).** Start with the flows the review walked most:
-   first run, triage of Needs you, reply and reply all, Send Later, filing and Undo, two windows. Add the consistency
-   oracle and run it after every step.
+4. **Lane B.** The hosted target and `@needs_session` scenarios on CI's macOS runners, sharded.
+5. **The end-to-end framework (R4),** in the order [test-architecture.md](test-architecture.md) section 11 gives: `mm`
+   and the page first, then the Mac's seams, the core's test clock in process, the driver, the oracle. Start with the
+   flows the review walked most: first run, triage of Needs you, reply and reply all, Send Later, filing and Undo, two
+   windows.
 6. **Security breadth.** Perimeter suites on both servers, the sanitizer's differential tests, fuzz targets, canary
    secrets, the injection corpus, the FFI tests, secret scanning, the project-rule lints.
 7. **The performance lab.** Worlds up to `huge`, `divan` benches, nightly timings with history, the soak.
@@ -364,14 +354,14 @@ CI, the flake count, and the number of budgets and security claims with a check 
 
 ## 10. Decisions for the owner
 
-[test-architecture.md](test-architecture.md) proposes answers to the first three: a VM, an in-app driver, and
-scenarios in Python on pytest.
+[test-architecture.md](test-architecture.md) settles three questions this strategy first left open:
 
-- **The VM.** Running the UI rings in a macOS VM (`tart`) on this Mac or a spare one, and in CI on GitHub's macOS
-  runners, which cost more minutes than Linux. The alternative is a spare Mac logged in as a test user.
-- **The driver or XCUITest.** XCUITest is Apple's tool, but it activates the app, can't read the app's model for the
-  oracle, and is slow. An in-app driver can do all three, at the cost of maintaining it. The proposal is the driver,
-  with a handful of XCUITest runs in the VM to keep it honest about real activation.
-- **The scenario format.** A small Python DSL that both runners import, or YAML that both read. The DSL is easier to
-  extend; YAML is easier to review.
+- **Where the UI rings run:** lane A on the host for everyday work, lane B on CI's macOS runners; a local VM is optional.
+  This Mac's free disk doesn't allow a VM per run, and CI's runners can't run one inside themselves.
+- **The driver or XCUITest:** an in-app driver. XCUITest needs the app active, can't read the core at the moment the app
+  settles, and is slow.
+- **The scenario format:** plain Python on pytest, not Gherkin; the readable catalogue is written from what ran.
+
+One stays open:
+
 - **What blocks a release.** Whether a wall-time budget missed in the lab blocks a release or opens an issue.
