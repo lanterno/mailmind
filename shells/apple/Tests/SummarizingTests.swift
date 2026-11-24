@@ -156,3 +156,101 @@ final class SummarizingTests: XCTestCase {
         XCTAssertFalse(Self.digest(ai: "none", summarizing: true).ai.isSummarizing)
     }
 }
+
+/// A brief with nothing to say while the AI read the mail that waited (the server's narrative is "" then) is read
+/// again once a round lands and nothing waits, as the page's is: else "Nothing to brief yet." would stay until the
+/// brief was opened again.
+@MainActor
+final class BriefAfterSummariesTests: XCTestCase {
+    private static let landed = CoreEvent(id: "1", name: "summarized", data: #"{"count": 2}"#)
+
+    private static let nothingYet = API.BriefingAnswer.brief(API.Brief(
+        cached: false, generated: "2026-11-15T09:00:00Z", groups: [], model: "empty", narrative: "", ok: true,
+        stale: false))
+
+    private static let missing = API.BriefingAnswer.briefMissing(API.BriefMissing(
+        cached: false, groups: [], missing: true, narrative: "", ok: true, stale: false))
+
+    private static func digest(ai: String = "anthropic", summarizing: Bool, items: [API.DigestItem] = []) -> API.Digest {
+        var digest = DeskFixture.digest(ai: ai, items: items)
+        digest.ai.summarizing = summarizing
+        return digest
+    }
+
+    /// The brief is read and written at one path: a GET reads it, a POST writes it.
+    private func briefReads(_ server: FakeServer) -> Int {
+        server.asked(API.Get.Briefing.path).filter { $0.method == "GET" }.count
+    }
+
+    private func briefWrites(_ server: FakeServer) -> Int {
+        server.asked(API.Post.Briefing.path).filter { $0.method == "POST" }.count
+    }
+
+    /// The brief opened while the AI reads the mail that waits: nothing to brief yet.
+    private func opened(ai: String = "anthropic", summarizing: Bool) async -> (FakeServer, Desk) {
+        let server = Fixture.server(rows: [Fixture.row(1, seen: false), Fixture.row(2)])
+        server.on("GET", API.Get.Digest.path, Self.digest(ai: ai, summarizing: summarizing))
+        server.on("GET", API.Get.Briefing.path, Self.nothingYet)
+        let app = MailApp()
+        app.mailbox.wire = server.wire
+        await app.mailbox.refresh()
+        let desk = Desk()
+        desk.use(app, routes: server.wire)
+        await desk.brief.load()
+        XCTAssertEqual(desk.brief.brief?.narrative, "")
+        return (server, desk)
+    }
+
+    /// Once read, the stored brief is missing, as the server says with summarized mail and none written: opening it
+    /// on purpose writes it, as the page's read does.
+    private func summarize(_ server: FakeServer, stillWaiting: Bool = false) {
+        server.on("GET", API.Get.Digest.path, Self.digest(summarizing: stillWaiting, items: DeskFixture.digest().items))
+        server.on("GET", API.Get.Briefing.path, stillWaiting ? Self.nothingYet : Self.missing)
+        server.on("POST", API.Post.Briefing.path, DeskFixture.brief)
+    }
+
+    func testABriefWithNothingToSayIsReadAgainOnceTheMailIsRead() async {
+        let (server, desk) = await opened(summarizing: true)
+        let reads = briefReads(server)
+
+        summarize(server)
+        await desk.heard(Self.landed)
+
+        await until { desk.brief.brief?.narrative == DeskFixture.brief.narrative }
+        XCTAssertEqual(briefReads(server), reads + 1)
+        XCTAssertEqual(briefWrites(server), 1, "written, as opening it would")
+        withExtendedLifetime(desk) {}
+    }
+
+    /// A round landed and more mail still waits: the brief stays as it is until the AI has read it all.
+    func testABriefIsNotReadAgainWhileMailStillWaits() async {
+        let (server, desk) = await opened(summarizing: true)
+        let reads = briefReads(server)
+        let digests = server.asked(API.Get.Digest.path).count
+
+        summarize(server, stillWaiting: true)
+        await desk.heard(Self.landed)
+
+        await until { server.asked(API.Get.Digest.path).count > digests }
+        await desk.brief.reread()?.value
+        XCTAssertEqual(briefReads(server), reads)
+        XCTAssertEqual(desk.brief.brief?.narrative, "")
+        withExtendedLifetime(desk) {}
+    }
+
+    /// AI off: nothing was being read, so a round's word reads no brief.
+    func testWithAIOffNoBriefIsReadAgain() async {
+        let (server, desk) = await opened(ai: "none", summarizing: true)
+        let reads = briefReads(server)
+        let digests = server.asked(API.Get.Digest.path).count
+
+        server.on("GET", API.Get.Digest.path, Self.digest(ai: "none", summarizing: false))
+        await desk.heard(Self.landed)
+
+        await until { server.asked(API.Get.Digest.path).count > digests }
+        await desk.brief.reread()?.value
+        XCTAssertEqual(briefReads(server), reads)
+        XCTAssertEqual(briefWrites(server), 0)
+        withExtendedLifetime(desk) {}
+    }
+}
