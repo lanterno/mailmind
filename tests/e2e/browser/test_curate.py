@@ -288,6 +288,15 @@ def test_a_sweep_stopped_where_the_server_cant_be_asked_again_says_so_and_offers
     clean(page)
 
 
+def test_a_senders_chip_says_how_it_lets_you_unsubscribe_before_any_preview(page, app, world):
+    issues(world)
+    world.deliver(w.ADA, "INBOX", w.variant(NEWS, Message_ID="<issue-310@loom.example.test>", Subject="Issue 310",
+                                            Date="Mon, 02 Nov 2026 07:00:00 +0000", List_Unsubscribe_Post=""))
+    row = drawer(page).locator(f'.flood-row[data-flood="{LOOM}"]')
+    expect(row.locator(".flood-chip.lu1")).to_have_text("by email")       # a mailto: way out is never called one click
+    clean(page)
+
+
 def test_the_flood_list_cleans_up_a_sender_after_two_clicks_and_undo_reverses_it(page, app, world):
     issues(world)
     d = drawer(page)
