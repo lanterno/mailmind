@@ -33,7 +33,8 @@ const TAG: &str = "draft";
 const RESUME_TAG: &str = "resume";
 /// How long a probe of a draft's copy waits for its server.
 const LIVE_TIMEOUT: Duration = Duration::from_secs(10);
-/// How long a save someone asked for waits for the account's gate, before the push job has it.
+/// How long a save someone asked for waits for the account's gate, before the push job has it, and how long the job
+/// waits for it each round.
 pub const PUSH_WAIT: Duration = Duration::from_millis(2500);
 const NOT_LOADED: &str = "Couldn\u{2019}t load this draft from the mail server. Try again in a moment.";
 
@@ -477,8 +478,11 @@ impl Drafting {
     pub fn push_round(&self) -> Result<i64, Fault> {
         let now = self.now();
         let soon = now + draft_journal::PUSH_EVERY;
+        // Each waits its turn for a moment, ahead of the syncs and the upkeep waiting too, as a person's own change and
+        // IDLE stay ahead of it: one that only asked whenever the gate was free met it taken, round after round, while
+        // the account synced, and a draft closed reached its server minutes on.
         for id in self.read(|book| book.journal_due(now, soon))? {
-            self.try_push(id, Priority::AfterUser, GateWait::Not);
+            self.try_push(id, Priority::AfterUser, GateWait::For(PUSH_WAIT));
         }
         let at = self.read(|book| book.journal_next_due(now, soon))?;
         Ok(draft_journal::next_round_in(now, at))
