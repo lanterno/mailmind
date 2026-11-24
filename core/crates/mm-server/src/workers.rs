@@ -7,8 +7,10 @@
 //! them: a kick that runs a job's next round now, and what each last did (`snapshot`, which `/api/debug/jobs` shows).
 //!
 //! Only `mailmind-server` starts them (`Workers::start`). The served suites start none: their `work` line runs one
-//! pass of a job at a time, so what a suite sees depends only on what it sends.
+//! pass of a job at a time, so what a suite sees depends only on what it sends. A kick of a job this process doesn't
+//! schedule is kept by name (`kicked`), so a suite sees what would have run now: `work kicked` runs those rounds.
 
+use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -71,11 +73,13 @@ impl Job {
 pub struct Jobs {
     clock: Arc<dyn Clock>,
     jobs: Mutex<Vec<Arc<Job>>>,
+    /// The jobs kicked that this process doesn't schedule, by name, until `kicked` takes them.
+    unscheduled: Mutex<BTreeSet<String>>,
 }
 
 impl Jobs {
     pub fn new(clock: Arc<dyn Clock>) -> Jobs {
-        Jobs { clock, jobs: Mutex::new(Vec::new()) }
+        Jobs { clock, jobs: Mutex::new(Vec::new()), unscheduled: Mutex::new(BTreeSet::new()) }
     }
 
     fn now(&self) -> f64 {
@@ -108,11 +112,22 @@ impl Jobs {
         self.held().iter().map(|j| j.name).collect()
     }
 
-    /// Run the job's next round now rather than when it is due, if this process schedules it.
+    /// Run the job's next round now rather than when it is due, if this process schedules it. One it doesn't is kept
+    /// by name for `kicked`.
     pub fn kick(&self, name: &str) {
-        if let Some(job) = self.held().iter().find(|j| j.name == name) {
-            job.kicked.kick();
+        let jobs = self.held();
+        match jobs.iter().find(|j| j.name == name) {
+            Some(job) => job.kicked.kick(),
+            None => {
+                self.unscheduled.lock().unwrap_or_else(PoisonError::into_inner).insert(name.to_owned());
+            }
         }
+    }
+
+    /// The jobs kicked since this was last asked that this process doesn't schedule, by name, in order: rounds that
+    /// would have run now, for whoever runs them by hand (the served suites' `work kicked`).
+    pub fn kicked(&self) -> Vec<String> {
+        std::mem::take(&mut *self.unscheduled.lock().unwrap_or_else(PoisonError::into_inner)).into_iter().collect()
     }
 
     /// One round of `job`, now, in this thread, after any round of it already running: the seconds until its next.

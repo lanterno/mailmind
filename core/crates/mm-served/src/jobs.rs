@@ -3,10 +3,16 @@
 //! minute's round of follow-ups, a pass of the change queue, an account's reconcile, a pass of the outbox and a round
 //! of the drafts' pushes; the forget round; a round of the body backfill and one of warming folders beyond the Inbox;
 //! a try of the accounts whose servers didn't answer; and the assistant's triage, a reply drafted ahead and a run of
-//! Tidy. A job the Rust server doesn't run yet says so.
+//! Tidy. A job the Rust server doesn't run yet says so. `work kicked` runs a pass of each job the server kicked since
+//! the last, as its lane would have run it then: one that takes arguments (a folder's sync) is let go.
 
 use mm_server::App;
 use serde_json::Value;
+
+/// The jobs whose pass the protocol names a folder or an account for, which a kick doesn't.
+const TAKES_ARGUMENTS: [&str; 2] = ["sync", "reconcile"];
+/// What a job the Rust server doesn't run yet says.
+const NOT_YET: &str = "not on the Rust server yet";
 
 /// The protocol's answer to `work <argument>`: `ok`, or `failed <why>`, naming only a class, never a value.
 pub fn work(app: &App, argument: &str) -> String {
@@ -16,6 +22,18 @@ pub fn work(app: &App, argument: &str) -> String {
     };
     let text = |i: usize| args.get(i).and_then(Value::as_str).unwrap_or_default();
     let done = match job {
+        "kicked" => {
+            for name in app.jobs.kicked() {
+                if TAKES_ARGUMENTS.contains(&name.as_str()) {
+                    continue;
+                }
+                let said = work(app, &name);
+                if said != "ok" && !said.ends_with(NOT_YET) {
+                    return said;
+                }
+            }
+            Ok(())
+        }
         "sync" => app.ingest.sync_folder(text(0), text(1), false, None).map(|_| ()).map_err(|e| e.class().to_owned()),
         "snoozes" => app.attention.snoozing.wake_due().map(|_| ()).map_err(|failure| failure.to_string()),
         "follow-ups" => app.attention.follow_ups.tick().map(|_| ()).map_err(|failure| failure.to_string()),
@@ -45,7 +63,7 @@ pub fn work(app: &App, argument: &str) -> String {
             app.syncing.try_unreached();
             Ok(())
         }
-        _ => return format!("failed {job}: not on the Rust server yet"),
+        _ => return format!("failed {job}: {NOT_YET}"),
     };
     match done {
         Ok(()) => "ok".to_owned(),
