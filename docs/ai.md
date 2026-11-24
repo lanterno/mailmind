@@ -298,6 +298,11 @@ and written apart:
   triage has read the last day's mail and only if none is stored this week, and a read takes the newest stored since Monday
   (`review.week_so_far`), so the one written ahead shows all week for nothing. One from an earlier day keeps what it said was filed away,
   and its `week_start` is the week it looked back on. A review written on Monday morning is under a week old until the next Monday's.
+  One written today counts what the week did as it stands (`TALLIES`: sent, received, its buckets, cleaned up and filed away), its
+  prose as the AI wrote it and `stale` once they differ; what needs the person and whom they wait on stay with their lists.
+- What was sent is counted in the folders that play each account's Sent (`Folders.role_as_listed`): the role the server's last LIST
+  that worked gave the folder, its `\Sent` attribute first, kept after the rail's list goes, else its whole name. A folder whose
+  name merely holds "sent" isn't Sent.
 - The page GETs, and POSTs only on `missing`. What it writes on its own (the brief as the Inbox
   opens, the delta for the new-mail pill) passes no `askOverLimit`. At the limit it
   then gets the 402 as an `ApiError` (`overLimit`), and the brief offers "Write it" instead of asking
