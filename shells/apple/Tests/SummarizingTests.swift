@@ -69,7 +69,8 @@ final class SummarizingTests: XCTestCase {
 
         var line = try XCTUnwrap(line(desk, app))
         XCTAssertEqual(line.gist, Self.reading, "not that nothing needs you")
-        XCTAssertTrue(line.tally.hasPrefix(Self.reading + " · "), line.tally)
+        XCTAssertTrue(line.tally.contains(" waiting"), line.tally)
+        XCTAssertFalse(line.tally.contains(Self.reading), "said once, on the line under it: \(line.tally)")
         XCTAssertFalse(line.tally.contains("0 need you"), line.tally)
         XCTAssertEqual(PaneEmptyWords.of(app).title, Self.reading, "the pane beside the emptied Needs you")
         XCTAssertEqual(desk.brief.line(unread: 1, now: Date()), Self.reading + " · 1 unread", "the brief's top line")
