@@ -818,6 +818,24 @@ final class DeskModelTests: XCTestCase {
         XCTAssertTrue(undoable)
     }
 
+    /// The cleanup's note says an unsubscribe can't be undone only when one will be sent: with the box unticked, or
+    /// with no way to unsubscribe, or a page that only opens in the browser, Undo takes back all the cleanup does.
+    func testACleanupSaysUnsubscribingCantBeUndoneOnlyWhenItSendsOne() {
+        func note(_ method: String, ticked: Bool) -> String {
+            var preview = DeskFixture.senderPreview
+            preview.unsub.method = method
+            return CurateModel.Cleaning(preview: preview, scope: .sender, unsubscribe: ticked).undoNote
+        }
+        let sends = "Block + sweep undo with Undo. Unsubscribing can’t be undone."
+        let undoes = "Block + sweep undo with Undo."
+        XCTAssertEqual(note("one-click", ticked: true), sends)
+        XCTAssertEqual(note("mailto", ticked: true), sends)
+        XCTAssertEqual(note("one-click", ticked: false), undoes, "the box unticked sends nothing")
+        XCTAssertEqual(note("mailto", ticked: false), undoes)
+        XCTAssertEqual(note("http-page", ticked: true), undoes, "a page opened sends nothing")
+        XCTAssertEqual(note("none", ticked: false), undoes)
+    }
+
     func testASweepIsPlannedThenRunOnConfirm() async {
         let going = [API.SweepBucket(bucket: "newsletters/marketing", count: 12, senders: [
             API.SweepSender(count: 9, fromAddr: "news@loom.example.test"),
