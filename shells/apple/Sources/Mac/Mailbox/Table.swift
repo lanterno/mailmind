@@ -317,7 +317,12 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
             remeasured.shift(startingAt: 0, by: lead)
             forgetShapes()
             keepingPlace {
+                // A list that shrank drops a chosen row past its new end without asking, as the row the reader moved
+                // on to does when the row before it leaves: the mailbox holds the choice, which `follow` below shows
+                // where its row stands now, so the table doesn't tell it that nothing is chosen.
+                following = true
                 table.noteNumberOfRowsChanged()
+                following = false
                 let rows = table.numberOfRows
                 table.noteHeightOfRows(withIndexesChanged: remeasured.filteredIndexSet { $0 < rows })
             }
