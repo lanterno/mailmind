@@ -215,7 +215,8 @@ impl Curation {
 pub struct Attention {
     pub snoozing: Arc<Snoozing>,
     pub muting: Arc<Muting>,
-    pub follow_ups: FollowUps,
+    /// Shared with Compose, whose send that marks an original answered settles what it met at once.
+    pub follow_ups: Arc<FollowUps>,
     pub tasks: Tasks,
     /// The database, for the copies and the message a request names.
     pub(crate) database: Arc<Database>,
@@ -253,7 +254,13 @@ impl Attention {
                 clock: clock.clone(),
                 read_only,
             })),
-            follow_ups: FollowUps::new(book.clone(), accounts.clone(), events.clone(), clock.clone(), zone.clone()),
+            follow_ups: Arc::new(FollowUps::new(
+                book.clone(),
+                accounts.clone(),
+                events.clone(),
+                clock.clone(),
+                zone.clone(),
+            )),
             tasks: Tasks::new(book, accounts, events, clock.clone(), zone.clone()),
             database: database.clone(),
         }

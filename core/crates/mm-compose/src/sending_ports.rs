@@ -444,6 +444,9 @@ pub trait Effects: Send + Sync + fmt::Debug {
     fn mark_answered(&self, pk: Option<i64>, account: &str, message_id: Option<&str>) -> Result<bool, CopyFailed>;
     /// A sent-no-reply follow-up on the thread, unless it has one (`followup_record_sent`).
     fn followup_sent(&self, account: &str, thread_id: &str, now: i64, at: &str) -> Result<(), Fault>;
+    /// The account's original was marked answered just now: what an answer meets is settled at once, a thread
+    /// waiting on the reply leaving Waiting, rather than at the minute's round. Best effort: it never fails a send.
+    fn answered(&self, account: &str);
 }
 
 /// What the Mailbox keeps about folders, and what the page is told.

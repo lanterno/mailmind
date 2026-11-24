@@ -132,6 +132,9 @@ pub trait AttentionBook: Send + Sync + fmt::Debug {
     /// The minute's round over every thread: resolve, expire, promote and detect, for `accounts`, at `now`. How many
     /// are due now, where the due ones changed, a swap included; None where they didn't.
     fn follow_up_round(&self, accounts: &[String], now: i64, when: &str) -> Result<Option<usize>, Fault>;
+    /// What an answer met on `account`'s threads resolved, and nothing else of the round: how many are due now, where
+    /// the due ones changed; None where they didn't.
+    fn resolve_follow_ups(&self, account: &str) -> Result<Option<usize>, Fault>;
     /// Each sent thread of `accounts` still with no reply, the longest wait first, at most `limit`.
     fn waiting_on_others(&self, accounts: &[String], limit: i64) -> Result<Vec<WaitingRow>, Fault>;
 

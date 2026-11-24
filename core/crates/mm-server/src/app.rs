@@ -459,6 +459,7 @@ impl App {
             read_only: environment.read_only(),
             stats: stats.clone(),
             heard: Arc::new(Heard { hub: events.clone(), stats: stats.clone(), folders: folders.clone() }),
+            follow_ups: attention.follow_ups.clone(),
         });
         // A sender's cleanup, a sweep and expiry, which file as the Screener does; a mailto: unsubscribe goes through
         // Compose's outbox.

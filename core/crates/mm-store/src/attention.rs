@@ -456,6 +456,15 @@ impl AttentionBook for AttentionStore {
         })
     }
 
+    fn resolve_follow_ups(&self, account: &str) -> Result<Option<usize>, Fault> {
+        self.db.write(|c| {
+            let before = due_keys(c)?;
+            c.prepare_cached(&resolve_sql())?.execute([account])?;
+            let after = due_keys(c)?;
+            Ok((after != before).then_some(after.len()))
+        })
+    }
+
     fn waiting_on_others(&self, accounts: &[String], limit: i64) -> Result<Vec<WaitingRow>, Fault> {
         let marks = vec!["?"; accounts.len()].join(",");
         let sql = format!(

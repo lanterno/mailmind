@@ -143,6 +143,14 @@ impl FollowUps {
         Ok(true)
     }
 
+    /// A reply marked `account`'s original answered: what that met resolves now, not at the next minute's round, and
+    /// the tabs hear it where the due ones changed. Whether they did.
+    pub fn resolve(&self, account: &str) -> Result<bool, Failure> {
+        let Some(count) = self.book.resolve_follow_ups(account)? else { return Ok(false) };
+        self.events.publish(AttentionEvent::FollowUpsChanged { count });
+        Ok(true)
+    }
+
     /// `POST /api/followups/dismiss`.
     pub fn dismiss(&self, named: &Named) -> Result<Value, Failure> {
         let Some((account, thread_id)) = self.threads.target(named)? else {

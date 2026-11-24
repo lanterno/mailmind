@@ -11,7 +11,7 @@ use std::time::Duration;
 use mm_accounts::directory::Pin;
 use mm_accounts::ports::ConfigFile;
 use mm_accounts::{Directory, account, preferences, tls_pin};
-use mm_attention::followups::{FollowUp, PENDING, SENT};
+use mm_attention::followups::{FollowUp, FollowUps, PENDING, SENT};
 use mm_attention::ports::{AttentionBook, FollowUpChange};
 use mm_compose::composing::Composing;
 use mm_compose::delivery::{Delivery, DeliveryParts};
@@ -332,12 +332,14 @@ impl Accounts for SendingAccounts {
 }
 
 /// What a delivered send sets off elsewhere (`bootstrap.compose._Effects`): \Answered on its original, on its server
-/// and then in its row (`server_ops.mark_answered`), and a follow-up on its thread (Attention's).
+/// and then in its row (`server_ops.mark_answered`), and a follow-up on its thread (Attention's), with what the
+/// answer met resolved at once.
 #[derive(Debug)]
 pub(crate) struct SendEffects {
     pub(crate) servers: Arc<dyn MailServers>,
     pub(crate) database: Arc<Database>,
     pub(crate) attention: Arc<AttentionStore>,
+    pub(crate) follow_ups: Arc<FollowUps>,
     pub(crate) read_only: bool,
 }
 
@@ -414,6 +416,16 @@ impl Effects for SendEffects {
                 resolved_at: None,
             }),
         })
+    }
+
+    fn answered(&self, account: &str) {
+        if let Err(failure) = self.follow_ups.resolve(account) {
+            let class = match failure {
+                mm_kernel::errors::Failure::Fault(fault) => fault.class,
+                mm_kernel::errors::Failure::Problem(_) => "Problem",
+            };
+            mm_kernel::log::warning("compose", "follow-ups weren't resolved after a reply", &[], Some(class));
+        }
     }
 }
 
@@ -507,6 +519,8 @@ pub(crate) struct Parts {
     pub(crate) stats: Arc<LiveStats>,
     /// Where Sent, Failed and DraftCopyRemoved are heard.
     pub(crate) heard: Arc<Heard>,
+    /// Attention's follow-ups, which a reply marking its original answered settles at once.
+    pub(crate) follow_ups: Arc<FollowUps>,
 }
 
 /// Compose's use cases, bound.
@@ -554,6 +568,7 @@ impl Compose {
                 servers: parts.servers,
                 database: parts.database.clone(),
                 attention: Arc::new(AttentionStore::new(parts.database.clone())),
+                follow_ups: parts.follow_ups,
                 read_only: parts.read_only,
             }),
             screen: screen.clone(),

@@ -441,6 +441,10 @@ impl Effects for NoEffects {
     fn followup_sent(&self, _account: &str, _thread_id: &str, _now: i64, _at: &str) -> Result<(), Fault> {
         unreachable!("none of these sends is a reply")
     }
+
+    fn answered(&self, _account: &str) {
+        unreachable!("none of these sends is a reply")
+    }
 }
 
 #[derive(Debug)]

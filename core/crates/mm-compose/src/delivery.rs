@@ -286,14 +286,19 @@ impl Delivery {
                 Err(_) => owed = Some("sent copy failed: Busy".to_owned()),
             }
         }
+        let mut answered_now = false;
+        let orig_account = row.orig_account.clone().unwrap_or_default();
         if owes.answered {
             let pk = self.original_pk(row);
-            let account = row.orig_account.clone().unwrap_or_default();
-            let marked = on_gate(&*self.parts.gate, &account, Priority::AfterUser, GateWait::Ever, || {
-                self.parts.effects.mark_answered(pk, &account, row.orig_message_id.as_deref())
+            let account = &orig_account;
+            let marked = on_gate(&*self.parts.gate, account, Priority::AfterUser, GateWait::Ever, || {
+                self.parts.effects.mark_answered(pk, account, row.orig_message_id.as_deref())
             });
             match marked {
-                Ok(Ok(_)) => self.write(|book| book.outbox_set(id, &[Mark::AnsweredSet]))?,
+                Ok(Ok(found)) => {
+                    answered_now = found;
+                    self.write(|book| book.outbox_set(id, &[Mark::AnsweredSet]))?;
+                }
                 Ok(Err(failed)) => {
                     owed.get_or_insert_with(|| format!("marking the original answered failed: {}", failed.class));
                     log::warning(TAG, "\\Answered failed", &[(Field::Id, &id.to_string())], Some(failed.class));
@@ -317,6 +322,10 @@ impl Delivery {
             if let Err(fault) = recorded {
                 log::warning(TAG, "follow-up record failed", &[(Field::Id, &id.to_string())], Some(fault.class));
             }
+        }
+        if answered_now {
+            // After the follow-up step, so a reply to a thread that waited on you starts no `sent` one of its own.
+            self.parts.effects.answered(&orig_account);
         }
         if owes.draft
             && let Err(why) = self.draft_cleanup(id, row)
