@@ -224,6 +224,7 @@ final class Desk {
         if MailApp.mailChanged.contains(event.name) {
             brief.reread()
             await readScreeners()
+            await review.reread()
         }
         // Summaries landed: what the brief, its line over the Inbox and the rail count as needing you changed, though
         // no sender came to any gate.
@@ -308,7 +309,10 @@ final class Desk {
     func readAgain() {
         app?.mailbox.readAgain()
         brief.reread()
-        Task { [weak self] in await self?.readScreeners() }
+        Task { [weak self] in
+            await self?.readScreeners()
+            await self?.review.reread()
+        }
     }
 
     // MARK: Asking

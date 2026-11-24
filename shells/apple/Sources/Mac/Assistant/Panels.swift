@@ -87,6 +87,15 @@ final class ReviewModel {
         }
     }
 
+    /// Read the review written again, once mail has changed, as the server reads it: it leaves out what has been filed
+    /// or deleted since, from its lists and its counts. Only a review on hand, and never written again: no AI runs.
+    func reread() async {
+        guard let routes = link.routes, review != nil,
+              case .review(let stored)? = try? await routes.get(API.Get.Review.self, [:]),
+              review != nil else { return }
+        stage = .written(stored)
+    }
+
     /// Write it again (runs the AI).
     func again() async {
         guard let routes = link.routes else { return }
