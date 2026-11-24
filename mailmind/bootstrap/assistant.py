@@ -212,7 +212,8 @@ class _Mail:
         return mailbox.stored_mail.delta_rows(c, accounts, since_ts, n)
 
     def sent_since(self, c, accounts, since_ts):
-        return mailbox.stored_mail.sent_since(c, accounts, since_ts)
+        return mailbox.stored_mail.sent_since(c, accounts, since_ts,
+                                              lambda account, folder: mailbox.folders.role_as_listed(account, folder) == "sent")
 
     def received_since(self, c, accounts, since_ts):
         return mailbox.stored_mail.received_since(c, accounts, since_ts)

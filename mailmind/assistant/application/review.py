@@ -28,6 +28,7 @@ log = get_logger("ai")
 WEEK_SECONDS = 7 * 86400
 TOP_OPEN = 8                            # cap the deterministic open/waiting lists
 CAP_TOTAL = 9000
+TALLIES = ("sent", "received", "by_bucket", "cleaned", "handled")   # what the week did: a review kept today reads them now
 REVIEW_SCHEMA = {
     "type": "object",
     "properties": {
@@ -164,7 +165,10 @@ class Reviews:
         def stored(written_on: str, row: Row) -> Result:
             said = json.loads(row["stats_json"])
             if written_on == day:
-                said["handled"], since = stats["handled"], since_ts     # an Undo changes it: as it stands, not as it was written
+                # Today's week, as it stands, not as it was written: a message sent since, mail come in, a sender cleaned up,
+                # an Undo. What needs the person and whom they wait on stay with their lists, as written.
+                said.update({tally: stats[tally] for tally in TALLIES})
+                since = since_ts
             else:                   # an earlier day's, read all week: the week it looked back on, as it said it
                 said.setdefault("handled", stats["handled"])
                 since = datetime.fromisoformat(row["created_at"]).timestamp() - WEEK_SECONDS

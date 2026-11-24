@@ -60,11 +60,13 @@ def handled_since(c, accounts, since_iso):
                      [since_iso, *ap]).fetchone()[0]
 
 
-def sent_since(c, accounts, since_ts):
+def sent_since(c, accounts, since_ts, plays_sent):
+    """How many stored messages since then the folders that play Sent hold: those `plays_sent(account, folder)` says
+    do, by the role the server's LIST gave each, not by what its name holds."""
     ac, ap = _among(accounts, "account")
-    return c.execute(
-        "SELECT COUNT(*) FROM messages WHERE lower(folder) LIKE '%sent%' AND ts>=?" + ac,
-        [since_ts, *ap]).fetchone()[0]
+    rows = c.execute("SELECT account, folder, COUNT(*) n FROM messages WHERE ts>=?" + ac + " GROUP BY account, folder",
+                     [since_ts, *ap]).fetchall()
+    return sum(r["n"] for r in rows if plays_sent(r["account"], r["folder"]))
 
 
 def received_since(c, accounts, since_ts):

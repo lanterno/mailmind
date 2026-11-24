@@ -57,6 +57,9 @@ class Folders:
         self._commands = commands
         self._stats = stats
         self._folder_list_cache: dict[str, _Listed] = {}
+        # The part each folder played in the last LIST of each account that worked, kept after the list itself goes
+        # (`invalidate`), so a folder's SPECIAL-USE attribute still says what it is between loads of the rail.
+        self._listed_roles: dict[str, dict[str, str]] = {}
         self._folder_list_lock = threading.Lock()
         self._folder_syncs: dict[tuple[str, str], threading.Event] = {}    # set when that folder's sync ends
         self._first_sync_failed: dict[tuple[str, str], str] = {}           # the error kind of its last first scan, while it failed
@@ -82,6 +85,14 @@ class Folders:
             if f["name"] == folder:
                 return f["role"]
         return folder_roles.role_by_name(folder)
+
+    def role_as_listed(self, account: str, folder: str) -> str:
+        """The part `folder` plays on this account: what the last LIST that worked said of it, its SPECIAL-USE attribute
+        first, however long ago; else what its whole name says. Sent mail counted for the week goes by it, so a Sent folder
+        of any name counts, and a folder whose name merely holds "sent" doesn't."""
+        with self._folder_list_lock:
+            listed = self._listed_roles.get(account, {})
+        return listed.get(folder) or folder_roles.role_by_name(folder)
 
 
 
@@ -171,6 +182,7 @@ class Folders:
             folders = self._live_folder_list(acct)
             with self._folder_list_lock:
                 self._folder_list_cache[account] = {"folders": folders, "ts": time.time()}
+                self._listed_roles[account] = {f["name"]: f["role"] for f in folders}
             return folders
         try:
             return gates.run(account, refresh, priority=gates.Priority.INTERACTIVE, deadline=deadline)
