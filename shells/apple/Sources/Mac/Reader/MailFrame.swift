@@ -375,17 +375,29 @@ final class FrameWebView: WKWebView {
         }
     }
 
-    /// The key last handed to WebKit. One the document didn't take, WebKit gives back to the app
-    /// (`NSApp.sendEvent`), which brings it to `keyDown` again.
-    private var handed: NSEvent?
+    /// The keys last handed to WebKit, a few in case one is held. One the document didn't take, WebKit gives back to
+    /// the app (`NSApp.sendEvent`), which brings it to `keyDown` again.
+    private var handed: [NSEvent] = []
 
     override func keyDown(with event: NSEvent) {
-        if event === handed {
-            handed = nil
+        if let given = handed.firstIndex(where: { $0 === event }) {
+            handed.remove(at: given)
             return givenBack(event)
         }
         handedOn(event)
         super.keyDown(with: event)
+    }
+
+    /// AppKit offers a function key (the arrows, Page Up and Down, Home and End) as a key equivalent before it sends
+    /// it on, and WebKit claims every key so offered while it has the keyboard: one its document didn't take it gives
+    /// back past `keyDown`, so it would never move the reader. So those keys take a typed key's way, through
+    /// `keyDown`, and come back to it from here too, as WebKit gives one back.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard event.type == .keyDown, window?.firstResponder === self, ReaderPage.move(for: event) != nil else {
+            return super.performKeyEquivalent(with: event)
+        }
+        keyDown(with: event)
+        return true
     }
 
     /// Page Up and Page Down, which WebKit keeps whether or not it had anything to page: they never come back.
@@ -399,7 +411,7 @@ final class FrameWebView: WKWebView {
     /// Tab or ⇧Tab moves the focus, which the reader then shows; any key may unfold a quote. Page Up and Down page
     /// the reader as they go, as WebKit never gives them back.
     private func handedOn(_ event: NSEvent) {
-        handed = event
+        handed = handed.suffix(7) + [event]
         walls?.keyed(opens: [36, 76].contains(event.keyCode) && !event.isARepeat, moved: event.keyCode == 48)
         if Self.kept(event) { moveReader(event) }
     }
