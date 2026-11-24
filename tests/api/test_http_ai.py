@@ -383,6 +383,73 @@ def test_since_you_last_looked_and_the_brief_read_the_inbox_alone(app, world, ai
         assert not [p for p in asked if subject in p], subject
 
 
+DEE = "dee@example.test"            # not one of the world's accounts
+DEE_SAYS = ("Dee's first note", "Dee's second note", "Dee's third note")
+
+
+def ai_said(app):
+    """How AI stands as the digest says it: how many messages wait for a summary, and whether they are being read."""
+    said = app.get("/api/digest").json["ai"]
+    return said.get("summaries_waiting"), said.get("summarizing")
+
+
+def dee_added(app, world):
+    """Dee's account added, its Inbox holding three messages from the last 30 days, and its first sync run as the app
+    runs one: none of it is new mail."""
+    entry = world.server.add_account(DEE)
+    for n, subject in enumerate(DEE_SAYS):
+        world.server.deliver(DEE, "INBOX", w.variant("ada-inbox-02-lunch-confirm.eml", Subject=subject,
+                                                     Message_ID=f"<dee-{n}@example.test>"))
+    added = app.post("/api/accounts/add", {"email": DEE, "type": "imap", "host": entry["host"], "port": entry["port"],
+                                            "starttls": entry["starttls"],
+                                            "credential": {"style": "keychain", "value": "app-password"}})
+    assert added.status == 200, added.json
+    assert app.post("/api/refresh", {}).status == 200
+    app.settle()
+    assert app.get("/api/digest").json["sync"]["result"] == "0 new"
+
+
+def triage_asked(ai):
+    return [r.prompt for r in ai.requests if r.prompt.startswith("You are triaging ONE email")]
+
+
+def test_an_accounts_first_sync_has_its_mail_summarized_at_once_not_at_the_next_round(app, world, ai):
+    """A first sync stores mail that was there before, so it is no new mail; but until its summaries come nothing knows
+    what needs you, so the sync asks for the summaries' round now (`work kicked` runs what a worker would have run), not
+    five minutes on. Until it lands, the status says the mail is being read."""
+    assert triaged(app, ai) > 0
+    assert ai_said(app) == (0, False)
+    app.work("kicked")
+    assert ai.requests == []
+    dee_added(app, world)
+    assert ai_said(app) == (3, True)
+    app.work("kicked")
+    asked = triage_asked(ai)
+    assert len(asked) == 3 and all(any(f"Subject: {s}" in p for p in asked) for s in DEE_SAYS), asked
+    assert ai_said(app) == (0, False)
+    ai.requests.clear()
+    app.work("kicked")                                  # asked for once
+    assert ai.requests == []
+
+
+def test_with_ai_off_an_accounts_first_sync_sends_nothing(app, world, ai):
+    assert app.post("/api/preferences", {"ai_enabled": False}).status == 200
+    dee_added(app, world)
+    app.work("kicked")
+    assert ai.requests == []
+    assert ai_said(app) == (None, None)
+
+
+def test_till_its_mail_is_summarized_the_brief_calls_nothing_quiet(app, world, ai):
+    """The world's mail waits for its summaries: nothing is summarized to brief from, but it may need you, so the brief
+    says nothing rather than that the Inbox is quiet, and asks nothing of the AI."""
+    assert ai_said(app)[0] > 0
+    for brief in (app.get("/api/briefing"), app.post("/api/briefing", {})):
+        assert brief.status == 200, brief.json
+        assert (brief.json["narrative"], brief.json["groups"], brief.json["model"]) == ("", [], "empty")
+    assert ai.requests == []
+
+
 NO_CREDIT = fa.error(400, "invalid_request_error", "Your credit balance is too low to access the Anthropic API. "
                                                  "Please go to Plans & Billing to upgrade or purchase credits.")
 
@@ -410,6 +477,14 @@ def test_background_summaries_stopped_for_want_of_credit_go_again_once_a_call_go
     app.clock.shift(timedelta(seconds=46))
     app.work("assess")
     assert summaries_waiting(app) == 0
+
+
+def test_what_waits_isnt_said_to_be_read_while_a_refusal_for_want_of_credit_holds_it_back(app, world, ai):
+    waiting, _ = ai_said(app)
+    assert ai_said(app) == (waiting, True) and waiting > 0
+    ai.queue(NO_CREDIT)
+    assert app.post("/api/ai/rewrite", {"op": "fix", "text": "teh"}).status == 502
+    assert ai_said(app) == (waiting, False)
 
 
 def test_background_summaries_stopped_for_want_of_credit_try_again_an_hour_later(app, world, ai):
