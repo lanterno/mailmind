@@ -27,7 +27,8 @@ each with one line:
                         reply ahead, for someone who turned drafting ahead on), forget (what went a month ago
                         let go), backfill (fetch the bodies of up to a dozen stored messages that have none, each
                         account in turn), warm (sync the Drafts, Archive and Sent of each account asking to be warmed,
-                        those due this round)
+                        those due this round), kicked (a pass of each job above that the app asked to run now since
+                        the last, as a worker would have run it then; one that takes arguments is let go)
     settle              ok once work the requests started has ended; `busy <what>` after 30 seconds
     check               ok, or `problems <JSON list>`: what its own checks refused since the last check
     unsanitized on|off  ok: from now on the bodies the reader and its frame show (`/api/message/body`, `body.html`)
@@ -105,6 +106,19 @@ def jobs():
             "backfill": syncing.backfill_round, "warm": warm.warm_tick, "retry": syncing.try_unreached}
 
 
+# The jobs whose pass the protocol names a folder or an account for, which a kick doesn't.
+TAKES_ARGUMENTS = ("sync", "reconcile")
+
+
+def run_kicked():
+    """A pass of each job the app kicked since the last, as its worker would have run it then."""
+    from mailmind.bootstrap import background
+    known = jobs()
+    for name in background.kicked():
+        if name in known and name not in TAKES_ARGUMENTS:
+            known[name]()
+
+
 def main():
     import dataclasses
 
@@ -157,7 +171,10 @@ def main():
                 elif command == "work":
                     job, _, given = argument.partition(" ")
                     try:
-                        jobs()[job](*json.loads(given or "[]"))
+                        if job == "kicked":
+                            run_kicked()
+                        else:
+                            jobs()[job](*json.loads(given or "[]"))
                         answer = "ok"
                     except Exception as e:                  # the suite fails the test with it
                         answer = f"failed {job}: {type(e).__name__}: {e}"

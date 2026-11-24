@@ -51,17 +51,29 @@ def nosync():
 
 
 def _kick(job):
-    """Run `job`'s next round now, if this process schedules it (read-only schedules no assess)."""
+    """Run `job`'s next round now, if this process schedules it (read-only schedules no assess). One it doesn't is kept
+    by name for `kicked`."""
     if job in JOBS.names():
         JOBS.kick(job)
+    else:
+        _UNSCHEDULED.add(job)
+
+
+def kicked():
+    """The jobs kicked since this was last asked that this process doesn't schedule, by name, in order: rounds that would
+    have run now, for whoever runs them by hand (the served suites' `work kicked`)."""
+    names = sorted(_UNSCHEDULED)
+    _UNSCHEDULED.clear()
+    return names
 
 
 def assemble():
     """The background jobs as a process starts: none on the scheduler /api/debug/jobs reports until wiring.start puts the
     running ones there, and the expiry rules' pace as the environment says. Importing this module assembles them once;
     wiring.assemble does it again with every context's."""
-    global JOBS, _EXPIRE_INTERVAL
+    global JOBS, _EXPIRE_INTERVAL, _UNSCHEDULED
     JOBS = scheduler.Scheduler()
+    _UNSCHEDULED = set()
     # Expiry rules (rules.EXPIRE, e.g. "github.com after 72h"): move INBOX mail past its age limit
     # to Trash on an own timer. Same shape as reconcile — one account per hold of the gate, taken
     # NON-blocking so a live user op is never stalled. Not started under NOSYNC (no IMAP writes).
