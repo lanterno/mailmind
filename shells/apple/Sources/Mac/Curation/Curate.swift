@@ -164,7 +164,7 @@ private struct FloodRow: View {
                                    tone: sender.unseenRatio >= 0.7 ? .sun : .plain)
                     }
                     if sender.accounts.count > 1 { MeadowChip(String(localized: "\(sender.accounts.count) inboxes")) }
-                    if sender.luLikely { MeadowChip(String(localized: "1-click")) }
+                    if let chip = model.unsubscribeChip(sender) { MeadowChip(chip) }
                     if !sender.lastSeen.isEmpty { MeadowChip(sender.lastSeen, tone: .line) }
                 }
                 .padding(.top, 3)

@@ -74,6 +74,9 @@ final class CurateModel {
     /// Whether to unsubscribe, as the person last ticked it for a sender, by address: the sheet opens with it again,
     /// so a box unticked never comes back ticked over an unsubscribe Undo can't take back. Kept while MailMind runs.
     @ObservationIgnored private var unsubscribeChoices: [String: Bool] = [:]
+    /// Each sender's way out as its preview said it (`one-click`, `mailto`, `http-page` or `none`), by address: the
+    /// list of senders says only that one is likely, never how.
+    private(set) var waysOut: [String: String] = [:]
     var batching: Batching?
     /// An account's sweep, planned and waiting for Confirm: what goes, bucket by bucket, and what stays.
     private(set) var sweepArmed: API.AccountSwept?
@@ -145,6 +148,7 @@ final class CurateModel {
         do {
             let preview = try await routes.get(API.Get.CleanupSender.self, ["addr": sender])
             let method = preview.unsub.method
+            waysOut[preview.fromAddr.lowercased()] = method
             let chosen = unsubscribeChoices[preview.fromAddr.lowercased()]
             cleaning = Cleaning(preview: preview, scope: .sender,
                                 unsubscribe: chosen ?? (method == "one-click" || method == "mailto"))
@@ -152,6 +156,20 @@ final class CurateModel {
             notices.say(problem.detail ?? String(localized: "error"), refused: true)
         } catch {
             notices.say(String(localized: "Couldn’t load sender"), refused: true)
+        }
+    }
+
+    /// The chip that says how a sender lets you unsubscribe: in one click, by an email sent from your account, on a
+    /// page of theirs, or no chip where there is no way out. Before the sender's preview has said how, the list knows
+    /// only that it is a newsletter, which most likely offers a way out, and says no more than that: a `mailto` way
+    /// out is never called one click.
+    func unsubscribeChip(_ sender: API.NoisySender) -> String? {
+        switch waysOut[sender.fromAddr.lowercased()] {
+        case "one-click": String(localized: "1-click")
+        case "mailto": String(localized: "by email")
+        case "http-page": String(localized: "web page")
+        case "none": nil
+        default: sender.luLikely ? String(localized: "newsletter") : nil
         }
     }
 
