@@ -24,12 +24,12 @@ final class ListKeysTests: XCTestCase {
     }
 
     /// The Inbox's first six rows in the list's table, the desk joined to its window.
-    private func table(brief: Bool = false, server: FakeServer = Fixture.server(rows: Array(Fixture.inbox.prefix(6))))
-        async throws -> (MailApp, MailboxTableController)
+    private func table(brief: Bool = false, server: FakeServer = Fixture.server(rows: Array(Fixture.inbox.prefix(6))),
+                       wire: Wire? = nil) async throws -> (MailApp, MailboxTableController)
     {
         let app = MailApp()
         self.app = app
-        app.mailbox.wire = server.wire
+        app.mailbox.wire = wire ?? server.wire
         await app.mailbox.refresh()
         app.mailbox.tab = .all
         let desk = Desk()
@@ -668,6 +668,90 @@ final class ListKeysTests: XCTestCase {
         return server
     }
 
+    /// A verb that moves on, run as the window runs it: the next row is chosen, the window draws that choice in the
+    /// table (SwiftUI's `updateNSView` calls `follow`) while the list read again is still on its way, and then it
+    /// comes, with the row that left gone.
+    private func movesOn(_ app: MailApp, _ controller: MailboxTableController, gate: ListGate,
+                         _ verb: () async -> Void) async {
+        let list = app.list
+        let total = list?.total ?? 0
+        gate.held = true
+        let open = app.selection.copy
+        await verb()
+        await until { app.selection.copy != open }
+        controller.follow(app.mailbox.marked)
+        gate.held = false
+        await until { list?.total == total - 1 }
+    }
+
+    /// e or # on the row just before a conversation, the list's last row, opens the conversation, chosen in its row
+    /// as a click chooses it, as the list read again moves it up; the next key files it whole, and with nothing left
+    /// the pane empties. The table once let AppKit drop the conversation's row as the list shrank under it, and told
+    /// the mailbox that nothing was chosen: the pane emptied and the next e had nothing to file.
+    func testFilingTheRowBeforeAConversationOpensTheConversationAndTheNextKeyFilesIt() async throws {
+        for (typed, code, path) in [("e", UInt16(14), API.Post.ThreadArchive.path), ("#", 20, API.Post.ThreadTrash.path)] {
+            let listed = Listed([Fixture.row(1, needs: true, from: "Ada Lovelace"),
+                                 Fixture.row(2, count: 3, needs: true, from: "Lin Mori")])
+            let server = shrinking(listed)
+            let gate = ListGate()
+            let (app, controller) = try await table(server: server, wire: gate.wire(server))
+            let list = try XCTUnwrap(app.list)
+            XCTAssertEqual(list.total, 2)
+            XCTAssertTrue(try XCTUnwrap(list.copy(at: 1)).isConversation(grouped: true))
+            let table = controller.table
+            table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+            XCTAssertEqual(app.selection.copy?.key, 1)
+
+            await movesOn(app, controller, gate: gate) { press(typed, table, code: code) }
+            XCTAssertEqual(app.selection.copy?.key, 2, "\(typed): the conversation opens")
+            XCTAssertEqual(app.mailbox.chosenRows.map(\.key), [2], "\(typed): chosen as a click chooses it")
+            XCTAssertEqual(table.selectedRowIndexes, IndexSet(integer: 0), "\(typed): its row, moved up")
+
+            press(typed, table, code: code)
+            await until { server.asked(path).count == 1 }
+            await until { list.total == 0 }
+            XCTAssertNil(app.selection.copy, "\(typed): nothing is left to open")
+            XCTAssertTrue(app.mailbox.chosenRows.isEmpty)
+        }
+    }
+
+    /// Moved, or snoozed, from the row just before a conversation at the list's end, or from the conversation just
+    /// before a last row, the next row opens, chosen in its row, as filing moves on.
+    func testMovingAndSnoozingMoveOnToTheNextRowWhereverTheConversationStands() async throws {
+        let orders: [[API.FolderRow]] = [
+            [Fixture.row(1, from: "Ada Lovelace"), Fixture.row(2, count: 3, from: "Lin Mori")],
+            [Fixture.row(2, count: 3, from: "Lin Mori"), Fixture.row(1, from: "Ada Lovelace")],
+        ]
+        for rows in orders {
+            for verb in ["move", "snooze"] {
+                let listed = Listed(rows)
+                let server = shrinking(listed)
+                let gate = ListGate()
+                let (app, controller) = try await table(server: server, wire: gate.wire(server))
+                controller.table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+                let first = rows[0].key, next = rows[1].key
+                XCTAssertEqual(app.selection.copy?.key, first)
+                await movesOn(app, controller, gate: gate) {
+                    if verb == "move" {
+                        let moved = await app.mailbox.moveNow(to: "Receipts", label: "Receipts")
+                        XCTAssertTrue(moved)
+                    } else {
+                        // As a snooze runs it (`AttentionModel.leaving`): where to go worked out first, gone to once
+                        // the server has taken it, and the list read again.
+                        guard let copy = app.selection.copy else { return XCTFail("nothing open") }
+                        let then = app.mailbox.leaving([copy])
+                        listed.take(first)
+                        then()
+                        app.mailbox.readAgain()
+                    }
+                }
+                XCTAssertEqual(app.selection.copy?.key, next, "\(verb) from \(first): the next row opens")
+                XCTAssertEqual(app.mailbox.chosenRows.map(\.key), [next])
+                XCTAssertEqual(controller.table.selectedRowIndexes, IndexSet(integer: 0))
+            }
+        }
+    }
+
     // MARK: Two windows
 
     /// Every mail window draws the process's one list in a table of its own. With a second window closed, the table
@@ -823,6 +907,28 @@ final class MessageWindowKeysTests: XCTestCase {
         keys.takeIfNowhere()
         XCTAssertTrue(window.firstResponder === keys)
         window.contentView = nil
+    }
+}
+
+/// Holds the server's lists back while `held`, as a slow server does: what a verb does at once is seen before the
+/// list read again comes.
+private final class ListGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var shut = false
+
+    var held: Bool {
+        get { lock.withLock { shut } }
+        set { lock.withLock { shut = newValue } }
+    }
+
+    func wire(_ server: FakeServer) -> Wire {
+        let send = server.wire.send
+        return Wire { [self] method, target, body in
+            while method == "GET", target.hasPrefix(API.Get.Inboxes.path), held {
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+            return await send(method, target, body)
+        }
     }
 }
 
