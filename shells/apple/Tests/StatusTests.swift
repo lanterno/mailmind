@@ -627,3 +627,27 @@ final class StatusHearsTests: XCTestCase {
         XCTAssertEqual(status.digest?.ai.summariesWaiting, 3)
     }
 }
+
+/// Help's search operators are the grammar's words, as the page's Help lists them: `is:starred` for flagged mail.
+/// The search box's suggestions are the server's own, so they say what its grammar offers.
+@MainActor
+final class SearchOperatorsTests: XCTestCase {
+    func testHelpSaysIsStarred() {
+        XCTAssertTrue(HelpWindow.operators.contains("is:starred"))
+        XCTAssertFalse(HelpWindow.operators.contains("is:flagged"))
+    }
+
+    func testTheSearchBoxsSuggestionsAreTheServers() async {
+        let server = Fixture.server()
+        let offered = API.SearchSuggestion(complete: true, detail: "Starred mail", label: "is:starred",
+                                           value: "is:starred")
+        server.on("GET", API.Get.Suggest.path, API.SearchSuggestions(items: [offered], ok: true))
+        let app = MailApp()
+        app.mailbox.wire = server.wire
+
+        let said = await app.mailbox.suggestions(for: "is:st")
+
+        XCTAssertEqual(said, [offered])
+        XCTAssertEqual(server.asked(API.Get.Suggest.path).map { $0.query["q"] }, ["is:st"])
+    }
+}
