@@ -639,8 +639,10 @@ impl Overview for Glances {
         since_ts: f64,
         since_iso: &str,
         _top: i64,
-        _sent: &[(String, String)],
+        sent: &[(String, String)],
     ) -> Result<WeekRows, Fault> {
+        // What was sent is counted in the folders the surroundings say play Sent.
+        assert_eq!(sent, [(ADA.to_owned(), "Sent Items".to_owned())]);
         assert_eq!((since_ts, since_iso), ((NOW - 7 * 86_400) as f64, "2026-10-26T12:00:00+00:00"));
         let ivo = Needing {
             message_key: Some(10),

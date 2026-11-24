@@ -170,6 +170,24 @@ fn the_list_is_kept_for_a_few_seconds_then_asked_again() {
 }
 
 #[test]
+fn the_part_a_folder_plays_is_what_the_last_list_said_even_once_the_list_kept_has_gone() {
+    let folders = folders(&Server::answering(vec![]), &Arc::new(Ticking::default()));
+    let role = |name: &str| folders.role_as_listed("ada@example.test", name).unwrap();
+    // Before any LIST, the whole name says: Gmail's, Dovecot's and Proton's Sent by theirs.
+    assert_eq!(
+        [role("[Gmail]/Sent Mail"), role("Sent Messages"), role("Sent"), role("Saved"), role("Consent forms")],
+        ["sent", "sent", "sent", "custom", "custom"]
+    );
+    rail(&folders);
+    folders.invalidate(Some("ada@example.test")).unwrap();
+    // The server's \Sent is on Saved: that is Sent, and a folder merely named so isn't.
+    assert_eq!([role("Saved"), role("Sent"), role("INBOX"), role("Trash")], ["sent", "custom", "inbox", "trash"]);
+    // A folder the LIST didn't name goes by its name, and so does another account's.
+    assert_eq!(role("Sent Items"), "sent");
+    assert_eq!(folders.role_as_listed("bea@example.test", "Saved").unwrap(), "custom");
+}
+
+#[test]
 fn a_server_out_of_reach_gives_the_folders_mail_is_stored_in() {
     let server = Server::answering(vec![Err(SessionError::Unreachable("ConnectionRefused"))]);
     let folders = folders(&server, &Arc::new(Ticking::default()));
