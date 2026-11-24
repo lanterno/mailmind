@@ -80,7 +80,9 @@ app="$out/MailMind.app"
 ditto "$built" "$app"
 
 # Every licence the app has to carry, which MailMind › Acknowledgements shows. In the bundle before it is signed, so
-# the signature seals it.
+# the signature seals it. It reads the crates' sources from cargo's cache, offline, and cargo's metadata wants every
+# locked crate there, the tests' too, which the build above never fetched: fetch them first.
+cargo fetch --locked --manifest-path "$here/../../core/Cargo.toml" >/dev/null
 python3 -I "$here/Release/acknowledgements.py" "$app/Contents/Resources/Acknowledgements.txt" \
     "$derived/SourcePackages/artifacts/sparkle/Sparkle/LICENSE"
 
