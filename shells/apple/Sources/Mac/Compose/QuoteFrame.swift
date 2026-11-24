@@ -8,6 +8,8 @@ import WebKit
 struct QuoteFrame: NSViewRepresentable {
     let html: String
     let title: String
+    /// Takes the keyboard once it is on screen, so its keys scroll it: the preview, which stands in the text's place.
+    var takesKeys = false
     @Environment(\.colorScheme) private var scheme
 
     private static let policy = "default-src 'none'; script-src 'none'; object-src 'none'; base-uri 'none'; "
@@ -30,7 +32,8 @@ struct QuoteFrame: NSViewRepresentable {
         configuration.websiteDataStore = .nonPersistent()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = false
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
-        let view = WKWebView(frame: .zero, configuration: configuration)
+        let view = KeyedWebView(frame: .zero, configuration: configuration)
+        view.wantsKeys = takesKeys
         view.navigationDelegate = context.coordinator
         view.allowsLinkPreview = false
         view.setAccessibilityLabel(title)
@@ -54,6 +57,18 @@ struct QuoteFrame: NSViewRepresentable {
     static func dismantleNSView(_ view: WKWebView, coordinator: Walls) {
         view.stopLoading()
         view.navigationDelegate = nil
+    }
+
+    /// A web view that takes the keyboard as it comes into its window, when asked to.
+    final class KeyedWebView: WKWebView {
+        var wantsKeys = false
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard wantsKeys, let window else { return }
+            wantsKeys = false
+            window.makeFirstResponder(self)
+        }
     }
 
     /// Only the document itself loads: a link clicked goes nowhere.

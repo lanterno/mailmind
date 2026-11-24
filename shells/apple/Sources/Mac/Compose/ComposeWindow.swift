@@ -433,7 +433,7 @@ struct ComposerForm: View {
                             .padding(.horizontal, 18)
                             .padding(.top, 10)
                     }
-                    QuoteFrame(html: preview.html, title: "How your message will read")
+                    QuoteFrame(html: preview.html, title: "How your message will read", takesKeys: true)
                         .padding(.horizontal, 4)
                 } else {
                     ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
