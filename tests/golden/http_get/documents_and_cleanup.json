@@ -216,7 +216,8 @@
      "lu_likely": true,
      "noise_score": 2.52,
      "unseen": 3,
-     "unseen_ratio": 1.0
+     "unseen_ratio": 1.0,
+     "unsub_method": "one-click"
     }
    ]
   },

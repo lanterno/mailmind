@@ -164,6 +164,46 @@ def test_cleanup_refusals(app, golden):
         execute(app, golden, label, body)
 
 
+# ── the way out Curate's list names ──────────────────────────────────────
+
+def listed_way(app, addr):
+    [sender] = [s for s in app.get("/api/cleanup/senders").json["senders"] if s["from_addr"] == addr]
+    return sender["unsub_method"]
+
+
+def loom_issues(world, **newest):
+    """Two older issues of The Weekly Loom, which make it noisy enough to list, and a newest saying `newest`."""
+    for n, day in ((216, "14"), (217, "21")):
+        world.deliver(w.ADA, "INBOX", w.variant(NEWSLETTER, Message_ID=f"<issue-{n}@loom.example.test>",
+                                                Date=f"Wed, {day} Oct 2026 07:00:00 +0000", Subject=f"Issue {n}"))
+    world.deliver(w.ADA, "INBOX", w.variant(NEWSLETTER, Message_ID="<issue-219@loom.example.test>",
+                                            Date="Mon, 02 Nov 2026 07:00:00 +0000", Subject="Issue 219", **newest))
+
+
+@pytest.mark.parametrize("headers, way", [
+    ({}, "one-click"),
+    ({"List_Unsubscribe_Post": ""}, "mailto"),
+    ({"List_Unsubscribe": "<https://loom.example.test/u/ada-219>", "List_Unsubscribe_Post": ""}, "http-page"),
+    ({"List_Unsubscribe": "", "List_Unsubscribe_Post": ""}, "none"),
+])
+def test_the_senders_list_names_the_way_out_the_newest_mail_stored_offers(app, world, headers, way):
+    loom_issues(world, **headers)
+    assert listed_way(app, LOOM) == way
+
+
+def test_a_sender_none_of_whose_headers_were_read_names_no_way_out(app, world):
+    from mailmind.bootstrap.mailbox import store
+    loom_issues(world)
+    with app.stopped():
+        c = store.conn()
+        try:
+            c.execute("UPDATE messages SET list_unsub_raw=NULL, list_unsub_method=NULL WHERE lower(from_addr)=?", (LOOM,))
+            c.commit()
+        finally:
+            c.close()
+    assert listed_way(app, LOOM) is None
+
+
 # ── the unsubscribe goes out ─────────────────────────────────────────────
 
 def test_an_rfc_8058_sender_is_offered_one_click(app, world):
