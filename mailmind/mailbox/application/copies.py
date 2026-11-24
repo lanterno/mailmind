@@ -49,10 +49,10 @@ class Copies:
 
     def append_to_drafts(self, acct: Account, raw: bytes, prev_uid: int | None = None, prev_uidvalidity: int | None = None,
                          prev_msgid: str | None = None, prev_folder: str | None = None, message_id: str | None = None,
-                         tried: str | None = None) -> tuple[FolderName, int | None, int | None, int | None]:
+                         tried: str | None = None) -> tuple[FolderName, int | None, int | None, list[int]]:
         """APPEND a draft (flagged \\Seen and \\Draft, as a mail app files its own) to the account's Drafts folder,
-        then delete the previous copy (single-UID expunge — NEVER a bulk expunge). Returns
-        (folder, new_uid|None, uidvalidity|None, removed_uid|None). Append first, so a save that fails or
+        then delete the copies it replaces (single-UID expunges — NEVER a bulk expunge). Returns
+        (folder, new_uid|None, uidvalidity|None, the UIDs removed). Append first, so a save that fails or
         a crash never leaves none: at worst the old copy stays beside the new one. prev_folder: where the
         previous copy is; when that isn't this Drafts folder, nothing is deleted here (its UID means
         nothing in this one), and the caller removes it there. tried: the Message-ID of a copy an earlier
@@ -65,21 +65,24 @@ class Copies:
                 prev_uid = prev_msgid = None
             try:
                 uidv = s.select(drafts, readonly=False).uidvalidity
+                selected = True
             except imaplib.IMAP4.abort:
                 raise
             except imaplib.IMAP4.error:          # refused: no copy is deleted, but the APPEND still goes
-                uidv = None
-            # the prior draft copy, if we can safely identify it: asked before the new copy can answer too
-            del_uid: int | None = None
-            removed: int | None = None
-            if prev_uid and (prev_uidvalidity is None or prev_uidvalidity == uidv):
-                del_uid = int(prev_uid)
-            elif prev_msgid:
+                uidv, selected = None, False
+            # The copies it replaces, where they can be told for sure, asked before the new copy can answer too: the one the
+            # row names, and every other in Drafts under the Message-ID it was saved with. Another app may have left more than
+            # one there (Thunderbird's earlier saves of it), both copies of the one message, by its key.
+            replaced: list[int] = []
+            removed: list[int] = []
+            if prev_uid and selected and (prev_uidvalidity is None or prev_uidvalidity == uidv):
+                replaced.append(int(prev_uid))
+            if prev_msgid and selected:
                 try:
-                    ids = s.uids("HEADER", "Message-ID", self._quote(prev_msgid))
-                    del_uid = ids[0] if ids else None
+                    replaced += [u for u in s.uids("UNDELETED", "HEADER", "Message-ID", self._quote(prev_msgid))
+                                 if u not in replaced]
                 except Exception:
-                    del_uid = None
+                    pass
             left = self._left_by(s, tried)
             landed = left if left and tried == message_id else None
             new_uid = landed or s.append(drafts, raw, flags=["\\Seen", "\\Draft"], when=datetime.now().astimezone())
@@ -89,11 +92,13 @@ class Copies:
                     s.expunge([left])
                 except Exception:
                     pass
-            if del_uid and del_uid != new_uid:
+            for old in replaced:
+                if old == new_uid:
+                    continue
                 try:
-                    s.add_flags([del_uid], ["\\Deleted"])
-                    s.expunge([del_uid])         # this UID alone, never a bulk EXPUNGE
-                    removed = del_uid
+                    s.add_flags([old], ["\\Deleted"])
+                    s.expunge([old])             # this UID alone, never a bulk EXPUNGE
+                    removed.append(old)
                 except Exception:
                     pass
             return drafts, new_uid, uidv, removed

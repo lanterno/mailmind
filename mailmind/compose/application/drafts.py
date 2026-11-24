@@ -229,7 +229,7 @@ class Drafts:
         folder, uid, uidv, replaced = self._copies.append_to_drafts(
             acct, j["raw"], **draft.replaced_in_place(prev, j), message_id=j["message_id"], tried=j["tried"])
         self._screen.touched(j["account"], folder)   # its list shows the new copy on its next open
-        gone = [(j["account"], folder, replaced)] if replaced else []   # and no longer the copies it replaced
+        gone = [(j["account"], folder, old) for old in replaced]   # and no longer the copies it replaced
         # Only now that the new copy is saved, so a save that fails never leaves no copy at all. Best-effort; a message
         # that isn't a draft at all stays.
         if draft.left_elsewhere(prev, j, folder) and self._ours_to_remove(prev):
