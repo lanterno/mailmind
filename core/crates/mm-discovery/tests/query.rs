@@ -66,6 +66,18 @@ fn each_operator_reads_as_python_read_it() {
 }
 
 #[test]
+fn starred_is_flagged_as_the_app_calls_it() {
+    let flagged = parsed("is:flagged");
+    assert_eq!(flagged, vec![(Kind::Flag, None, Some("flagged"), false, true)]);
+    assert_eq!(parsed("is:starred"), flagged);
+    assert_eq!(parsed("is:Starred"), flagged);
+    assert_eq!(parsed("-is:starred"), vec![(Kind::Flag, None, Some("flagged"), true, true)]);
+    // Only `is:` takes it: anywhere else it is a word to find.
+    assert_eq!(parsed("starred"), vec![text("starred")]);
+    assert_eq!(parsed("has:starred"), vec![text("has:starred")]);
+}
+
+#[test]
 fn a_dash_negates_what_follows_it() {
     assert_eq!(parsed("-hello"), vec![(Kind::Text, words("hello"), None, true, true)]);
     assert_eq!(parsed("-"), vec![text("-")]);
