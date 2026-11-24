@@ -289,11 +289,12 @@ holds them for Python and Rust, and runs in `just lint`.
 
 ## 7. CI
 
-Today CI runs two workflows. `served.yml` runs `tests/api` and the browser suite on both servers, and `clients.yml` runs
-`core-verify`, the core's budgets, `cargo deny`, the Mac's unit tests, its smoke run and the release check. **No workflow
-runs** the Python unit, integration, contract, security or characterization suites, the page's 781 Vitest tests, `just
-lint`, `just audit`, the Hypothesis machines, the oracle tests or the Dovecot contract. They run only when someone runs
-`just verify` on their own Mac.
+CI runs three workflows. `served.yml` runs `tests/api` and the browser suite on both servers; `clients.yml` runs
+`core-verify`, the core's budgets, `cargo deny`, the Mac's unit tests, its smoke run and the release check; and
+`checks.yml` runs `just lint`, every Python test `just test` runs, `check-frontend`, `check-web` (the page's types,
+ESLint and Vitest) and `just audit`, which also runs each Monday. Until November 2026 the third didn't exist, and those
+ran only when someone ran `just verify` on their own Mac. **Still no workflow runs** the Dovecot contract or
+`test-rust-all`; both join the nightly tier.
 
 The target:
 

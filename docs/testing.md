@@ -194,8 +194,8 @@ server take its sanitizer away through the protocol (`app.unsanitized()`), to sh
   the looping ones (`FADES_DONE`).
 
 These tests are marked `browser` and skipped unless pytest runs with `--browser`.
-`just test-full` installs Chromium if needed and runs everything. `just verify` leaves them out
-to stay fast. `just test-full` and `just test-browser` run four processes at a time (`-n 4`), each with a Chromium and a build of
+`just test-full` installs Chromium if needed and runs everything. `just verify` runs the ones on the Rust server's
+ledger, against that server (`just test-rust`), and leaves the rest out to stay fast. `just test-full` and `just test-browser` run four processes at a time (`-n 4`), each with a Chromium and a build of
 its own: a Chromium keeps cores of its own busy, and with a process for each core the tests' waits for the page run out.
 
 `tests/contract/test_mail_session_dovecot.py` holds the MailSession contract against a real server,
