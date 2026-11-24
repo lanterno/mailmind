@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use mm_assistant::action_plan::{out_of_reach, preset_told, verb_told};
 use mm_assistant::ask::{Asker, cited, fts_match};
+use mm_assistant::background_ports::Backlog;
 use mm_assistant::briefs::Briefs;
 use mm_assistant::bulk::BulkCommands;
 use mm_assistant::calls::Calls;
@@ -788,6 +789,40 @@ fn a_brief_is_written_once_kept_for_the_day_and_read_with_each_message_where_it_
     glances.rows.lock().expect("rows").pop();
     assert_eq!(briefs.build(&accounts, false, true, "brief").expect("a card")["stale"], true);
     assert!(sent(&w).is_empty());
+}
+
+/// How many messages wait for a summary, whatever their age.
+#[derive(Debug, Default)]
+struct Waiting(AtomicI64);
+
+impl Backlog for Waiting {
+    fn summaries_waiting(&self, _newer_than: i64) -> Result<i64, Fault> {
+        Ok(self.0.load(Ordering::SeqCst))
+    }
+}
+
+#[test]
+fn an_inbox_whose_mail_waits_for_its_summaries_is_never_called_quiet() {
+    let w = world(true);
+    let (glances, kept, waiting) =
+        (Arc::new(Glances::default()), Arc::new(Kept2::default()), Arc::new(Waiting::default()));
+    let briefs =
+        Briefs::new(w.calls.clone(), kept, glances, clock_at(NOW), Arc::new(Utc)).with_backlog(waiting.clone());
+    let accounts = [ADA.to_owned()];
+    waiting.0.store(10, Ordering::SeqCst);
+    // Nothing is summarized yet, so nothing is briefed, read or written, and nothing is asked of the AI.
+    for generate in [false, true] {
+        let card = briefs.build(&accounts, false, generate, "brief").expect("a card");
+        assert_eq!(
+            (card["model"].clone(), card["narrative"].clone(), card["cached"].clone()),
+            (json!("empty"), json!(""), json!(false))
+        );
+    }
+    assert!(sent(&w).is_empty());
+    // Once each is read and none needs a glance, it is quiet.
+    waiting.0.store(0, Ordering::SeqCst);
+    let quiet = briefs.build(&accounts, false, true, "brief").expect("a card");
+    assert_eq!(quiet["narrative"], json!("Nothing needs you right now \u{2014} your inbox is quiet."));
 }
 
 #[test]
