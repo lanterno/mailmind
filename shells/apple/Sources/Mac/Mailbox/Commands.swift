@@ -31,19 +31,27 @@ struct MailWindowDoor {
     /// What a place is gone to through: the window's mailbox, `focused`, while a mail window is open; with none, the
     /// process's, the window opened again once the place is chosen. Nil while there is nothing to go through.
     func going(from focused: Mailbox?) -> Going? {
-        if isOpen() { return focused.map { Going(mailbox: $0, then: {}) } }
-        return mailbox().map { Going(mailbox: $0, then: reopen) }
+        if isOpen() { return focused.map { Going(door: self, focused: $0) } }
+        return mailbox().map { Going(door: self, focused: $0) }
     }
 
-    /// The mailbox to go somewhere through, and what follows: nothing, or the window opened again.
+    /// The mailbox to go somewhere through, and whether the window opens again, both asked as the item runs: AppKit
+    /// keeps a menu's items as SwiftUI last drew them and runs one before they are drawn again, so a door read as the
+    /// menu was drawn with no window open (as MailMind opened, or once its window had closed) opened a second mail
+    /// window over the one opened since.
     @MainActor
     struct Going {
-        let mailbox: Mailbox
-        let then: @MainActor () -> Void
+        let door: MailWindowDoor
+        /// The mailbox the menus were handed: the window's in front, or the process's while none was open.
+        let focused: Mailbox
 
         func go(_ there: (Mailbox) -> Void) {
-            there(mailbox)
-            then()
+            if door.isOpen() {
+                there(focused)
+            } else if let mailbox = door.mailbox() {
+                there(mailbox)
+                door.reopen()
+            }
         }
     }
 

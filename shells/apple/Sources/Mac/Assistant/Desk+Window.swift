@@ -191,6 +191,7 @@ final class Desk {
             mailbox.wentAway = { self?.wentAway($0) }
             mailbox.rereadsTallies = { self?.brief.reread() }
             mailbox.inDesk = { view in self.map { AnyView(view.environment($0)) } ?? view }
+            mailbox.doesAsked = { self?.doAsked() }
             mailbox.rowMenu.append { rows in
                 guard let self else { return [] }
                 return self.commands(for: rows.map(MailCopy.init), stack: self.stack).map { command in
@@ -740,7 +741,14 @@ struct AssistantMenuItems: View {
             return { act(desk) }
         }
         guard let going = door.going(from: nil) else { return nil }
-        return { going.go { _ in Desk.asked.append(act) } }
+        let door = door
+        return {
+            going.go { mailbox in
+                Desk.asked.append(act)
+                // Drawn with no window open, and one has opened since: its desk does it now.
+                if door.isOpen() { mailbox.doesAsked?() }
+            }
+        }
     }
 
     /// What Today's Brief does: the window's desk goes to it; with no mail window, the window opens again on it.

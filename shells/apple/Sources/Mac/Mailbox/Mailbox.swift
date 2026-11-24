@@ -161,6 +161,9 @@ final class Mailbox {
     /// The desk's: a message's own window inside the mail window's desk, so its reader shows the cards the pane's
     /// does (the summary and what the message proposes, an invite with its RSVP).
     @ObservationIgnored var inDesk: (@MainActor (AnyView) -> AnyView)?
+    /// The desk's: do now what the menus asked of the mail window (`Desk.asked`) when they were drawn with none open
+    /// and one has opened since.
+    @ObservationIgnored var doesAsked: (@MainActor () -> Void)?
     /// The areas that have hung their hooks here, each once a window however often its view appears.
     @ObservationIgnored private var joined: Set<String> = []
     /// Counted up each time the hooks are let go (`leave`): an area's view that is still on screen joins again when
@@ -200,6 +203,7 @@ final class Mailbox {
         wentAway = nil
         rereadsTallies = nil
         inDesk = nil
+        doesAsked = nil
         joinRound += 1
     }
 
