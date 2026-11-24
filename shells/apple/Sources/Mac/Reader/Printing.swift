@@ -92,10 +92,12 @@ final class MessagePrinter: NSObject {
 
     /// Paper can't unfold anything, so every `<details>` prints open, the core's quote and the mail's own, through
     /// the part of it that holds what it folds (`::details-content`). The quote's pill, which only opens it, is left
-    /// off. A WebKit that doesn't know `::details-content` (Safari 18.4's brought it, macOS 15.4's) drops both rules
-    /// and prints the folds closed, as before.
+    /// off, and the mail's own summaries show the open marker (▼), as an open fold's do, not the closed one (▶). A
+    /// WebKit that doesn't know `::details-content` (Safari 18.4's brought it, macOS 15.4's) drops every rule and
+    /// prints the folds closed, as before, under the closed marker.
     static let unfolded = "details::details-content{content-visibility:visible}"
-        + "@supports selector(::details-content){details.mm-quote>summary{display:none}}"
+        + "@supports selector(::details-content){details.mm-quote>summary{display:none}"
+        + "details>summary:first-of-type{list-style-type:disclosure-open}}"
 
     /// The head a printed copy starts with: the subject, then From, To, Cc and Date, each the mail's own words
     /// escaped, so nothing in them is read as markup.
