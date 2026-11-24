@@ -378,7 +378,9 @@ extension API {
     /// is on). `model` is what a person's asks go to, and `background_model` what background summaries ask: "" while AI is off.
     /// `cloud_model` is whether the model chosen for a server on this Mac (a model on this Mac, or a compatible service on
     /// loopback) runs in a cloud, as Ollama's `-cloud` models do, so mail asked of it leaves this Mac: said whether AI is on
-    /// or off. `summaries_waiting` is how many Inbox messages from the last 30 days wait for a summary, there while AI is on.
+    /// or off. `summaries_waiting` is how many Inbox messages from the last 30 days wait for a summary, and `summarizing` whether
+    /// the background reads them, now or at its next round, with neither today's limit nor the breaker holding them back: each
+    /// there while AI is on. Until those summaries land, what needs you isn't known.
     public struct AiStatus: Codable, Hashable, Sendable {
         public var backgroundModel: String
         public var batchWaiting: Int?
@@ -394,8 +396,9 @@ extension API {
         public var provider: AiProvider
         public var spentTodayMicros: Int?
         public var summariesWaiting: Int?
+        public var summarizing: Bool?
 
-        public init(backgroundModel: String, batchWaiting: Int? = nil, cloudModel: Bool, engine: String, keyFrom: String, lastError: String? = nil, lastOk: Bool? = nil, lastTs: Int, limitMicros: Int, model: String, off: AiOff? = nil, provider: AiProvider, spentTodayMicros: Int? = nil, summariesWaiting: Int? = nil) {
+        public init(backgroundModel: String, batchWaiting: Int? = nil, cloudModel: Bool, engine: String, keyFrom: String, lastError: String? = nil, lastOk: Bool? = nil, lastTs: Int, limitMicros: Int, model: String, off: AiOff? = nil, provider: AiProvider, spentTodayMicros: Int? = nil, summariesWaiting: Int? = nil, summarizing: Bool? = nil) {
             self.backgroundModel = backgroundModel
             self.batchWaiting = batchWaiting
             self.cloudModel = cloudModel
@@ -410,6 +413,7 @@ extension API {
             self.provider = provider
             self.spentTodayMicros = spentTodayMicros
             self.summariesWaiting = summariesWaiting
+            self.summarizing = summarizing
         }
 
         enum CodingKeys: String, CodingKey {
@@ -427,6 +431,7 @@ extension API {
             case provider
             case spentTodayMicros = "spent_today_micros"
             case summariesWaiting = "summaries_waiting"
+            case summarizing
         }
     }
 
