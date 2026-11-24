@@ -84,4 +84,26 @@ final class CurateUndoTests: XCTestCase {
         let undo = try XCTUnwrap(model.sheetUndo)
         XCTAssertTrue(undo === window.undoManager)
     }
+
+    /// The cleanup's toast offers its Undo as long as every Undo toast does, not the moment a plain word stays.
+    func testTheCleanupsToastStaysAsLongAsAnUndoOffer() async throws {
+        let server = Fixture.server(grouped: false)
+        server.on("GET", API.Get.CleanupSender.path, DeskFixture.senderPreview)
+        server.on("POST", API.Post.CleanupExecute.path, Self.cleaned)
+        server.on("GET", API.Get.CleanupSenders.path,
+                  API.NoisySenders(generated: "2026-11-15T09:00:00Z", ok: true, senders: []))
+        let app = await opened(server)
+        let desk = Desk()
+        desk.use(app, routes: server.wire)
+
+        await desk.curate.previewCleanup("news@shop.example.test")
+        await desk.curate.pressCleanup()
+        await desk.curate.pressCleanup()
+        XCTAssertEqual(app.mailbox.toast?.text, "Blocked · swept 31 · unsubscribed")
+        XCTAssertNotNil(app.mailbox.toast?.undo)
+        let said = app.mailbox.toast?.id
+        try await Task.sleep(for: .milliseconds(Toast.saysMs + 1000))
+        XCTAssertEqual(app.mailbox.toast?.id, said, "still offering Undo past a plain word's time")
+        withExtendedLifetime(desk) {}
+    }
 }
