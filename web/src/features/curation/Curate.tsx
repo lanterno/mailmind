@@ -16,6 +16,7 @@ import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import { offerUndo, readAgain, undoGroup, useDigest } from "../mailbox";
 import { FilterDialog, Filters } from "./Filters";
+import { sendsUnsubscribe } from "./cleanupWords";
 import { curateOpen } from "./open";
 import { PLANNING, sweeps, sweepingWords, sweepWhile } from "./sweeping";
 import { sweepFailed, sweepStopped, undoBrings } from "./sweepWords";
@@ -182,7 +183,7 @@ export function CleanupPanel() {
                 </label>
               )}
               {d.sweep_capped && <div className="do-cap"><Icon name="alert" /> Sweeps the most recent {d.sweep_count} — run again for the rest.</div>}
-              <div className="do-danger-note">Block + sweep undo with <b>z</b>. {method === "none" ? "" : "Unsubscribing can’t be undone."}</div>
+              <div className="do-danger-note">Block + sweep undo with <b>z</b>. {sendsUnsubscribe(method, p.unsubscribe) ? "Unsubscribing can’t be undone." : ""}</div>
               <div className="do-foot">
                 <button className={p.armed ? "btn-retry strong danger armed" : "btn-retry strong danger"} onClick={() => { if (p.armed) void runCleanup(qc, p); else cleaning.set({ ...p, armed: true }); }}>{p.armed ? "Click again to confirm" : "Clean up"}</button>
                 <button className="do-cancel" onClick={() => cleaning.set(null)}>Cancel</button>
