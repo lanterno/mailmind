@@ -1325,6 +1325,7 @@ extension API {
         public var accounts: [String]
         public var ai: AiStatus
         public var aliases: [String: String?]
+        public var colours: [String: Int]
         public var generated: String
         public var items: [DigestItem]
         public var profile: String
@@ -1335,10 +1336,11 @@ extension API {
         public var status: [String: AccountSync]
         public var sync: SyncState
 
-        public init(accounts: [String], ai: AiStatus, aliases: [String: String?], generated: String, items: [DigestItem], profile: String, sendAccounts: [String], signatureDefault: String, signatures: [String: String], stats: DigestStats, status: [String: AccountSync], sync: SyncState) {
+        public init(accounts: [String], ai: AiStatus, aliases: [String: String?], colours: [String: Int], generated: String, items: [DigestItem], profile: String, sendAccounts: [String], signatureDefault: String, signatures: [String: String], stats: DigestStats, status: [String: AccountSync], sync: SyncState) {
             self.accounts = accounts
             self.ai = ai
             self.aliases = aliases
+            self.colours = colours
             self.generated = generated
             self.items = items
             self.profile = profile
@@ -1354,6 +1356,7 @@ extension API {
             case accounts
             case ai
             case aliases
+            case colours
             case generated
             case items
             case profile
