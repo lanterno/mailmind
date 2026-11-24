@@ -79,7 +79,7 @@ function Keys({ legend, ai }: { legend: () => Legend; ai: AiStatus | null | unde
         ))}
       </div>
       <div className="legh">Search operators</div>
-      <div className="legsearch"><code>from:</code> <code>to:</code> <code>cc:</code> <code>subject:</code> <code>body:</code> <code>is:unread</code> <code>is:flagged</code> <code>category:finance</code> <code>is:newsletter</code> <code>is:snoozed</code> <code>bucket:receipt</code> <code>has:attachment</code> <code>in:Sent</code> <code>account:</code> <code>before:</code>/<code>after:</code> <code>"quoted phrase"</code> <code>-exclude</code></div>
+      <div className="legsearch"><code>from:</code> <code>to:</code> <code>cc:</code> <code>subject:</code> <code>body:</code> <code>is:unread</code> <code>is:starred</code> <code>category:finance</code> <code>is:newsletter</code> <code>is:snoozed</code> <code>bucket:receipt</code> <code>has:attachment</code> <code>in:Sent</code> <code>account:</code> <code>before:</code>/<code>after:</code> <code>"quoted phrase"</code> <code>-exclude</code></div>
       <AiNote ai={ai} />
       <div className="legtoggle legtheme" role="group" aria-label="Theme">Theme
         {THEMES.map((t) => <button type="button" key={t} aria-pressed={t === current} onClick={() => setTheme(t)}>{THEME_LABEL[t]}</button>)}
