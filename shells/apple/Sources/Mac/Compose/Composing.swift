@@ -89,6 +89,12 @@ final class Composing: ComposeHost {
     /// The saves closing started, by composer, until each settles: Reply waits for them, so the message it reads says
     /// what answers it once they have landed.
     @ObservationIgnored private var closingSaves: [UUID: Task<Bool?, Never>] = [:]
+    /// Drafts closed while their server's copy was still to go, the server's gate too busy for the closing save, and
+    /// when: the push job sends each, and says so only as the outbox's event, which no list hears. Until it has, for
+    /// as long as the job may take, each such event reads the lists again, so Drafts shows it once it is there.
+    @ObservationIgnored private(set) var reaching: [Int: Date] = [:]
+    /// The longest the push job waits between tries (`draft_journal::BACKOFF_MOST`).
+    static let reachingFor: TimeInterval = 15 * 60
     /// The message the reader offers its reply box for: a plain reply to it opens there. Moving to another message
     /// closes a reply left open, which saves it to Drafts as closing a window does.
     var inlineSlot: MailCopy? {
@@ -123,7 +129,10 @@ final class Composing: ComposeHost {
             for await event in events {
                 guard let self else { return }
                 switch event.name {
-                case "outbox", "commands-changed": self.outboxChanged()
+                case "outbox":
+                    self.outboxChanged()
+                    self.heardTheOutbox()
+                case "commands-changed": self.outboxChanged()
                 case "sync-done", "resync": await self.readDigest()
                 case "draft-ready":
                     if let key = event.decoded([String: JSONValue].self)?["key"], case .number(let n) = key {
@@ -269,6 +278,13 @@ final class Composing: ComposeHost {
     }
 
     func draftsChanged() { mailChanged?() }
+
+    /// The outbox changed: a draft closed before its copy reached its server may have reached it, so the lists are
+    /// read again while one may still be on its way. Drafts as it opens catches up with a copy MailMind put there.
+    func heardTheOutbox(now: Date = Date()) {
+        reaching = reaching.filter { now.timeIntervalSince($0.value) < Self.reachingFor }
+        if !reaching.isEmpty { draftsChanged() }
+    }
     func foldersChanged() { mailChanged?() }
     func outboxChanged() {
         if let outbox { Task { await outbox.load() } }
@@ -306,6 +322,7 @@ final class Composing: ComposeHost {
             case true?:
                 say("Saved to Drafts")
                 draftsChanged()
+                if composer.waitsForServer, let id = composer.draftId { reaching[id] = Date() }
             case false?:
                 failedSend = snapshot
                 // An earlier save that holds all of it but what isn't an address leaves nothing to lose: the toast
