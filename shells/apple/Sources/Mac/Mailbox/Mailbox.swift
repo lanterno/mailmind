@@ -265,7 +265,7 @@ final class Mailbox {
     func readDigest() async {
         guard let calls, let digest = try? await calls.get(API.Get.Digest.self) else { return }
         accounts = digest.accounts
-        places = AccountPlaces.remember(digest.accounts, in: placesKept)
+        places = AccountPlaces.remember(digest.accounts, core: digest.colours, in: placesKept)
         aliases = digest.aliases.compactMapValues { $0 }
         aiOn = digest.ai.isOn
         ai = digest.ai
