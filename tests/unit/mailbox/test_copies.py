@@ -144,7 +144,7 @@ def test_every_copy_under_the_message_id_the_draft_was_saved_with_goes_once_the_
 def test_a_copy_under_the_message_id_that_is_the_one_an_earlier_try_landed_stays():
     s = _Session(found={"<d1@example.test>": [41, 77]})
     out = copies(s).append_to_drafts(ACCT, b"raw", prev_msgid="<d1@example.test>", message_id="<d1@example.test>",
-                                     tried="<d1@example.test>")
+                                     tried=["<d1@example.test>"])
     assert out == ("Brouillons", 41, 5, [77]) and "append" not in kinds(s)
 
 
@@ -183,16 +183,24 @@ def test_a_drafts_folder_lost_on_the_way_raises():
 def test_this_very_draft_left_by_an_earlier_try_stands_and_none_is_added():
     s = _Session(found={"<d2@example.test>": 77})
     out = copies(s).append_to_drafts(ACCT, b"raw", prev_uid=42, prev_uidvalidity=5, message_id="<d2@example.test>",
-                                     tried="<d2@example.test>")
+                                     tried=["<d2@example.test>"])
     assert out == ("Brouillons", 77, 5, [42]) and "append" not in kinds(s)
 
 
 def test_another_draft_left_by_an_earlier_try_goes_once_the_new_one_is_there():
     s = _Session(found={"<d1@example.test>": 76})
-    out = copies(s).append_to_drafts(ACCT, b"raw", message_id="<d2@example.test>", tried="<d1@example.test>")
+    out = copies(s).append_to_drafts(ACCT, b"raw", message_id="<d2@example.test>", tried=["<d1@example.test>"])
     assert out == ("Brouillons", 100, 5, [])
     assert kinds(s) == ["select", "search", "append", "flag", "expunge", "logout"]
     assert s.said[4] == ("expunge", [76])
+
+
+def test_every_draft_earlier_tries_left_goes_and_this_very_one_stands():
+    s = _Session(found={"<d1@example.test>": 75, "<d2@example.test>": 76, "<d3@example.test>": 77})
+    out = copies(s).append_to_drafts(ACCT, b"raw", message_id="<d3@example.test>",
+                                     tried=["<d1@example.test>", "<d2@example.test>", "<d3@example.test>"])
+    assert out == ("Brouillons", 77, 5, []) and "append" not in kinds(s)
+    assert [said for said in s.said if said[0] == "expunge"] == [("expunge", [75]), ("expunge", [76])]
 
 
 def test_an_old_copy_that_wont_go_is_left_and_the_save_still_stands():
@@ -203,12 +211,12 @@ def test_an_old_copy_that_wont_go_is_left_and_the_save_still_stands():
 def test_a_search_for_what_a_try_left_lost_on_the_way_raises():
     s = _Session(lose={"search"})
     with pytest.raises(imaplib.IMAP4.abort):
-        copies(s).append_to_drafts(ACCT, b"raw", tried="<d1@example.test>")
+        copies(s).append_to_drafts(ACCT, b"raw", tried=["<d1@example.test>"])
 
 
 def test_a_search_for_what_a_try_left_that_is_refused_finds_nothing():
     s = _Session(refuse={"search"})
-    assert copies(s).append_to_drafts(ACCT, b"raw", tried="<d1@example.test>")[1] == 100
+    assert copies(s).append_to_drafts(ACCT, b"raw", tried=["<d1@example.test>"])[1] == 100
 
 
 # -- removing a draft --------------------------------------------------------------------------------------------

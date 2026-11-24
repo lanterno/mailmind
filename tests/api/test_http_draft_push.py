@@ -59,6 +59,25 @@ def test_the_push_job_waits_its_turn_while_another_job_holds_the_account(app, wo
     assert app.get("/api/outbox").json["drafts"] == []
 
 
+def test_every_copy_failed_pushes_left_goes_once_one_lands(app, world):
+    # Each try's APPEND lands, and the connection drops before the server says so: no try knows of its copy. The first
+    # save's goes by the Message-ID the draft was made with; the second's only by what the tries kept.
+    world.server.drop_after("APPEND", user=w.ADA, times=3)
+    swatch = {"account": w.ADA, "mode": "new", "to": ["lin@example.test"], "subject": "Swatch order"}
+    saved = None
+    for text in ("Two of each.", "Three of each.", "Four of each."):
+        named = {"draft_id": saved["draft_id"], "base_version": saved["version"]} if saved else {}
+        r = app.post("/api/draft", {**swatch, "text": text, **named})
+        assert r.status == 200 and r.json["pushed"] is False, r.json
+        saved = r.json
+    assert len(swatches_in_drafts(world)) == 3               # a copy each try left
+    app.clock.shift(timedelta(minutes=2))
+    app.work("drafts")                                       # the next try lands
+    [copy] = swatches_in_drafts(world)
+    assert b"Four of each." in copy
+    assert app.get("/api/outbox").json["drafts"] == []
+
+
 def heard_next(tab):
     """The next event the tab hears, as (event, data)."""
     head, data = tab.event().split("\n")[1:3]

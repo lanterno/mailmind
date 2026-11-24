@@ -126,12 +126,24 @@ def test_a_discard_waits_only_on_a_copy_that_may_be_there(row, j, there):
     assert journal.copy_may_be_there(row, j) is there
 
 
-def test_a_send_takes_a_copy_a_try_left_in_its_own_account_only():
-    j = {"tried": "<t@example.test>", "account": "ada@example.test"}
-    assert journal.left_by_a_try(j, "ada@example.test") == "<t@example.test>"
-    assert journal.left_by_a_try(j, "bea@example.test") is None
-    assert journal.left_by_a_try({**j, "tried": None}, "ada@example.test") is None
-    assert journal.left_by_a_try(None, "ada@example.test") is None
+def test_a_send_takes_every_copy_a_try_left_in_its_own_account_only():
+    j = {"tried": "<t@example.test> <u@example.test>", "account": "ada@example.test"}
+    assert journal.left_by_a_try(j, "ada@example.test") == ["<t@example.test>", "<u@example.test>"]
+    assert journal.left_by_a_try(j, "bea@example.test") == []
+    assert journal.left_by_a_try({**j, "tried": None}, "ada@example.test") == []
+    assert journal.left_by_a_try(None, "ada@example.test") == []
+
+
+def test_a_try_keeps_every_copy_the_tries_before_it_may_have_left():
+    j = {"tried": None}
+    assert journal.trying(j, "<t@example.test>") == "<t@example.test>"
+    j = {"tried": "<t@example.test>"}
+    assert journal.trying(j, "<u@example.test>") == "<t@example.test> <u@example.test>"
+    assert journal.trying(j, "<t@example.test>") == "<t@example.test>"          # this save's again: kept once
+    assert journal.trying(j, None) == "<t@example.test>"
+    assert journal.trying({"tried": None}, None) is None
+    assert journal.tried_ids({"tried": "<t@example.test> <u@example.test>"}) == ["<t@example.test>", "<u@example.test>"]
+    assert journal.tried_ids(None) == []
 
 
 def test_the_tray_says_what_waits_with_no_subject_as_empty():
