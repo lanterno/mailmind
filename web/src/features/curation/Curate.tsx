@@ -16,7 +16,7 @@ import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import { offerUndo, readAgain, undoGroup, useDigest } from "../mailbox";
 import { FilterDialog, Filters } from "./Filters";
-import { sendsUnsubscribe } from "./cleanupWords";
+import { sendsUnsubscribe, wayOutChip } from "./cleanupWords";
 import { curateOpen } from "./open";
 import { PLANNING, sweeps, sweepingWords, sweepWhile } from "./sweeping";
 import { sweepFailed, sweepStopped, undoBrings } from "./sweepWords";
@@ -236,7 +236,7 @@ function Flood() {
               <span className="flood-chip">{x.count} msg{x.count === 1 ? "" : "s"}</span>
               {x.unseen > 0 && <span className={(x.unseen_ratio || 0) >= 0.7 ? "flood-chip hot" : "flood-chip"}>{x.unseen} unread</span>}
               {(x.accounts?.length ?? 0) > 1 && <span className="flood-chip multi">{x.accounts.length} inboxes</span>}
-              {x.lu_likely && <span className="flood-chip lu1">1-click</span>}
+              {wayOutChip(x.unsub_method, x.lu_likely) && <span className="flood-chip lu1">{wayOutChip(x.unsub_method, x.lu_likely)}</span>}
               {x.last_seen && <span className="flood-chip">{x.last_seen}</span>}
             </div>
           </div>

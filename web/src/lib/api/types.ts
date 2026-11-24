@@ -42,6 +42,7 @@ export type FilingVerb = Schemas["FilingVerb"];
 export type Verdict = Schemas["Verdict"];
 export type RuleChange = Schemas["RuleChange"];
 export type BlockScope = Schemas["BlockScope"];
+export type UnsubMethod = Schemas["UnsubMethod"];
 export type RsvpDecision = Schemas["RsvpDecision"];
 export type ComposeMode = Schemas["ComposeMode"];
 export type DocumentKind = Schemas["DocumentKind"];
