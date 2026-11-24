@@ -526,6 +526,45 @@ final class ComposerTests: XCTestCase {
         XCTAssertEqual(Double(try XCTUnwrap(host.sent.first?.after)), Double(hour), accuracy: 5, "in 1 hour")
     }
 
+    // MARK: The AI's words and the person's
+
+    /// A reply written ahead arrives after the person has begun typing in the reply it opened: their words stay, and
+    /// the AI's don't go in; into a reply still as it opened, they go in above the signature.
+    func testAReplyWrittenAheadNeverTakesThePlaceOfWordsTypedMeanwhile() {
+        host.signatures["ada@example.test"] = "Ada"
+        let reply = composer(Seeds.reply(opened(), all: false, mine: host.mine))
+        let start = reply.body
+        reply.setBody("Got it\n\n-- \nAda", selection: NSRange(location: 6, length: 0))
+        XCTAssertFalse(reply.place("Thursday works.", unless: start))
+        XCTAssertEqual(reply.body, "Got it\n\n-- \nAda", "the person's words stay")
+
+        let untouched = composer(Seeds.reply(opened(), all: false, mine: host.mine))
+        XCTAssertTrue(untouched.place("Thursday works.", unless: untouched.body))
+        XCTAssertEqual(untouched.body, "Thursday works.\n\n-- \nAda")
+        XCTAssertEqual(untouched.selectionRequest, NSRange(location: 15, length: 0), "the caret after them, above the signature")
+    }
+
+    /// A drafted reply that comes back with no words leaves the box as it was, never only the signature to send.
+    func testADraftWithNoWordsLeavesTheBoxAsItWas() async {
+        host.signatures["ada@example.test"] = "Ada"
+        routes.answer(API.Post.AiDraftReply.path, #"{"ok": true, "body": "  ", "model": "stub", "tone": "balanced"}"#)
+        let reply = composer(Seeds.reply(opened(), all: false, mine: host.mine))
+        reply.setBody("Got it\n\n-- \nAda", selection: NSRange(location: 6, length: 0))
+        await reply.draftReply()
+        XCTAssertEqual(reply.body, "Got it\n\n-- \nAda")
+        XCTAssertEqual(reply.notice, "Couldn’t draft a reply")
+    }
+
+    /// A drafted reply goes in above the signature, the caret after its words.
+    func testADraftedReplyLeavesTheCaretAboveTheSignature() async {
+        host.signatures["ada@example.test"] = "Ada"
+        routes.answer(API.Post.AiDraftReply.path, #"{"ok": true, "body": "Thursday works.", "model": "stub", "tone": "balanced"}"#)
+        let reply = composer(Seeds.reply(opened(), all: false, mine: host.mine))
+        await reply.draftReply()
+        XCTAssertEqual(reply.body, "Thursday works.\n\n-- \nAda")
+        XCTAssertEqual(reply.selectionRequest, NSRange(location: 15, length: 0))
+    }
+
     // MARK: Snippets and pictures
 
     func testTabBringsInASnippetThenGoesThroughItsPlaceholders() {
