@@ -1,0 +1,144 @@
+# What `just verify` runs that the served and clients workflows don't: the Python lints and every Python test (unit,
+# integration, contract, security, characterization), the page's checks and its Vitest suites, and the audit of
+# every lockfile. Each is a job of its own, side by side, so one failing never hides another. The audit also runs
+# each Monday, since a lockfile that hasn't changed can still pin something newly known to be vulnerable.
+#
+# Every action is pinned to a commit, with its release in a comment. Tools come pinned too: just, uv and osv-scanner
+# through taiki-e/install-action, Rust from core/rust-toolchain.toml, Python from .python-version, node from the
+# setup below.
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  python:
+    name: python (lint and tests)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The leaves the Python app shares with the core build from core/crates/mm-py as uv installs the package.
+      - name: Rust, as core/rust-toolchain.toml pins it
+        working-directory: core
+        run: rustup toolchain install
+
+      - uses: taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941 # v2.89.1
+        with:
+          tool: just@1.59.0,uv@0.13.5
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: core
+
+      - name: The Python packages
+        run: uv sync --frozen
+
+      - name: Ruff, the import contracts and pyright
+        run: just lint
+
+      - name: The package compiles
+        run: just compile
+
+      # Every test but the browser's and Dovecot's, which the served workflow and `just test-dovecot` run. The ten
+      # slowest are listed so they don't creep.
+      - name: Every Python test
+        run: just test --durations=10 --basetemp="$RUNNER_TEMP/pytest"
+
+      - name: What the servers printed
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: python-server-logs
+          path: ${{ runner.temp }}/pytest/**/server.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  web:
+    name: web (types, lint, Vitest)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The API's types are written from the Python app's routes, so the check needs the package and its leaves.
+      - name: Rust, as core/rust-toolchain.toml pins it
+        working-directory: core
+        run: rustup toolchain install
+
+      - uses: taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941 # v2.89.1
+        with:
+          tool: just@1.59.0,uv@0.13.5
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: core
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: The Python packages
+        run: uv sync --frozen
+
+      - name: No control bytes, no inline script, the theme parses, the CSS balances
+        run: just check-frontend
+
+      - name: The API's types match the routes; tsc, ESLint and Vitest
+        run: just check-web
+
+  audit:
+    name: audit (every lockfile)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Rust, as core/rust-toolchain.toml pins it
+        working-directory: core
+        run: rustup toolchain install
+
+      - uses: taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941 # v2.89.1
+        with:
+          tool: just@1.59.0,uv@0.13.5,osv-scanner@2.7.0
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: core
+
+      - name: The Python packages
+        run: uv sync --frozen
+
+      - name: pip-audit and osv-scanner
+        run: just audit
