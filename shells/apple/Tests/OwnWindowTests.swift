@@ -285,6 +285,13 @@ final class OwnWindowTests: XCTestCase {
                 host.layoutSubtreeIfNeeded()
                 try await Task.sleep(for: .milliseconds(10))
             }
+            // The window's catcher stands in its chain once SwiftUI has made its views, later on a busy Mac.
+            await until {
+                host.layoutSubtreeIfNeeded()
+                return sequence(first: window.firstResponder, next: { $0?.nextResponder }).contains {
+                    ($0 as? MessageWindowKeys.Catcher)?.verbs != nil
+                }
+            }
             try RealKeys.press("s", 1, in: window)
             await until { server.asked(API.Post.Flag.path).count == 1 }
             try RealKeys.press(typed, code, in: window)
