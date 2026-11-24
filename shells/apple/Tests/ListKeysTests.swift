@@ -317,6 +317,37 @@ final class ListKeysTests: XCTestCase {
         bare.contentView = nil
     }
 
+    /// After a click on the window's SwiftUI, e and d still reach the list past the Edit menu, whose Emoji & Symbols
+    /// and Start Dictation the menu bar matches on e and d alone: the keys pressed as a person presses them.
+    func testEAndDReachTheListPastTheEditMenuAfterAClickOnSwiftUI() async throws {
+        let (taken, restore) = RealKeys.withEditMenu()
+        defer { restore() }
+        let server = Fixture.server(rows: Array(Fixture.inbox.prefix(6)))
+        let (app, controller) = try await table(server: server)
+        let window = window()
+        let host = NSHostingView(rootView: Color.clear.frame(width: 860, height: 800))
+        window.contentView = host
+        host.addSubview(controller.scrollView)
+        UntakenKeys.Catcher.hang(on: window, for: app.mailbox)
+        RealKeys.key(window)
+        defer {
+            window.orderOut(nil)
+            window.contentView = nil
+        }
+        func type(_ key: String, _ code: UInt16) async throws {
+            XCTAssertTrue(window.makeFirstResponder(host), "a click on SwiftUI: the keyboard is its")
+            try RealKeys.press(key, code, in: window)
+            for _ in 0..<10 { try await Task.sleep(for: .milliseconds(10)) }
+        }
+        try await type("j", 38)
+        XCTAssertNotNil(app.selection.copy, "j opens the first row")
+        try await type("e", 14)
+        await until { !server.asked(API.Post.Archive.path).isEmpty }
+        try await type("d", 2)
+        await until { !server.asked(API.Post.Trash.path).isEmpty }
+        XCTAssertEqual(taken.keys, [], "the Edit menu took neither")
+    }
+
     /// Return in the search field leaves the keyboard there, as the page's does, where J would be typed: the empty
     /// pane says ↓ then, and ↓ goes on to the list, which takes the keyboard and opens its first row.
     func testTheEmptyPaneSaysTheKeyThatStartsAtTheTopFromWhereTheKeyboardIs() async throws {

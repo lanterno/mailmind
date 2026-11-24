@@ -260,6 +260,42 @@ final class OwnWindowTests: XCTestCase {
         XCTAssertEqual(server.asked(API.Post.Flag.path).count, 1, "⌘س starred nothing")
     }
 
+    /// e and d reach the message in its window as s does, past the Edit menu, whose Emoji & Symbols and Start
+    /// Dictation the menu bar matches on e and d alone: the keys pressed as a person presses them, the window's content
+    /// as it opens, with nothing in it holding the keyboard.
+    func testEAndDFileTheMessageInItsWindowPastTheEditMenu() async throws {
+        let core = try await openCore()
+        let (taken, restore) = RealKeys.withEditMenu()
+        defer { restore() }
+        for (typed, code, path) in [("e", UInt16(14), API.Post.Archive.path), ("d", 2, API.Post.Trash.path)] {
+            let server = OpenedMessageVerbsTests.server()
+            let mailbox = await mailbox(server)
+            let reader = ReaderModel()
+            reader.hold(Self.copy, OpenedMessageVerbsTests.head(Self.copy, thread: nil))
+            let verbs = MessageWindowVerbs(copy: Self.copy, mailbox: mailbox, reader: reader, routes: server.wire)
+            let content = MessageWindowContent(core: core, copy: Self.copy, reader: reader, find: ReaderFind(),
+                                               verbs: verbs)
+            let host = NSHostingView(rootView: MessageWindow.inDesk(of: mailbox, content).meadowLight(.day))
+            host.frame = CGRect(x: 0, y: 0, width: 820, height: 700)
+            let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.contentView = host
+            RealKeys.key(window)
+            for _ in 0..<20 {
+                host.layoutSubtreeIfNeeded()
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            try RealKeys.press("s", 1, in: window)
+            await until { server.asked(API.Post.Flag.path).count == 1 }
+            try RealKeys.press(typed, code, in: window)
+            await until { !server.asked(path).isEmpty }
+            XCTAssertFalse(server.asked(path).isEmpty, "\(typed) files the message")
+            window.orderOut(nil)
+            window.contentView = nil
+        }
+        XCTAssertEqual(taken.keys, [], "the Edit menu took neither")
+    }
+
     // MARK: Find
 
     /// ⌘F in a message's own window finds in its message, as Edit › Find in Message says there, from the window
