@@ -469,8 +469,16 @@ final class OpenedMessageVerbsTests: XCTestCase {
             XCTAssertEqual(body, API.SeenBody(folder: copy.folder, key: copy.key, seen: seen, uid: copy.uid), said)
         case .snooze:
             let body = try JSONDecoder().decode(API.SnoozeBody.self, from: try await asked(API.Post.Snooze.path))
-            XCTAssertEqual([body.folder, body.key.map(String.init), body.uid.map(String.init)],
-                           [copy.folder, String(copy.key), String(copy.uid)], said)
+            if opened.whole {
+                // A conversation's row snoozes the whole conversation, by its thread, as the page's does: none of
+                // its messages stays behind as a row of its own.
+                let row = try XCTUnwrap(opened.row)
+                XCTAssertEqual([body.account, body.threadId], [row.account, row.threadId], said)
+                XCTAssertNil(body.key, said + ": no one message of it")
+            } else {
+                XCTAssertEqual([body.folder, body.key.map(String.init), body.uid.map(String.init)],
+                               [copy.folder, String(copy.key), String(copy.uid)], said)
+            }
         case .later:
             let body = try JSONDecoder().decode(API.ReplyLaterBody.self, from: try await asked(API.Post.Replylater.path))
             XCTAssertEqual([body.folder, body.key.map(String.init), body.uid.map(String.init)],
@@ -736,6 +744,29 @@ final class OpenedMessageVerbsTests: XCTestCase {
             await waiting(for: "\(stack) closes the message") { world.app.selection.copy == nil }
             XCTAssertEqual(world.app.place, .virtual(stack, account: Fixture.ada))
         }
+    }
+
+    /// A conversation's row in Snoozed is brought back whole, by its thread, as the page's open conversation is; a
+    /// message's row by its copy.
+    func testUnsnoozeBringsAConversationsRowBackWhole() async throws {
+        let server = Self.server()
+        server.on("POST", API.Post.Unsnooze.path, API.Unsnoozed(count: 3, ok: true))
+        let world = await world(server)
+        world.app.place = .virtual(.snoozed, account: Fixture.ada)
+        await waiting(for: "Snoozed's rows") { world.app.list?.copy(at: 1) != nil }
+        let conversation = try XCTUnwrap(world.app.list?.copy(at: 1))
+        XCTAssertTrue(conversation.isConversation(grouped: world.mailbox.grouped), "the row stands for a conversation")
+        world.mailbox.chose([conversation])
+        await world.desk.attention.unsnooze([MailCopy(conversation)])
+        let body = try JSONDecoder().decode(API.NamesThreadOrMessages.self,
+                                            from: try XCTUnwrap(server.asked(API.Post.Unsnooze.path).first).body)
+        XCTAssertEqual(body, API.NamesThreadOrMessages(account: conversation.account, threadId: conversation.threadId))
+
+        let message = try XCTUnwrap(world.app.list?.copy(at: 0))
+        await world.desk.attention.unsnooze([MailCopy(message)])
+        let again = try JSONDecoder().decode(API.NamesThreadOrMessages.self,
+                                             from: try XCTUnwrap(server.asked(API.Post.Unsnooze.path).last).body)
+        XCTAssertEqual(again, API.NamesThreadOrMessages(folder: message.folder, key: message.key, uid: message.uid))
     }
 
     /// The stack's verb that takes the message open off it, as the pane's bar and the snooze chooser run it.
