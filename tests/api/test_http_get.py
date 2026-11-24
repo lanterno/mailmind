@@ -180,7 +180,7 @@ SEARCHES = (
     "is:answered",
     "is:junk",
     "is:newsletter",
-    "is:starred",                           # not an operator: searched as text
+    "is:starred",                           # flagged, as the app calls it
     "bucket:spam/scam",
     "category:finance",
     "in:Drafts",

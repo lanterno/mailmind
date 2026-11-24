@@ -1622,7 +1622,40 @@
   "body": {
    "generated": "2026-11-02T12:00:00+00:00",
    "has_more": false,
-   "items": [],
+   "items": [
+    {
+     "account": "ada@example.test",
+     "action": null,
+     "alias": "Ada",
+     "bucket": "other/personal-ish",
+     "commitment_worthy": false,
+     "date": "2026-10-30",
+     "flagged": true,
+     "folder": "INBOX",
+     "from_addr": "noor@studio.example.test",
+     "from_name": "Noor Haddad",
+     "has_attach": true,
+     "importance": null,
+     "is_junk": false,
+     "key": 7,
+     "needs_you": false,
+     "reply_worthy": false,
+     "safe_to_file": false,
+     "seen": false,
+     "sent_to": [
+      {
+       "addr": "ada@example.test",
+       "name": "Ada Park"
+      }
+     ],
+     "sent_to_more": 0,
+     "snippet": "Forwarding Lin's note, see attached.",
+     "subject": "Fwd: Fabric samples",
+     "thread_id": "rf:ada@example.test:46cc6a37490f7358",
+     "uid": 7,
+     "when": "3d ago"
+    }
+   ],
    "offset": 0,
    "ok": true,
    "query": "is:starred",

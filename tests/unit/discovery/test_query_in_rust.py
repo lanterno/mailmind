@@ -21,6 +21,7 @@ from mailmind.discovery.domain.query import Clause, Kind, QuerySpec
 MAX_CHARS = 512
 FIELDS = frozenset({"from", "subject", "body", "to", "cc"})
 FLAGS = frozenset({"unread", "read", "flagged", "answered", "junk"})
+FLAG_ALIAS = {"starred": "flagged"}           # the app calls a flagged message starred
 BUCKET_ALIAS = {
     "newsletter": "newsletters/marketing", "newsletters": "newsletters/marketing",
     "marketing": "newsletters/marketing",
@@ -32,10 +33,10 @@ BUCKET_ALIAS = {
     "personal": "personal/protected", "protected": "personal/protected", "other": "other/personal-ish",
 }
 OPERATORS = ("from", "to", "cc", "subject", "body", "is", "has", "in", "label", "account", "before", "after", "bucket", "category")
-IS_OFFERED = ("unread", "read", "flagged", "answered", "junk", "snoozed", "newsletter", "receipt", "notification")
+IS_OFFERED = ("unread", "read", "starred", "answered", "junk", "snoozed", "newsletter", "receipt", "notification")
 HAS_OFFERED = ("attachment",)
 _NARROW_IS = frozenset({"newsletter", "newsletters", "marketing", "receipt", "receipts", "transactional",
-                        "notification", "notifications", "automated", "spam", "scam", "flagged", "unread", "junk"})
+                        "notification", "notifications", "automated", "spam", "scam", "flagged", "starred", "unread", "junk"})
 
 
 def _seconds(text):
@@ -53,8 +54,8 @@ def _clause(token):
     name, lower = name.lower(), value.lower()
     if sep and name in FIELDS and value:
         return Clause(Kind.FIELD, value, name, negated, narrows=True)
-    if sep and name == "is" and lower in FLAGS:
-        return Clause(Kind.FLAG, None, lower, negated, narrows=lower in _NARROW_IS)
+    if sep and name == "is" and FLAG_ALIAS.get(lower, lower) in FLAGS:
+        return Clause(Kind.FLAG, None, FLAG_ALIAS.get(lower, lower), negated, narrows=lower in _NARROW_IS)
     if sep and name == "is" and lower == "snoozed":
         return Clause(Kind.SNOOZED, negated=negated)
     if sep and name == "is" and lower in BUCKET_ALIAS:
@@ -101,7 +102,7 @@ SPACES = "".join(chr(c) for c in range(0x110000) if chr(c).isspace())
 TRICKY = ("꟎꟒꟔\U00016ea0\U00016ebb᫏ʕΣσςͅ'.­Kİßé日‮​"
           "\udce9𐏿\U00100000\U00100001\U0010fffd\x00")
 OPERATOR = st.sampled_from([*OPERATORS, "IS", "Is", "BUCKET", "Category", "FROM", "Before", "AFTER", "x", ""])
-VALUE = st.sampled_from([*FLAGS, *BUCKET_ALIAS, "snoozed", "attachment", "UNREAD", "Newsletter", "ΣΑΣ", "marKeting",
+VALUE = st.sampled_from([*FLAGS, *FLAG_ALIAS, *BUCKET_ALIAS, "snoozed", "attachment", "UNREAD", "Newsletter", "ΣΑΣ", "marKeting",
                          "Archive", "ada@example.test", "a b", ""])
 LETTERS = st.text(st.sampled_from("ab:-\"'\\" + TRICKY + SPACES[:6] + "　\x1c"), max_size=8)
 ANY_TEXT = st.text(st.characters(), max_size=12)
