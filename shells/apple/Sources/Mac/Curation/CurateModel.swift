@@ -71,6 +71,9 @@ final class CurateModel {
     private(set) var audit: [API.AuditEvent] = []
     var marked: Set<String> = []
     var cleaning: Cleaning?
+    /// Whether to unsubscribe, as the person last ticked it for a sender, by address: the sheet opens with it again,
+    /// so a box unticked never comes back ticked over an unsubscribe Undo can't take back. Kept while MailMind runs.
+    @ObservationIgnored private var unsubscribeChoices: [String: Bool] = [:]
     var batching: Batching?
     /// An account's sweep, planned and waiting for Confirm: what goes, bucket by bucket, and what stays.
     private(set) var sweepArmed: API.AccountSwept?
@@ -137,12 +140,22 @@ final class CurateModel {
         do {
             let preview = try await routes.get(API.Get.CleanupSender.self, ["addr": sender])
             let method = preview.unsub.method
-            cleaning = Cleaning(preview: preview, scope: .sender, unsubscribe: method == "one-click" || method == "mailto")
+            let chosen = unsubscribeChoices[preview.fromAddr.lowercased()]
+            cleaning = Cleaning(preview: preview, scope: .sender,
+                                unsubscribe: chosen ?? (method == "one-click" || method == "mailto"))
         } catch let problem as Problem {
             notices.say(problem.detail ?? String(localized: "error"), refused: true)
         } catch {
             notices.say(String(localized: "Couldn’t load sender"), refused: true)
         }
+    }
+
+    /// The box ticked or unticked: kept for this sender, and a cleanup armed asks again, since what it does changed.
+    func chooseUnsubscribe(_ on: Bool) {
+        guard let asked = cleaning else { return }
+        unsubscribeChoices[asked.preview.fromAddr.lowercased()] = on
+        cleaning?.unsubscribe = on
+        cleaning?.armed = false
     }
 
     /// The first press arms the cleanup; the second runs it.

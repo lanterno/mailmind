@@ -228,7 +228,7 @@ struct CleanupSheet: View {
                 }
                 if asked.method != "none" {
                     Toggle(asked.method == "http-page" ? "open the unsubscribe page" : "also send the unsubscribe now",
-                           isOn: Binding(get: { asked.unsubscribe }, set: { model.cleaning?.unsubscribe = $0 }))
+                           isOn: Binding(get: { asked.unsubscribe }, set: { model.chooseUnsubscribe($0) }))
                         .toggleStyle(.checkbox)
                         .font(.meadow(.ui, 13.5))
                         .padding(.leading, 26)
