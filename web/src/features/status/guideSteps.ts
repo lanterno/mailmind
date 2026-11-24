@@ -26,7 +26,7 @@ export function guideSteps({ ai, singleKeys }: { ai: boolean; singleKeys: boolea
     ...(ai
       ? [{ id: "ask", at: ["#search"], title: "Ask, or tell it what to do", text: "Start the search box with ? to ask your mail a question, or with ! to say what you want done. A ! shows you what it would do, and nothing happens until you confirm." }]
       : []),
-    { id: "screener", at: ['a.frow[data-folder="__screener__"]', "#rail"], title: "The Screener", text: "Someone new has written? They wait in the Screener for you to decide. Allow keeps them, and Screen out stops their mail reaching your Inbox." },
+    { id: "screener", at: ['a.frow[data-folder="__screener__"]', "#rail"], title: "The Screener", text: "Someone new has written? They wait in the Screener for you to decide. Let in keeps them, and Screen out stops their mail reaching your Inbox." },
   ];
 }
 

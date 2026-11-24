@@ -12,7 +12,7 @@ import { Icon } from "../../lib/ui/Icon";
 import { readAgain, useDigest } from "../mailbox";
 import { decisionWords } from "./screenerWords";
 
-const VERDICT_WORD: Record<Verdict, string> = { keep: "Allow", block: "Screen out" };
+const VERDICT_WORD: Record<Verdict, string> = { keep: "Let in", block: "Screen out" };
 
 export const useScreener = (account: string | undefined) =>
   useQuery({ queryKey: ["screener", account], queryFn: () => get(`/api/screener?account=${encodeURIComponent(account!)}`), enabled: Boolean(account) });
@@ -57,7 +57,7 @@ export function ScreenerPane({ account }: { account: string | undefined }) {
   };
   if (!data) return <div id="rows"><div className="nores" role="status">Loading…</div></div>;
   if (!rows.length) {
-    return <div id="rows"><div className="nores allclear"><div className="ac-h">Screener clear</div><div className="ac-b">Every sender in this inbox has been allowed or screened out.</div></div></div>;
+    return <div id="rows"><div className="nores allclear"><div className="ac-h">Screener clear</div><div className="ac-b">Every sender in this inbox has been let in or screened out.</div></div></div>;
   }
   return (
     <div id="rows">
@@ -76,7 +76,7 @@ export function ScreenerPane({ account }: { account: string | undefined }) {
               {hint && <div className="scr-hint"><Icon name="wind" /> <b>{VERDICT_WORD[hint.verdict]}?</b> {hint.why}</div>}
             </div>
             <div className="scr-acts">
-              <button className={hint?.verdict === "keep" ? "scr-allow suggested" : "scr-allow"} onClick={() => void decide(s.from_addr, s.from_name, "keep")}><Icon name="check" /> Allow</button>
+              <button className={hint?.verdict === "keep" ? "scr-allow suggested" : "scr-allow"} onClick={() => void decide(s.from_addr, s.from_name, "keep")}><Icon name="check" /> Let in</button>
               <button className={hint?.verdict === "block" ? "scr-block suggested" : "scr-block"} onClick={() => void decide(s.from_addr, s.from_name, "block")}><Icon name="ban" /> Screen out</button>
             </div>
           </div>
