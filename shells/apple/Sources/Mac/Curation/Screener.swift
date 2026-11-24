@@ -136,7 +136,7 @@ final class ScreenerModel {
         }
     }
 
-    /// Allow a sender, or screen them out.
+    /// Let a sender in, or screen them out: said as the buttons say it.
     func decide(_ sender: String, _ verdict: API.Verdict) async {
         guard let routes = link.routes else { return }
         let item = rows.first { $0.fromAddr == sender }
@@ -145,7 +145,7 @@ final class ScreenerModel {
         do {
             let changed = try await routes.post(API.Post.Rules.self, API.RuleBody(token: sender, verdict: verdict == .keep ? .keep : .block))
             let who = Self.calling(item, sender)
-            notices.say(verdict == .keep ? String(localized: "Allowed \(who)")
+            notices.say(verdict == .keep ? String(localized: "Let in \(who)")
                 : String(localized: "Screened out \(who)") + (changed.trashed ? " · trashed" : ""))
             if let item { recent.insert(Decided(sender: item, verdict: verdict, at: Date()), at: 0) }
             self.changed()
@@ -172,7 +172,7 @@ final class ScreenerModel {
     /// The page's word for each verdict, as a hint names it.
     static func word(_ verdict: API.Verdict) -> String {
         switch verdict {
-        case .keep: String(localized: "Allow")
+        case .keep: String(localized: "Let in")
         case .block: String(localized: "Screen out")
         }
     }
