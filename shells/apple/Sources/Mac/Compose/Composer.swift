@@ -1084,7 +1084,10 @@ final class Composer: Identifiable {
         let body = payload().send(after: after > 0 ? after : 0)
         let replyKey = mode == .reply || mode == .replyall ? origKey : nil
         let snapshot = snapshot()   // Undo, then send it unchanged, isn't asked again
-        let waiting = saving   // a save still in flight: the send must name the copy it leaves
+        // A send for later leaves its draft in Drafts until it goes, and there to send another time if it is
+        // cancelled: saved now as a save someone asks for is, which tries its server at once, so the copy there is
+        // what was scheduled. Else a save still in flight: the send must name the copy it leaves.
+        let waiting = after > 0 ? save(silent: true) : saving
         dirty = false
         close(force: true)
         host.send(self, body, snapshot: snapshot, replyKey: replyKey, after: after, waitingFor: waiting)
