@@ -156,6 +156,14 @@ class Gateway:
         lm = self._model()
         return self._governor.held_back(features.kind(feature), feature, model or lm.model, lm)
 
+    def stopped(self, feature: str, model: str | None = None) -> str | None:
+        """What stops background calls for `feature` until it passes, the breaker ("breaker") or today's limit ("limit"),
+        or None: not someone using the AI now, which only has them wait a moment."""
+        if self._governor is None:
+            return None
+        lm = self._model()
+        return self._governor.stopped(feature, model or lm.model, lm)
+
     def _admitted(self, feature: str, name: str, lm: LanguageModel) -> AbstractContextManager[None]:
         if self._governor is None:
             return contextlib.nullcontext()

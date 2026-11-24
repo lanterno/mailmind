@@ -96,6 +96,12 @@ class CostGovernor:
                 return "away"
             if kind == SCHEDULED and now - self._last_seen > SCHEDULED_PRESENCE_SECONDS:
                 return "away"
+        return self.stopped(feature, model, instance)
+
+    def stopped(self, feature: str, model: str, instance: LanguageModel) -> str | None:
+        """What stops background calls for `feature` until it passes, whoever is using the app: the breaker ("breaker") or
+        today's limit ("limit"), or None. Neither waits on someone asking, as yielding does."""
+        with self._lock:
             if self._is_open(feature, model, instance):
                 return "breaker"
         return "limit" if self.room() <= 0 else None    # a ledger that can't be read stops work, not starts it

@@ -89,7 +89,7 @@ class Status:
         chosen for a server on this Mac runs in a cloud (`Engine.cloud_model`, said on or off), where the key came
         from, how the most recent call went (last_ok None until one has run), what today's calls cost so far in
         micro-dollars (None when the usage ledger can't be read), and while AI is on how many messages from the last 30
-        days wait for a summary."""
+        days wait for a summary, and whether they are being read (`summarizing`)."""
         engine = self._engine()
         on = self._gateway().on
         return {"engine": "api" if on else "none", "provider": engine.provider, "off": None if on else engine.off,
@@ -97,17 +97,24 @@ class Status:
                 "cloud_model": engine.cloud_model, "key_from": engine.key_from if on else "",
                 "last_ok": self._last["ok"], "last_ts": self._last["ts"], "last_error": self._last["error"],
                 "spent_today_micros": self._spent_today(), "limit_micros": self._governor().limit_micros(),
-                **self._batch_note(on), **self._waiting_note(on)}
+                **self._batch_note(on), **self._waiting_note(on, engine)}
 
-    def _waiting_note(self, on: bool) -> dict[str, int]:
-        """`summaries_waiting`, while AI is on and the store can be read."""
+    def _waiting_note(self, on: bool, engine: Engine) -> dict[str, Any]:
+        """`summaries_waiting` and `summarizing`, while AI is on and the store can be read."""
         if not on or self._waiting is None:
             return {}
         try:
-            return {"summaries_waiting": self._waiting()}
+            waiting = self._waiting()
         except Exception as e:
             log.warning("what waits for a summary can't be read", exc_info=e)
             return {}
+        return {"summaries_waiting": waiting, "summarizing": waiting > 0 and self._reading(engine)}
+
+    def _reading(self, engine: Engine) -> bool:
+        """Whether the background reads what waits for a summary, now or at its next round, which a kick brings when mail
+        comes: neither today's limit nor the breaker holds its summaries back. Someone asking the AI something only has
+        them wait a moment."""
+        return self._gateway().stopped("triage", engine.background_model) is None
 
     def _batch_note(self, on: bool) -> dict[str, int]:
         """`batch_waiting`, when there's a batch out to say so of."""
