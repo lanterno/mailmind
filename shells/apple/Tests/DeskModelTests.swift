@@ -881,6 +881,34 @@ final class DeskModelTests: XCTestCase {
         XCTAssertEqual(model.cleaning?.unsubscribe, true, "another sender opens as ever")
     }
 
+    /// What Curate did goes on its sheet's Edit ▸ Undo too, a sheet being a window of its own whose undo manager is
+    /// asked while it is in front: undone there, it is taken back as the toast's Undo takes it.
+    func testACleanupIsOnTheSheetsEditUndoToo() async {
+        routes.answer("GET", "/api/cleanup/sender", DeskFixture.senderPreview)
+        routes.answer("POST", "/api/cleanup/execute", API.CleanedUp(
+            blockScope: .sender, blockedToken: "news@shop.example.test", method: "one-click", ok: true,
+            reversible: API.Reversible(block: true, sweep: true, unsubscribe: false), status: "unsubscribed_oneclick",
+            sweepCapped: false, sweepFailed: 0, sweepQueued: 0, swept: 31, undoGroup: "ug-1"))
+        let model = CurateModel(link: link, notices: notices)
+        let sheet = UndoManager()
+        sheet.groupsByEvent = false
+        model.sheetUndo = sheet
+        var undone: [String] = []
+        model.undoFromSheet = { undone.append($0) }
+
+        await model.previewCleanup("news@shop.example.test")
+        await model.pressCleanup()
+        sheet.beginUndoGrouping()
+        await model.pressCleanup()
+        sheet.endUndoGrouping()
+        XCTAssertTrue(undoable, "the toast offers Undo")
+        XCTAssertTrue(sheet.canUndo)
+        XCTAssertEqual(sheet.undoActionName, "Clean Up")
+        sheet.undo()
+        XCTAssertEqual(undone, ["Clean Up"])
+        XCTAssertFalse(sheet.canUndo, "once")
+    }
+
     func testASweepIsPlannedThenRunOnConfirm() async {
         let going = [API.SweepBucket(bucket: "newsletters/marketing", count: 12, senders: [
             API.SweepSender(count: 9, fromAddr: "news@loom.example.test"),
