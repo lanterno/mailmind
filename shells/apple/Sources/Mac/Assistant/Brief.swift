@@ -124,7 +124,7 @@ struct BriefScreen: View {
                     Spacer(minLength: 0)
                 } else {
                     MeadowAIMark("Your brief")
-                    if let written = BriefWords.written(model.brief) {
+                    if let written = BriefWords.written(model.brief, reading: model.summarizing) {
                         Text(written)
                             .font(.meadow(.ui, 12.5))
                             .foregroundStyle(meadow.ink3)

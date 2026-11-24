@@ -56,9 +56,12 @@ enum BriefWords {
         return now.formatted(style.weekday(.wide)) + " · " + now.formatted(style.day().month(.wide))
     }
 
-    /// When the brief was written, for the line beside "Your brief", and whether the mail has changed since.
-    static func written(_ brief: API.Brief?, calendar: Calendar = .current, locale: Locale = .current) -> String? {
-        guard let brief, let when = EventWhen.moment(brief.generated, calendar: calendar) else { return nil }
+    /// When the brief was written, for the line beside "Your brief", and whether the mail has changed since. None while
+    /// the AI is `reading` the new mail and nothing is written yet: the brief says it is reading, not that it was
+    /// written.
+    static func written(_ brief: API.Brief?, reading: Bool = false, calendar: Calendar = .current,
+                        locale: Locale = .current) -> String? {
+        guard let brief, !(reading && brief.narrative.isEmpty), let when = EventWhen.moment(brief.generated, calendar: calendar) else { return nil }
         let at = EventWhen.clock(when, calendar: calendar, locale: locale)
         return brief.stale ? String(localized: "written at \(at) · mail has changed since")
             : String(localized: "written at \(at)")
