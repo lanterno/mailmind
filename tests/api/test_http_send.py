@@ -13,6 +13,7 @@ tests/characterization/test_http_send_in_process.py: no answer over HTTP tells t
 import base64
 import email
 import email.policy
+import email.utils
 import re
 from datetime import datetime, timedelta, timezone
 
@@ -333,7 +334,23 @@ def test_a_changed_mind_about_an_invite_sends_each_answer(app, world):
 
 
 def test_wire_dates_follow_the_frozen_clock(send):
+    # Dated as it leaves, once the Undo Send window has passed, not as it was written.
     send.post("send", "/api/send", new(idempotency_key="k-date"))
     send.drain("sent")
     [d] = send.world.smtp.messages
-    assert re.search(rb"^Date: Mon, 02 Nov 2026 12:00:00 \+0000\r?$", d.data, re.M)
+    left = datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc) + timedelta(seconds=send.window + 1)
+    assert f"\r\nDate: {email.utils.format_datetime(left)}\r\n".encode() in d.data
+
+
+def test_a_message_sent_later_is_dated_as_it_leaves_and_keeps_its_message_id(app, world):
+    at = datetime(2026, 11, 2, 18, 0, tzinfo=timezone.utc)
+    assert app.post("/api/send", new(send_after=int(at.timestamp()), idempotency_key="k-dated")).json["ok"]
+    [queued] = rows("SELECT message_id FROM outbox")
+    app.clock.move_to(at + timedelta(seconds=5))
+    app.work("outbox")
+    [d] = world.smtp.messages
+    sent = email.message_from_bytes(d.data, policy=email.policy.compat32)
+    assert sent["Date"] == "Mon, 02 Nov 2026 18:00:05 +0000"
+    assert sent["Message-ID"].strip() == queued["message_id"]
+    [copy] = [m.raw for m in world.server.mailbox(w.ADA, "Sent").messages.values() if b"Fabric order" in m.raw]
+    assert copy == d.data
