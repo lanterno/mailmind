@@ -423,6 +423,26 @@ final class ComposerTests: XCTestCase {
         XCTAssertEqual(host.sent.first?.after, host.now() + 3600)
     }
 
+    /// A send for later leaves its draft in Drafts until it goes: the draft is saved first, as a save someone asks
+    /// for is, which tries its server at once, and the send waits for it, so Drafts holds what was scheduled, there to
+    /// send another time if the send is cancelled. A send now saves nothing first.
+    func testASendForLaterSavesItsDraftFirstAndWaitsForIt() async throws {
+        let later = written("Thursday, then")
+        later.send(after: host.now() + 3600)
+        let sent = try XCTUnwrap(host.sent.first)
+        XCTAssertTrue(sent.waited, "the send waits for the save")
+        await eventually("saved") { routes.calls(to: "/api/draft").count == 1 }
+        let saved = try XCTUnwrap(routes.calls(to: "/api/draft").first?.body)
+        XCTAssertNotEqual(saved["autosave"], .bool(true))
+        XCTAssertEqual(saved["text"]?.string, "Thursday, then")
+
+        let now = written("Right away")
+        now.send()
+        XCTAssertEqual(host.sent.last?.waited, false)
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(routes.calls(to: "/api/draft").count, 1, "a send now saves nothing first")
+    }
+
     func testReplyAllsFixRemovesOnlyThoseCopiedFromTheOriginal() {
         var seed = ComposeSeed()
         seed.mode = .replyall
