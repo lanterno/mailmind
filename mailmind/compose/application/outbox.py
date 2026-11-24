@@ -171,12 +171,14 @@ class Outbox:
             except Exception as e:
                 owed = f"sent copy failed: {type(e).__name__}"
                 log.warning("Sent-copy failed for #%(id)s: %(why)s", {"id": oid, "why": self._transport.sanitize_error(e)})
+        answered_now = False
         if owes.answered:
             try:
                 pk = self._original_pk(row)
-                gates.run(row["orig_account"],
-                          lambda: self._effects.mark_answered(pk, row["orig_account"], row["orig_message_id"]),
-                          priority=gates.Priority.AFTER_USER)
+                marked = gates.run(row["orig_account"],
+                                   lambda: self._effects.mark_answered(pk, row["orig_account"], row["orig_message_id"]),
+                                   priority=gates.Priority.AFTER_USER)
+                answered_now = marked[0]
                 self._commit(lambda c: self._book.outbox_set(c, oid, answered_set=1))
             except Exception as e:
                 owed = owed or f"marking the original answered failed: {type(e).__name__}"
@@ -191,6 +193,11 @@ class Outbox:
                 self._commit(lambda c: self._book.outbox_set(c, oid, followup_recorded=1))
             except Exception as e:
                 log.warning("followup record failed for #%(id)s", {"id": oid}, exc_info=e)
+        if answered_now:          # after the follow-up step: a thread that waited on your reply starts no `sent` one
+            try:
+                self._effects.answered(row["orig_account"])
+            except Exception as e:
+                log.warning("follow-ups unresolved after #%(id)s", {"id": oid}, exc_info=e)
         if owes.draft:
             try:
                 with self._uow.read() as c:

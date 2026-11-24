@@ -8,6 +8,7 @@ from mailmind.attention.application.threads import Threads
 from mailmind.attention.domain import followups
 from mailmind.attention.domain.events import FollowUpDismissed, FollowUpsChanged, ReplyLaterChanged
 from mailmind.kernel.errors import Refused
+from mailmind.kernel.ids import AccountId
 from mailmind.kernel.when import now_iso
 from mailmind.platform import bus
 from mailmind.platform.db.uow import UnitOfWork
@@ -37,6 +38,16 @@ class FollowUps:
             self._book.followup_detect_received(c, now, followups.GRACE_DAYS, followups.EXPIRE_DAYS)
             after = self._book.due_followup_keys(c)
         if after != before:                               # set comparison catches swaps, not just count deltas
+            bus.publish(FollowUpsChanged(len(after)))
+
+    def resolve(self, account: AccountId) -> None:
+        """A reply marked the account's original answered: what that met resolves now, not at the next minute's round,
+        and the tabs hear it where the due ones changed."""
+        with self._uow.write() as c:
+            before = self._book.due_followup_keys(c)
+            self._book.resolve_followups(c, account)
+            after = self._book.due_followup_keys(c)
+        if after != before:
             bus.publish(FollowUpsChanged(len(after)))
 
     def dismiss(self, body: dict[str, Any]) -> dict[str, Any]:

@@ -128,6 +128,10 @@ class _Effects:
         from mailmind.bootstrap import attention
         attention.book.followup_record_sent(c, account, thread_id, now, at)
 
+    def answered(self, account):
+        from mailmind.bootstrap import attention
+        attention.followups.resolve(account)
+
 
 class _Screen:
     """What the server keeps about folders and tells the page, until the Mailbox and the routers hold it."""
