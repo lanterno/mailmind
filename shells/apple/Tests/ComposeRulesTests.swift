@@ -367,7 +367,10 @@ final class ComposeModelTests: XCTestCase {
     func testSubjectsArePrefixedOnce() {
         XCTAssertEqual(Addresses.prefixed("Lunch", "Re:"), "Re: Lunch")
         XCTAssertEqual(Addresses.prefixed("re: Lunch", "Re:"), "Re: Lunch")
-        XCTAssertEqual(Addresses.prefixed("Fwd: Lunch", "Re:"), "Re: Lunch")
+        XCTAssertEqual(Addresses.prefixed("Fwd: Fabric samples", "Re:"), "Re: Fwd: Fabric samples",
+                       "a reply keeps the forward's prefix, as Mail does")
+        XCTAssertEqual(Addresses.prefixed("Re: Plans", "Fwd:"), "Fwd: Re: Plans", "and a forward the reply's")
+        XCTAssertEqual(Addresses.prefixed("FW: Plans", "Fwd:"), "Fwd: Plans")
         XCTAssertEqual(Addresses.prefixed("", "Fwd:"), "Fwd:")
         XCTAssertEqual(Addresses.prefixed(nil, "Re:"), "Re:")
     }
