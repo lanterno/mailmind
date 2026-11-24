@@ -282,8 +282,11 @@ class Drafts:
         now = _now()
         with self._uow.read() as c:
             due = self._book.journal_due(c, now, now + draft_journal.PUSH_EVERY)
+        # Each waits its turn for a moment, ahead of the syncs and the upkeep waiting too, as a person's own change and IDLE
+        # stay ahead of it: one that only asked whenever the gate was free met it taken, round after round, while the
+        # account synced, and a draft closed reached its server minutes on.
         for r in due:
-            self._try_push(r["draft_id"], priority=gates.Priority.AFTER_USER, wait=False)
+            self._try_push(r["draft_id"], priority=gates.Priority.AFTER_USER, deadline=PUSH_WAIT)
         with self._uow.read() as c:
             at = self._book.journal_next_due(c, now, now + draft_journal.PUSH_EVERY)
         return draft_journal.next_round_in(now, at)
