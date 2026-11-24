@@ -1009,7 +1009,15 @@ struct LaterChoices: View {
     /// The preset the keyboard is on: the first as the popover opens, as the page's `useFocusFirst` puts it there,
     /// never the date and time of one's own; the arrows move it and Return picks it.
     @FocusState private var focused: Int?
+    /// The date and time of one's own has the keyboard: its digits, arrows and Return are the field's.
+    @FocusState private var ownTime: Bool
     @Environment(\.meadow) private var meadow
+
+    /// Whether the date and time field has the keys: as SwiftUI's focus says, or as the window's, which a click in
+    /// the field gives it before SwiftUI may have heard.
+    private var fieldHasKeys: Bool {
+        ownTime || NSApp.keyWindow?.firstResponder is NSDatePicker
+    }
 
     var body: some View {
         let presets = SendTimes.presets()
@@ -1029,7 +1037,8 @@ struct LaterChoices: View {
                 .focusable()
                 .focused($focused, equals: index)
                 .focusEffectDisabled()
-                .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: [])
+                // A digit typed in the time field is the time's, never a preset's.
+                .keyboardShortcut(ownTime ? nil : KeyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: []))
             }
             MeadowPopRule()
             HStack(spacing: 8) {
@@ -1037,16 +1046,10 @@ struct LaterChoices: View {
                 DatePicker("Pick a date & time", selection: $custom)
                     .datePickerStyle(.compact)
                     .labelsHidden()
+                    .focused($ownTime)
                 Spacer(minLength: 6)
-                Button("Schedule") {
-                    let when = Int(custom.timeIntervalSince1970)
-                    if Double(when) > Date().timeIntervalSince1970 {
-                        pick(when)
-                    } else {
-                        composer.say("Pick a future time")
-                    }
-                }
-                .meadowButton(small: true)
+                Button("Schedule", action: scheduleOwn)
+                    .meadowButton(small: true)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
@@ -1064,22 +1067,38 @@ struct LaterChoices: View {
         .onKeyPress(.downArrow) { move(1, among: presets.count) }
         .onKeyPress(.upArrow) { move(-1, among: presets.count) }
         .onKeyPress(.return) {
+            // Return in the time field schedules the time typed there.
+            if fieldHasKeys {
+                scheduleOwn()
+                return .handled
+            }
             guard let at = focused, presets.indices.contains(at) else { return .ignored }
             pick(presets[at].epoch)
             return .handled
         }
         // A preset's digit where the layout's digits aren't ASCII (Arabic's ١), which the shortcuts above never match.
         .onKeyPress(phases: .down) { press in
-            guard press.modifiers.isEmpty, let digit = SingleKey.typed(press)?.wholeNumberValue,
+            guard !fieldHasKeys, press.modifiers.isEmpty, let digit = SingleKey.typed(press)?.wholeNumberValue,
                   presets.indices.contains(digit - 1) else { return .ignored }
             pick(presets[digit - 1].epoch)
             return .handled
         }
     }
 
-    /// Move the keyboard `by` presets, from the first to the last and no further, while it is on one.
+    /// The date and time of one's own, once it is still to come.
+    private func scheduleOwn() {
+        let when = Int(custom.timeIntervalSince1970)
+        if Double(when) > Date().timeIntervalSince1970 {
+            pick(when)
+        } else {
+            composer.say("Pick a future time")
+        }
+    }
+
+    /// Move the keyboard `by` presets, from the first to the last and no further, while it is on one; the time
+    /// field's arrows step its time.
     private func move(_ by: Int, among count: Int) -> KeyPress.Result {
-        guard let at = focused else { return .ignored }
+        guard !fieldHasKeys, let at = focused else { return .ignored }
         focused = min(max(at + by, 0), count - 1)
         return .handled
     }
