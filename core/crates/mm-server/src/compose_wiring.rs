@@ -193,7 +193,7 @@ impl Copies for ImapCopies {
         raw: &[u8],
         prev: &InPlace,
         message_id: Option<&str>,
-        tried: Option<&str>,
+        tried: &[&str],
     ) -> Result<Appended, CopyFailed> {
         let mut s = self.open(account, TIMEOUT_SECONDS)?;
         let drafts = ImapCopies::role(&mut s, "drafts", "Drafts")?;
@@ -224,17 +224,22 @@ impl Copies for ImapCopies {
                 }
             }
         }
-        let left = ImapCopies::left_by(&mut s, tried)?;
-        let landed = left.filter(|_| tried == message_id);
+        // Each copy a try may have left: this very message's stands, and every other goes once the new copy is there.
+        let mut lefts = Vec::new();
+        for mid in tried {
+            lefts.push((*mid, ImapCopies::left_by(&mut s, Some(mid))?));
+        }
+        let landed =
+            lefts.iter().find(|(mid, uid)| uid.is_some() && Some(*mid) == message_id).and_then(|(_, uid)| *uid);
         let uid = match landed {
             Some(uid) => Some(uid),
             // Read, as a mail app files its own: a draft is never unread mail.
             None => s.0.append(&drafts, raw, &["\\Seen", "\\Draft"], Some(&self.now())).map_err(failed)?,
         };
-        if let Some(left) = left
-            && landed.is_none()
-        {
-            let _ = ImapCopies::remove(&mut s, left);
+        for left in lefts.into_iter().filter_map(|(_, uid)| uid) {
+            if Some(left) != landed {
+                let _ = ImapCopies::remove(&mut s, left);
+            }
         }
         let mut removed = Vec::new();
         for old in replaced {

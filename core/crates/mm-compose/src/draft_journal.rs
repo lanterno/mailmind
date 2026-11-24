@@ -57,14 +57,30 @@ pub fn holds_a_save(j: Option<&Waiting>) -> bool {
     j.is_some_and(|j| j.raw.as_ref().is_some_and(|r| !r.is_empty()))
 }
 
-/// Is there a copy for a discard to wait on: the one the row tracks, or one a try may have left?
-pub fn copy_may_be_there(uid: Option<i64>, j: Option<&Waiting>) -> bool {
-    uid.unwrap_or(0) != 0 || j.is_some_and(|j| j.tried.as_deref().is_some_and(|t| !t.is_empty()))
+/// The Message-IDs of the copies tries since the last push that landed may have left, oldest first. `tried` keeps each,
+/// between spaces, which no Message-ID holds: a try that fails after its APPEND, and another after it, may each have
+/// left one, and the next try, or a discard, takes all of them.
+pub fn tried_ids(j: Option<&Waiting>) -> Vec<&str> {
+    j.and_then(|j| j.tried.as_deref()).map(|t| t.split_whitespace().collect()).unwrap_or_default()
 }
 
-/// The Message-ID of a copy a try at this save may have left in `account`.
-pub fn left_by_a_try<'a>(j: Option<&'a Waiting>, account: &str) -> Option<&'a str> {
-    j.filter(|j| j.account == account).and_then(|j| j.tried.as_deref()).filter(|t| !t.is_empty())
+/// What `tried` keeps once a try at this save's `message_id` may reach the server: every copy before it too.
+pub fn trying(j: &Waiting, message_id: &str) -> String {
+    let mut ids = tried_ids(Some(j));
+    if !message_id.is_empty() && !ids.contains(&message_id) {
+        ids.push(message_id);
+    }
+    ids.join(" ")
+}
+
+/// Is there a copy for a discard to wait on: the one the row tracks, or one a try may have left?
+pub fn copy_may_be_there(uid: Option<i64>, j: Option<&Waiting>) -> bool {
+    uid.unwrap_or(0) != 0 || !tried_ids(j).is_empty()
+}
+
+/// The Message-IDs of the copies tries at this draft may have left in `account`.
+pub fn left_by_a_try<'a>(j: Option<&'a Waiting>, account: &str) -> Vec<&'a str> {
+    tried_ids(j.filter(|j| j.account == account))
 }
 
 /// Seconds until the push job looks again, `due` the next save to come due.

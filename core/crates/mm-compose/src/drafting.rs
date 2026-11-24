@@ -381,7 +381,8 @@ impl Drafting {
     /// APPEND the save, drop the copy it replaces, and move the row with them (`_push`).
     fn push(&self, prev: &DraftRow, j: &Waiting) -> Result<OnGate, CopyFailed> {
         let message_id = j.message_id.clone().unwrap_or_default();
-        let going = self.write(|book| book.journal_tried(prev.id, j.version, &message_id))?;
+        let going =
+            self.write(|book| book.journal_tried(prev.id, j.version, &draft_journal::trying(j, &message_id)))?;
         if !going {
             return Ok(OnGate::Waits);
         }
@@ -394,7 +395,7 @@ impl Drafting {
             &raw,
             &draft::replaced_in_place(prev, &j.account),
             Some(&message_id),
-            j.tried.as_deref(),
+            &draft_journal::tried_ids(Some(j)),
         )?;
         let folder = appended.folder.clone();
         self.parts.screen.touched(&j.account, &folder);
@@ -461,10 +462,10 @@ impl Drafting {
             removed =
                 self.parts.copies.delete_draft_uid(&row.account, row.folder.as_deref(), row.uid, row.uidvalidity)?;
         }
-        if reach(&j.account)
-            && let Some(tried) = j.tried.as_deref().filter(|t| !t.is_empty())
-        {
-            self.parts.copies.delete_left_copy(&j.account, tried)?;
+        if reach(&j.account) {
+            for left in draft_journal::tried_ids(Some(j)) {
+                self.parts.copies.delete_left_copy(&j.account, left)?;
+            }
         }
         let now = self.now();
         let folder = row.folder.clone().unwrap_or_default();

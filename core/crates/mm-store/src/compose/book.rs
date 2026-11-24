@@ -450,9 +450,9 @@ impl Book for Block<'_> {
         .map(drop)
     }
 
-    fn journal_tried(&self, draft_id: i64, version: i64, message_id: &str) -> Result<bool, Fault> {
+    fn journal_tried(&self, draft_id: i64, version: i64, tried: &str) -> Result<bool, Fault> {
         let sql = "UPDATE draft_journal SET tried=? WHERE draft_id=? AND version=? AND discard=0";
-        Ok(self.run(sql, params![message_id, draft_id, version])? == 1)
+        Ok(self.run(sql, params![tried, draft_id, version])? == 1)
     }
 
     fn journal_settled(&self, draft_id: i64, version: i64) -> Result<(), Fault> {

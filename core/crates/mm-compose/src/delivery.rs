@@ -355,7 +355,7 @@ impl Delivery {
                             .delete_draft_uid(&d.account, d.folder.as_deref(), d.uid, d.uidvalidity)
                             .map_err(|f| f.class)?;
                     let waiting = self.read(|book| book.journal_get(draft_id)).map_err(|f| f.class)?;
-                    if let Some(left) = draft_journal::left_by_a_try(waiting.as_ref(), &d.account) {
+                    for left in draft_journal::left_by_a_try(waiting.as_ref(), &d.account) {
                         self.parts.copies.delete_left_copy(&d.account, left).map_err(|f| f.class)?;
                     }
                     let now = self.now();

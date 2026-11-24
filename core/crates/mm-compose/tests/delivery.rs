@@ -381,7 +381,7 @@ impl Copies for SentFolder {
         _raw: &[u8],
         _prev: &InPlace,
         _message_id: Option<&str>,
-        _tried: Option<&str>,
+        _tried: &[&str],
     ) -> Result<Appended, CopyFailed> {
         unreachable!("a send never asks it")
     }

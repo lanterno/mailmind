@@ -125,7 +125,7 @@ pub struct Waiting {
     pub tail_text: Option<String>,
     pub tail_html: Option<String>,
     pub bcc: Option<String>,
-    /// The Message-ID of a copy a try may have left.
+    /// The Message-IDs of the copies tries may have left, between spaces (`draft_journal::tried_ids`).
     pub tried: Option<String>,
     pub saved_at: i64,
     pub due_at: i64,
@@ -265,8 +265,9 @@ pub trait Book {
     fn journal_put(&self, save: &Save<'_>) -> Result<(), Fault>;
     /// All that's left to ask is that the copy goes.
     fn journal_discard(&self, draft_id: i64, version: i64, account: &str, now: i64) -> Result<(), Fault>;
-    /// A try may reach the server from here on; false when the row or this version has gone meanwhile.
-    fn journal_tried(&self, draft_id: i64, version: i64, message_id: &str) -> Result<bool, Fault>;
+    /// A try may reach the server from here on: `tried` names every copy one may have left (`draft_journal::trying`).
+    /// False when the row or this version has gone meanwhile.
+    fn journal_tried(&self, draft_id: i64, version: i64, tried: &str) -> Result<bool, Fault>;
     /// The push of `version` landed.
     fn journal_settled(&self, draft_id: i64, version: i64) -> Result<(), Fault>;
     fn journal_failed(&self, draft_id: i64, attempts: i64, due_at: i64) -> Result<(), Fault>;
@@ -397,7 +398,7 @@ pub trait Copies: Send + Sync + fmt::Debug {
         raw: &[u8],
         prev: &InPlace,
         message_id: Option<&str>,
-        tried: Option<&str>,
+        tried: &[&str],
     ) -> Result<Appended, CopyFailed>;
     /// Remove one draft by its UID, a single-UID expunge: whether it went.
     fn delete_draft_uid(
