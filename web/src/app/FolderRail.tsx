@@ -2,6 +2,7 @@
 // tab and Back works.
 import { useEffect, useRef } from "react";
 import { Button, Menu, MenuItem, MenuTrigger, Popover, Separator } from "react-aria-components";
+import { accountColour } from "./accountColour";
 import { go, pathOf, type ListSource, type VirtualFolder } from "./route";
 import { shortAddress } from "../lib/text";
 import { Icon } from "../lib/ui/Icon";
@@ -15,17 +16,15 @@ import { FOLDER_ICON, labelQuery, roleLabel, type FolderInfo } from "../features
 
 const ALL = "__all__", MANAGE = "__manage__";
 
-const acctColor = (accounts: string[], a: string) => `var(--acct-${(Math.max(0, accounts.indexOf(a)) % 6) + 1})`;
-
-function Dots({ accounts, of }: { accounts: string[]; of: string[] }) {
+function Dots({ accounts, colours, of }: { accounts: string[]; colours: Record<string, number>; of: string[] }) {
   return (
     <span className="acct-stack" aria-hidden="true">
-      {of.slice(0, 4).map((a) => <i key={a} style={{ "--a": acctColor(accounts, a) } as React.CSSProperties} />)}
+      {of.slice(0, 4).map((a) => <i key={a} style={{ "--a": accountColour(colours, accounts, a) } as React.CSSProperties} />)}
     </span>
   );
 }
 
-function AccountSwitch({ accounts, aliases, current, down }: { accounts: string[]; aliases: Record<string, string | null>; current: string; down: string[] }) {
+function AccountSwitch({ accounts, aliases, colours, current, down }: { accounts: string[]; aliases: Record<string, string | null>; colours: Record<string, number>; current: string; down: string[] }) {
   const nameOf = (a: string) => aliases[a] || shortAddress(a);
   const name = current === ALL ? "All inboxes" : nameOf(current);
   const isDown = (a: string) => down.includes(a);
@@ -40,7 +39,7 @@ function AccountSwitch({ accounts, aliases, current, down }: { accounts: string[
   return (
     <MenuTrigger>
       <Button className="acct-sw" id="acctSw" ref={button} aria-label={`Account: ${name}${down.length ? ` (${head})` : ""}. Switch account`}>
-        <Dots accounts={accounts} of={current === ALL ? accounts : [current]} />
+        <Dots accounts={accounts} colours={colours} of={current === ALL ? accounts : [current]} />
         <span className="as-txt"><b>{name}</b><small className={down.length && (current === ALL || isDown(current)) ? "err" : undefined}>{head}</small></span>
         <Icon name="down" className="as-chev" />
       </Button>
@@ -49,7 +48,7 @@ function AccountSwitch({ accounts, aliases, current, down }: { accounts: string[
         <Menu selectionMode="single" selectedKeys={[current]} autoFocus onAction={(key) => choose(String(key))}>
           {[ALL, ...accounts].map((a) => (
             <MenuItem key={a} id={a} textValue={a === ALL ? "All inboxes" : nameOf(a)} className="am-item">
-              <Dots accounts={accounts} of={a === ALL ? accounts : [a]} />
+              <Dots accounts={accounts} colours={colours} of={a === ALL ? accounts : [a]} />
               <span className="am-txt"><b>{a === ALL ? "All inboxes" : nameOf(a)}</b><small className={a !== ALL && isDown(a) ? "err" : undefined}>{sub(a)}</small></span>
               {a === current && <Icon name="check" className="am-chk" />}
             </MenuItem>
@@ -156,7 +155,7 @@ function Labels({ source, account }: { source: ListSource | null; account: strin
   );
 }
 
-export function FolderRail({ accounts, aliases, source, down }: { accounts: string[]; aliases: Record<string, string | null>; source: ListSource | null; down: string[] }) {
+export function FolderRail({ accounts, aliases, colours, source, down }: { accounts: string[]; aliases: Record<string, string | null>; colours: Record<string, number>; source: ListSource | null; down: string[] }) {
   const across = source?.kind === "allInboxes" || source?.kind === "across" || source?.kind === "documents";   // the Hub is every account's
   const account = source?.kind === "folder" ? source.account : source?.kind === "search" && source.account ? source.account : across ? undefined : accounts[0];
   const { data, isError, refetch } = useFolders(account);
@@ -175,7 +174,7 @@ export function FolderRail({ accounts, aliases, source, down }: { accounts: stri
   ] : [];
   return (
     <aside className="folderrail" id="rail" aria-label="Accounts and folders">
-      <div id="monos">{accounts.length > 0 && <AccountSwitch accounts={accounts} aliases={aliases} current={current} down={down} />}</div>
+      <div id="monos">{accounts.length > 0 && <AccountSwitch accounts={accounts} aliases={aliases} colours={colours} current={current} down={down} />}</div>
       <nav className="frail-list" id="folderrail" aria-label="Folders">
         {across && <RailRow source={{ kind: "allInboxes" }} on={source?.kind === "allInboxes"} icon="inbox" label="Inbox" />}
         {isError && !data && (

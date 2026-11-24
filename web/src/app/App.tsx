@@ -311,7 +311,7 @@ export function App() {
       <TopBar m={m} readOnly={isReadOnly} />
       <AccountAlert m={m} />
       <main className="split">
-        <FolderRail accounts={accounts} aliases={aliases} source={source} down={badAccounts(m.digest)} />
+        <FolderRail accounts={accounts} aliases={aliases} colours={m.digest?.colours ?? {}} source={source} down={badAccounts(m.digest)} />
         <Splitter />
         <section className="list" id="list">
           <div className="listhead">
