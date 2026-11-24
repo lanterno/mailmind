@@ -208,6 +208,18 @@ fn typing_puts_no_push_off_and_a_failed_one_waits_longer_each_time() {
 }
 
 #[test]
+fn a_try_keeps_every_copy_the_tries_before_it_may_have_left() {
+    let none = Waiting::default();
+    assert_eq!(draft_journal::trying(&none, "<t@example.test>"), "<t@example.test>");
+    let once = Waiting { tried: Some("<t@example.test>".to_owned()), ..Waiting::default() };
+    assert_eq!(draft_journal::trying(&once, "<u@example.test>"), "<t@example.test> <u@example.test>");
+    assert_eq!(draft_journal::trying(&once, "<t@example.test>"), "<t@example.test>");
+    assert_eq!(draft_journal::trying(&once, ""), "<t@example.test>");
+    assert_eq!(draft_journal::trying(&none, ""), "");
+    assert!(draft_journal::tried_ids(None).is_empty());
+}
+
+#[test]
 fn a_discard_waits_on_a_copy_a_try_may_have_left() {
     let tried = Waiting {
         tried: Some("<d@example.test>".to_owned()),
@@ -217,8 +229,13 @@ fn a_discard_waits_on_a_copy_a_try_may_have_left() {
     assert!(draft_journal::copy_may_be_there(None, Some(&tried)));
     assert!(draft_journal::copy_may_be_there(Some(4), None));
     assert!(!draft_journal::copy_may_be_there(Some(0), Some(&Waiting::default())));
-    assert_eq!(draft_journal::left_by_a_try(Some(&tried), "ada@example.test"), Some("<d@example.test>"));
-    assert_eq!(draft_journal::left_by_a_try(Some(&tried), "bo@example.test"), None);
+    assert_eq!(draft_journal::left_by_a_try(Some(&tried), "ada@example.test"), ["<d@example.test>"]);
+    assert!(draft_journal::left_by_a_try(Some(&tried), "bo@example.test").is_empty());
+    let twice = Waiting { tried: Some("<d@example.test> <e@example.test>".to_owned()), ..tried.clone() };
+    assert_eq!(
+        draft_journal::left_by_a_try(Some(&twice), "ada@example.test"),
+        ["<d@example.test>", "<e@example.test>"]
+    );
     assert!(draft_journal::asks_removal(Some(&Waiting { discard: true, ..Waiting::default() })));
     assert!(!draft_journal::holds_a_save(Some(&Waiting { raw: Some(Vec::new()), ..Waiting::default() })));
 }
