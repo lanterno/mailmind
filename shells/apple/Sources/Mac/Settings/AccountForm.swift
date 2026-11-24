@@ -74,7 +74,14 @@ struct AccountForm: View {
                     if !draft.unsupported {
                         row("Password") {
                             VStack(alignment: .leading, spacing: 8) {
-                                if draft.type == .proton {
+                                if let own = draft.protonOwn {
+                                    // It logs in with a password of its own, not the Bridge's: said as its card
+                                    // says it, and kept as it is.
+                                    CredentialWords(credential: own)
+                                        .font(.meadow(.ui, 14))
+                                        .foregroundStyle(meadow.ink)
+                                    SettingHelp(String(localized: "This account logs in with its own password, which an edit keeps."))
+                                } else if draft.type == .proton {
                                     SettingHelp(String(localized:
                                         "Proton accounts log in through Proton Bridge, with the Bridge’s password."))
                                     BridgePasswordView(status: status)

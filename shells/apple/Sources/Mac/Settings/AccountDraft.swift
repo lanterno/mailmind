@@ -46,6 +46,8 @@ struct AccountDraft: Equatable {
     let fixing: AccountFix?
     /// The type the edited account is saved as; nil when adding one.
     private let savedKind: Kind?
+    /// How the edited account's password is kept, as its card says it; nil when adding one.
+    let savedCredential: API.CredentialShown?
     var alias = ""
     var signature = ""
     var email = ""
@@ -86,6 +88,7 @@ struct AccountDraft: Equatable {
         editing = row?.email
         self.fixing = row == nil ? nil : fixing
         savedKind = row.map { Kind(rawValue: $0.type) ?? .imap }
+        savedCredential = row?.credential
         guard let row else { return }
         alias = row.alias ?? ""
         signature = row.signature
@@ -240,10 +243,23 @@ struct AccountDraft: Equatable {
         }
     }
 
-    /// The credential to send: the Bridge's for Proton; else the password typed, kept in the Keychain; nil when none
-    /// is typed (an edit then keeps the one it has).
+    /// An edited Proton account that logs in with a password of its own, not the Bridge's: how it is kept, which the
+    /// sheet shows as the account's card does, and which an edit keeps.
+    var protonOwn: API.CredentialShown? {
+        guard type == .proton, savedKind == .proton, let saved = savedCredential, saved.style != "proton_bridge" else {
+            return nil
+        }
+        return saved
+    }
+
+    /// The credential to send: the Bridge's for a new Proton account, or one made Proton by this edit; else the
+    /// password typed, kept in the Keychain; nil when none is typed, and for an edited Proton account, whose password
+    /// isn't typed here: the edit keeps the credential it has, which the server would otherwise replace, deleting the
+    /// account's own Keychain item.
     var credential: JSONValue? {
-        if type == .proton { return .object(["style": .string("proton_bridge")]) }
+        if type == .proton {
+            return savedKind == .proton ? nil : .object(["style": .string("proton_bridge")])
+        }
         guard source == .keychain else { return nil }
         let typed = password.trimmed
         return typed.isEmpty ? nil : .object(["style": .string("keychain"), "value": .string(typed)])
