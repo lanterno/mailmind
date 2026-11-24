@@ -175,7 +175,7 @@ INSERT INTO followups (account, thread_id, kind, state, first_sent_ts) VALUES
 fn the_weeks_numbers_count_all_that_needs_the_person_and_all_they_wait_on_and_its_lists_hold_the_first() {
     let dir = tempfile::tempdir().unwrap();
     let database = database(dir.path(), CROWDED);
-    let week = |accounts: &[String], top| database.week(accounts, 0.0, "1970-01-01T00:00:00+00:00", top).unwrap();
+    let week = |accounts: &[String], top| database.week(accounts, 0.0, "1970-01-01T00:00:00+00:00", top, &[]).unwrap();
     let ada = [ADA.to_owned()];
     let listed = week(&ada, 8);
     assert_eq!((listed.needs.len(), listed.needs_you, listed.waiting.len(), listed.waiting_on), (8, 11, 8, 10));
@@ -190,6 +190,22 @@ fn the_weeks_numbers_count_all_that_needs_the_person_and_all_they_wait_on_and_it
     // Every account's, with none named.
     let every = week(&[], 8);
     assert_eq!((every.needs.len(), every.needs_you, every.waiting.len(), every.waiting_on), (8, 12, 8, 11));
+}
+
+#[test]
+fn what_was_sent_is_counted_in_the_folders_named_as_each_accounts_sent_alone() {
+    let dir = tempfile::tempdir().unwrap();
+    let database = database(dir.path(), CROWDED);
+    let ada = [ADA.to_owned()];
+    let sent =
+        |folders: &[(String, String)]| database.week(&ada, 0.0, "1970-01-01T00:00:00+00:00", 8, folders).unwrap().sent;
+    assert_eq!(
+        database.stored_folders_of(&ada),
+        Ok(vec![(ADA.to_owned(), "Archive".to_owned()), (ADA.to_owned(), "INBOX".to_owned())])
+    );
+    assert_eq!(sent(&[]), 0);
+    assert_eq!(sent(&[(ADA.to_owned(), "Archive".to_owned())]), 1);
+    assert_eq!(sent(&[(ADA.to_owned(), "Archive".to_owned()), ("bea@example.test".to_owned(), "INBOX".to_owned())]), 2);
 }
 
 #[test]
