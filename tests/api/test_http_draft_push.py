@@ -1,9 +1,11 @@
 """A draft's push to its server, over HTTP. The push job waits its turn for a moment while another job holds the
-account, and the copy another app left beside it under the same Message-ID goes with the one the draft was opened from,
-so Drafts holds one."""
+account, a push tells the open lists of Drafts, its first too, and the copy another app left beside it under the same
+Message-ID goes with the one the draft was opened from, so Drafts holds one."""
+import json
 import threading
 from datetime import timedelta
 
+from event_stream import Stream
 from fixtures import world as w
 
 NOTES = "ada-drafts-02-thunderbird-v2.eml"     # Thunderbird's second save of it; its first is beside it, same Message-ID
@@ -55,3 +57,22 @@ def test_the_push_job_waits_its_turn_while_another_job_holds_the_account(app, wo
     [copy] = swatches_in_drafts(world)
     assert b"Two of each." in copy
     assert app.get("/api/outbox").json["drafts"] == []
+
+
+def heard_next(tab):
+    """The next event the tab hears, as (event, data)."""
+    head, data = tab.event().split("\n")[1:3]
+    return head.removeprefix("event: "), json.loads(data.removeprefix("data: "))
+
+
+def test_a_first_push_tells_the_open_lists_of_drafts(app, world):
+    tab = Stream(app)
+    tab.frame()
+    r = app.post("/api/draft", {"account": w.ADA, "mode": "new", "to": ["lin@example.test"], "subject": "Swatch order",
+                                "text": "Two of each."})
+    assert r.status == 200 and r.json["pushed"] is True, r.json
+    heard = []
+    while (event := heard_next(tab))[0] != "outbox":     # the tray's word comes last
+        heard.append(event)
+    assert ("reconcile", {"account": w.ADA, "folder": "Drafts", "pruned": 1}) in heard
+    tab.close()
