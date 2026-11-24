@@ -6,7 +6,7 @@
 use std::collections::VecDeque;
 use std::sync::Mutex;
 
-use mm_compose::builder::{build_message, reference_chain, thread_ids};
+use mm_compose::builder::{build_message, reference_chain, restamped, thread_ids};
 use mm_compose::spec::{Attachment, Draws, MessageSpec, Minting};
 use mm_kernel::seams::Moment;
 use serde_json::Value;
@@ -155,4 +155,18 @@ fn a_reply_chains_the_ids_it_answers_and_a_draft_keeps_the_well_formed_ones() {
     assert_eq!(kept.len(), 50);
     assert_eq!((kept[0].as_str(), kept[1].as_str()), ("<r0@example.test>", "<r11@example.test>"));
     assert_eq!(thread_ids(Some("garbage"), None), (None, Vec::new()));
+}
+
+#[test]
+fn a_message_restamped_says_the_moment_given_in_its_own_date_alone() {
+    let at = Moment::from_micros(1_795_000_000 * 1_000_000);
+    let raw: &[u8] = b"From: ada@example.test\r\nDate: Mon, 02 Nov 2026\r\n 12:00:00 +0000\r\nX-Date: kept\r\n\
+        Message-ID: <m1@example.test>\r\n\r\nDate: in the body\r\n";
+    let want: &[u8] = b"From: ada@example.test\r\nDate: Wed, 18 Nov 2026 11:06:40 +0000\r\nX-Date: kept\r\n\
+        Message-ID: <m1@example.test>\r\n\r\nDate: in the body\r\n";
+    assert_eq!(String::from_utf8_lossy(&restamped(raw, at)), String::from_utf8_lossy(want));
+    let lower = restamped(b"date: Mon, 02 Nov 2026 12:00:00 +0000\r\nSubject: Hi\r\n\r\nHi\r\n", at);
+    assert_eq!(lower, b"Date: Wed, 18 Nov 2026 11:06:40 +0000\r\nSubject: Hi\r\n\r\nHi\r\n");
+    let none: &[u8] = b"Subject: Hi\r\n\r\nDate: in the body\r\n";
+    assert_eq!(restamped(none, at), none);
 }

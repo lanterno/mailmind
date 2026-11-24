@@ -91,6 +91,11 @@ impl Book for Rows<'_> {
         Ok(())
     }
 
+    fn outbox_set_raw(&self, id: i64, raw: &[u8]) -> Result<(), Fault> {
+        self.with(id, |r| raw.clone_into(&mut r.raw));
+        Ok(())
+    }
+
     fn outbox_due(&self, now: i64) -> Result<Vec<(i64, String)>, Fault> {
         let rows = self.0.lock().unwrap_or_else(PoisonError::into_inner);
         let due = rows.iter().filter(|r| r.state == "queued" && r.next_attempt_at <= now);
@@ -356,11 +361,13 @@ impl Transport for Wire {
 #[derive(Debug, Default)]
 struct SentFolder {
     panics: AtomicBool,
+    took: Mutex<Vec<Vec<u8>>>,
 }
 
 impl Copies for SentFolder {
-    fn append_to_sent(&self, _account: &str, _raw: &[u8], _message_id: Option<&str>) -> Result<String, CopyFailed> {
+    fn append_to_sent(&self, _account: &str, raw: &[u8], _message_id: Option<&str>) -> Result<String, CopyFailed> {
         assert!(!self.panics.swap(false, Ordering::SeqCst), "a panic whose words could quote mail");
+        self.took.lock().unwrap().push(raw.to_vec());
         Ok("Sent".to_owned())
     }
 
@@ -630,4 +637,18 @@ fn a_read_only_process_queues_no_send_asks_none_again_and_sends_none() {
     assert_eq!(sending.outbox.row(1).state, "queued", "what a full run queued waits for the next");
     assert_eq!(sending.wire.tries.load(Ordering::SeqCst), 0);
     assert_eq!(sending.said(), []);
+}
+
+#[test]
+fn a_send_goes_out_dated_as_it_leaves_with_its_message_id_kept_and_its_copy_in_sent_the_same() {
+    let sending = Sending::new(false);
+    let written: &[u8] = b"Date: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <1@example.test>\r\n\r\nHi\r\n";
+    sending.outbox.queue(1, written);
+    sending.later(3 * 3600);
+    sending.pass();
+    let went: &[u8] = b"Date: Thu, 01 Jan 1970 03:16:40 +0000\r\nMessage-ID: <1@example.test>\r\n\r\nHi\r\n";
+    assert_eq!(*sending.wire.took.lock().unwrap(), [went.to_vec()]);
+    assert_eq!(*sending.sent_folder.took.lock().unwrap(), [went.to_vec()]);
+    let row = sending.outbox.row(1);
+    assert_eq!((row.state.as_str(), row.raw.as_slice()), ("sent", went));
 }
