@@ -148,6 +148,22 @@ final class SummarizingTests: XCTestCase {
         XCTAssertEqual(PaneEmptyWords.of(needsDone: true, hasMail: false).title, "Nothing needs you.")
     }
 
+    /// While the AI reads the new mail and the brief has nothing written yet, the line beside "Your brief" says no
+    /// time: it once said "written at 10:42" over "Reading your new mail…". A brief with words keeps its time, and
+    /// one that is empty with nothing read says it as before.
+    func testTheBriefSaysNoWrittenTimeWhileItIsReadingTheNewMail() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let empty = API.Brief(cached: false, generated: "2026-11-15T09:00:00Z", groups: [], model: "empty",
+                              narrative: "", ok: true, stale: false)
+        var written = empty
+        written.narrative = "Grace needs the figures by Friday."
+        XCTAssertNil(BriefWords.written(empty, reading: true, calendar: calendar))
+        let said = try XCTUnwrap(BriefWords.written(written, reading: true, calendar: calendar))
+        XCTAssertTrue(said.hasPrefix("written at "), said)
+        XCTAssertNotNil(BriefWords.written(empty, reading: false, calendar: calendar))
+        XCTAssertNotNil(BriefWords.written(empty, calendar: calendar), "not reading unless said")
+    }
+
     /// The status says it only while AI is on, as the server does.
     func testOnlyAnAIThatIsOnReads() {
         var on = Self.digest(summarizing: true).ai
