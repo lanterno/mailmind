@@ -35,3 +35,8 @@ reason = "unic-ucd-version is unmaintained, no bug reported. Reached through url
 id = "RUSTSEC-2025-0100"
 ignoreUntil = 2027-02-12
 reason = "unic-ucd-ident is unmaintained, no bug reported. Reached through urlpattern in tauri-utils, which matches the app's own capability URLs."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0543"
+ignoreUntil = 2027-02-24
+reason = "chrono is unmaintained, no bug reported. It is in the lockfile only as serde_with's optional chrono feature, which nothing turns on: cargo tree finds no path to it on any target, so it is never built."
