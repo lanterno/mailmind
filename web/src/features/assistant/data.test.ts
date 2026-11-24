@@ -63,6 +63,24 @@ describe("today's brief", () => {
     expect(posted()).toEqual([["/api/briefing/refresh", true]]);
     expect(client.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["briefSide"] });
   });
+  it("is read again once the AI has read the mail it had nothing to say of, and only then", async () => {
+    const nothing = { narrative: "", groups: [], model: "empty" };
+    const written = { narrative: "Lin needs you.", groups: [], model: "m" };
+    the.get.mockResolvedValue(nothing);
+    const r = await renderHook((p: { reading: boolean }) => useBrief(true, p.reading), { props: { reading: true }, client: testClient() });
+    await waitFor(() => expect(r.result.brief).toEqual(nothing));
+    await r.rerender({ reading: true });
+    expect(the.get).toHaveBeenCalledTimes(1);
+    the.get.mockResolvedValue(written);
+    await r.rerender({ reading: false });
+    await waitFor(() => expect(r.result.brief).toEqual(written));
+    expect(the.get).toHaveBeenCalledTimes(2);
+    // Something to say: more mail read later reads nothing again.
+    await r.rerender({ reading: true });
+    await r.rerender({ reading: false });
+    expect(the.get).toHaveBeenCalledTimes(2);
+    expect(the.post).not.toHaveBeenCalled();
+  });
   it("says it's at the limit when a click is refused for it", async () => {
     the.get.mockResolvedValue({ missing: true });
     the.post.mockRejectedValue(new ApiError(402, { over_limit: true }));

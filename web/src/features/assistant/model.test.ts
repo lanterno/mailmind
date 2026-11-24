@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DigestItem } from "../mailbox";
-import { clock, commitments, eventSpan, eventWhen, inviteWhen, meetingWhen, greeting, nameIn, needsNote, nextOf, ofWhole, reviewRange, waitAge, type Upcoming } from "./model";
+import { clock, commitments, eventSpan, eventWhen, inviteWhen, meetingWhen, greeting, nameIn, needsNote, nextOf, ofWhole, READING, reviewRange, summarizing, waitAge, type Upcoming } from "./model";
 
 const item = (key: number, over: Partial<DigestItem> = {}) => ({ key, folder: "INBOX", uid: key, importance: 1, needs_you: false, safe_to_file: false, commitment_worthy: false, ...over }) as DigestItem;
 
@@ -18,6 +18,13 @@ describe("what the digest asks of you", () => {
     expect(needsNote(0)).toBe("Nothing needs you");
     expect(needsNote(1)).toBe("1 needs you");
     expect(needsNote(2)).toBe("2 need you");
+  });
+  it("never says nothing needs you while the AI reads mail waiting for its summary", () => {
+    expect(READING).toBe("Reading your new mail…");
+    expect(needsNote(0, true)).toBe(READING);
+    expect(needsNote(2, true)).toBe("2 need you");
+    expect(summarizing({ summarizing: true })).toBe(true);
+    for (const ai of [{ summarizing: false }, { summarizing: null }, {}, undefined]) expect(summarizing(ai)).toBe(false);
   });
 });
 
