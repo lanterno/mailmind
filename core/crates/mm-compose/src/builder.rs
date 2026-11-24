@@ -221,7 +221,8 @@ fn format_datetime(minting: &Minting<'_>) -> String {
 /// the bytes are as they were.
 pub fn restamped(raw: &[u8], now: Moment) -> Vec<u8> {
     let head_ends = raw.windows(4).position(|w| w == b"\r\n\r\n").map_or(raw.len(), |at| at + 2);
-    let line_end = |from: usize| raw[from..head_ends].windows(2).position(|w| w == b"\r\n").map_or(head_ends, |n| from + n + 2);
+    let line_end =
+        |from: usize| raw[from..head_ends].windows(2).position(|w| w == b"\r\n").map_or(head_ends, |n| from + n + 2);
     let mut at = 0;
     while at < head_ends {
         let mut ends = line_end(at);
