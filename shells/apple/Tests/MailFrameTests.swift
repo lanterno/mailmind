@@ -690,6 +690,8 @@ final class MailFrameTests: XCTestCase {
         XCTAssertGreaterThan(head.height, 0, "the printed copy's head")
         let own = try await place(of: "#own", in: frame), terms = try await place(of: "#own > summary", in: frame)
         XCTAssertGreaterThan(own.height, terms.height + 15, "the mail's own details, open on paper")
+        let marker = try await asked(frame, "return getComputedStyle(document.querySelector(\"#own > summary\")).listStyleType;")
+        XCTAssertEqual(marker as? String, "disclosure-open", "and its marker says so: ▼, not ▶")
         let quote = try await place(of: "details.mm-quote", in: frame)
         let pill = try await place(of: "details.mm-quote > summary", in: frame)
         XCTAssertEqual(pill.height, 0, "no pill on paper")
