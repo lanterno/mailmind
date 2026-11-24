@@ -218,6 +218,34 @@ final class ComposerTests: XCTestCase {
         XCTAssertEqual(routes.calls(to: "/api/draft").count, 3, "one save, and none as it closed")
     }
 
+    /// A draft closed while its server's gate was too busy reaches it later, by the push job, which says so only on
+    /// the outbox's event: each such event reads the lists again until it may have, so Drafts shows it once it's there.
+    func testADraftClosedBeforeItReachedItsServerReadsTheListsAgainAsTheOutboxChanges() async throws {
+        routes.answer("/api/draft",
+                      #"{"ok": true, "draft_id": 52, "version": 1, "message_id": "<d@example.test>", "pushed": false}"#)
+        routes.answer(API.Get.Outbox.path, #"{"ok": true, "items": [], "drafts": []}"#)
+        let composing = Composing()
+        composing.use(routes, digest: Fixture.digest())
+        composing.openWindow = { _ in }
+        var reads = 0
+        composing.mailChanged = { reads += 1 }
+        composing.heardTheOutbox()
+        XCTAssertEqual(reads, 0, "nothing on its way: the outbox's event reads nothing")
+
+        let composer = try XCTUnwrap(composing.open(ComposeSeed()))
+        composer.setBody("On its way", selection: NSRange(location: 10, length: 0))
+        composer.close()
+        await eventually("kept") { composing.notice?.text == "Saved to Drafts" }
+        XCTAssertEqual(reads, 1, "read again as it closed")
+        XCTAssertNotNil(composing.reaching[52])
+
+        composing.heardTheOutbox()
+        XCTAssertEqual(reads, 2, "the push job may have sent it")
+        composing.heardTheOutbox(now: Date().addingTimeInterval(Composing.reachingFor + 1))
+        XCTAssertEqual(reads, 2, "long past the job's longest wait, nothing is read for it")
+        XCTAssertTrue(composing.reaching.isEmpty)
+    }
+
     func testDiscardThrowsAwayTheServersCopyToo() async throws {
         let draft = written("Gone soon")
         _ = await draft.save().value
