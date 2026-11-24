@@ -153,6 +153,19 @@ def test_a_stored_review_keeps_what_it_said_when_the_mail_moves_on_and_counts_th
     assert (again["cached"], again["stale"], len(model.sent)) == (True, True, 1)
 
 
+def test_a_review_kept_today_counts_what_needs_you_as_it_stands_once_one_is_done(model, said, week):
+    reviews = reviews_over(model, said, week)
+    week.waiting = [{"account": ADA, "thread_id": "t-plans", "message_key": None, "folder": None, "uid": None,
+                     "subject": "Plans", "recipients": "lin@example.test", "first_sent_ts": 1793500000}]
+    week.replylater = 1
+    first = review_of(model, reviews)
+    assert (first["stats"]["needs_you"], first["stats"]["waiting_on"], first["stats"]["reply_later"]) == (1, 1, 1)
+    week.needs, week.copies, week.waiting, week.replylater = [], {}, [], 0      # Done: Lin's lunch archived, the rest met
+    again = reviews.build({ADA})
+    assert (again["stats"]["needs_you"], again["stats"]["waiting_on"], again["stats"]["reply_later"]) == (0, 0, 0)
+    assert (again["needs"], again["narrative"], len(model.sent)) == ([], WEEK, 1)
+
+
 # -- the delta -------------------------------------------------------------------------------------
 
 def news(n):
