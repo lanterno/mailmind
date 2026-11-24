@@ -24,6 +24,7 @@ pub use plain::{Header, plain_message};
 use std::collections::{BTreeSet, HashSet};
 
 use mm_kernel::addresses::{MAX_RECIPIENTS, clean, parse_addr_list, validate_pair};
+use mm_kernel::seams::Moment;
 use mm_kernel::text::{is_space, strip};
 
 use crate::markdown::{content_id, plain_pictures};
@@ -212,7 +213,36 @@ const HEADER_BREAK: &str = "Header values may not contain linefeed or carriage r
 
 /// `email.utils.format_datetime` of the moment in UTC: `Mon, 02 Nov 2026 12:00:00 +0000`.
 fn format_datetime(minting: &Minting<'_>) -> String {
-    let seconds = minting.now.whole_seconds();
+    date_of(minting.now)
+}
+
+/// The message with its Date header saying `now`, as `builder.restamped` makes it: a message goes out with the moment
+/// it leaves, not the one it was written. Only the header block's own Date changes, folded lines and all; with none,
+/// the bytes are as they were.
+pub fn restamped(raw: &[u8], now: Moment) -> Vec<u8> {
+    let head_ends = raw.windows(4).position(|w| w == b"\r\n\r\n").map_or(raw.len(), |at| at + 2);
+    let line_end = |from: usize| raw[from..head_ends].windows(2).position(|w| w == b"\r\n").map_or(head_ends, |n| from + n + 2);
+    let mut at = 0;
+    while at < head_ends {
+        let mut ends = line_end(at);
+        if raw[at..ends].len() >= 5 && raw[at..at + 5].eq_ignore_ascii_case(b"Date:") {
+            while ends < head_ends && matches!(raw[ends], b' ' | b'\t') {
+                ends = line_end(ends);
+            }
+            let mut out = Vec::with_capacity(raw.len());
+            out.extend_from_slice(&raw[..at]);
+            out.extend_from_slice(format!("Date: {}\r\n", date_of(now)).as_bytes());
+            out.extend_from_slice(&raw[ends..]);
+            return out;
+        }
+        at = ends;
+    }
+    raw.to_vec()
+}
+
+/// `email.utils.format_datetime` of `now` in UTC.
+fn date_of(now: Moment) -> String {
+    let seconds = now.whole_seconds();
     let days = seconds.div_euclid(86_400);
     let of_day = seconds.rem_euclid(86_400);
     let (year, month, day) = mm_kernel::when::civil(days);

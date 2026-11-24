@@ -167,6 +167,8 @@ pub trait Book {
     /// (its id, created): created is false when the idempotency key was seen already, a double submit.
     fn outbox_insert(&self, row: &NewSend) -> Result<(Option<i64>, bool), Fault>;
     fn outbox_set(&self, id: i64, marks: &[Mark]) -> Result<(), Fault>;
+    /// The bytes a queued send goes out as, from now on: its Date restamped as it leaves.
+    fn outbox_set_raw(&self, id: i64, raw: &[u8]) -> Result<(), Fault>;
     /// Bring a queued send forward to `now`: false when it isn't queued.
     fn outbox_send_now(&self, id: i64, now: i64) -> Result<bool, Fault>;
     /// Whether a send of this draft is queued or going out now.

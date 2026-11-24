@@ -211,6 +211,10 @@ impl Book for Block<'_> {
         self.run(&sql, params_from_iter(values)).map(drop)
     }
 
+    fn outbox_set_raw(&self, id: i64, raw: &[u8]) -> Result<(), Fault> {
+        self.run("UPDATE outbox SET raw=? WHERE id=?", params![raw, id]).map(drop)
+    }
+
     fn outbox_send_now(&self, id: i64, now: i64) -> Result<bool, Fault> {
         let sql = "UPDATE outbox SET next_attempt_at=?, wait_kind='grace' WHERE id=? AND state='queued'";
         Ok(self.run(sql, params![now, id])? == 1)

@@ -30,6 +30,7 @@ use mm_kernel::seams::Clock;
 use mm_kernel::when::iso;
 use serde_json::{Value, json};
 
+use crate::builder;
 use crate::draft;
 use crate::draft_journal;
 use crate::events::ComposeEvent;
@@ -397,6 +398,17 @@ impl Delivery {
                 self.failed(row, true);
                 return Ok(());
             }
+        };
+        // Its Date says when it leaves, not when it was written: a send scheduled for later, or one that waited out its
+        // server, went out dated hours back. The copy in Sent is these bytes too, and the Message-ID stays.
+        let restamped;
+        let row = if row.delivered {
+            row
+        } else {
+            let raw = builder::restamped(&row.raw, self.parts.clock.now());
+            self.write(|book| book.outbox_set_raw(id, &raw))?;
+            restamped = OutboxRow { raw, ..row.clone() };
+            &restamped
         };
         if !row.delivered {
             let envelope: Vec<String> = serde_json::from_str(&row.envelope).unwrap_or_default();
