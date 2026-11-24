@@ -4606,6 +4606,7 @@ export interface components {
             unseen: number;
             /** Unseen Ratio */
             unseen_ratio: number;
+            unsub_method: components["schemas"]["UnsubMethod"] | null;
         };
         /** NoisySenders */
         NoisySenders: {
@@ -6562,6 +6563,8 @@ export interface components {
              */
             ok: true;
         };
+        /** @enum {string} */
+        UnsubMethod: "one-click" | "mailto" | "http-page" | "none";
         /** Upcoming */
         Upcoming: {
             /** Items */
