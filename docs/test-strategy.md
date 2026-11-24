@@ -3,7 +3,8 @@
 [testing.md](testing.md) says how to run the tests that exist. This document says what MailMind should test, at which
 level, on which machine, and why: for its features, its performance and its security. It starts from what a long review
 of the Mac app found that the tests had missed, sets the principles that would have caught it, lays out the rings of
-tests and the harnesses each needs, and ends with the order to build them in.
+tests and the harnesses each needs, and ends with the order to build them in. [test-architecture.md](test-architecture.md)
+is the framework that runs the whole-app rings: its parts, its protocol, and what a test looks like.
 
 ## 1. What the review found
 
@@ -362,6 +363,9 @@ finds that no ring caught, per pass and per release. It should fall pass by pass
 CI, the flake count, and the number of budgets and security claims with a check behind them.
 
 ## 10. Decisions for the owner
+
+[test-architecture.md](test-architecture.md) proposes answers to the first three: a VM, an in-app driver, and
+scenarios in Python on pytest.
 
 - **The VM.** Running the UI rings in a macOS VM (`tart`) on this Mac or a spare one, and in CI on GitHub's macOS
   runners, which cost more minutes than Linux. The alternative is a spare Mac logged in as a test user.
