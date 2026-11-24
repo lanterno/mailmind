@@ -62,7 +62,7 @@ def test_the_ai_suggests_on_a_click_and_only_a_click_on_a_row_decides(page, app,
     first = page.locator(".scr-row").first
     addr = first.get_attribute("data-scr")
     page.get_by_role("button", name=re.compile("Suggest")).click()
-    expect(first.locator(".scr-hint")).to_contain_text("Allow? stub why")
+    expect(first.locator(".scr-hint")).to_contain_text("Let in? stub why")
     expect(first.locator(".scr-allow")).to_have_class(re.compile("suggested"))
     assert (rules_now(app), len(ai.requests)) == (before, 1)
     expect(page.locator(".scr-bar")).to_contain_text("for 1 of these")
@@ -75,9 +75,9 @@ def test_the_ai_suggests_on_a_click_and_only_a_click_on_a_row_decides(page, app,
 def test_allowing_a_sender_keeps_them_and_takes_them_off_the_list(page, app, world):
     screener(page)
     n = page.locator(".scr-row").count()
-    page.locator(f'.scr-row[data-scr="{THIMBLE}"]').get_by_role("button", name="Allow").click()
+    page.locator(f'.scr-row[data-scr="{THIMBLE}"]').get_by_role("button", name="Let in").click()
     expect(page.locator(f'.scr-row[data-scr="{THIMBLE}"]')).to_have_count(0)
-    expect(page.locator("#toast")).to_contain_text("Allowed Thimble & Co")
+    expect(page.locator("#toast")).to_contain_text("Let in Thimble & Co")
     assert THIMBLE in rules_now(app)["keep_senders"]
     expect(page.locator("#count")).to_have_text(f"{n - 1} to screen")
     expect(page.locator('a.frow[data-folder="__screener__"] .unread')).to_have_text(str(n - 1))
@@ -146,7 +146,7 @@ def test_screening_out_takes_their_mail_out_of_needs_you_as_out_of_the_brief_unt
 def test_a_refused_decision_brings_the_sender_back(page, world):
     screener(page)
     page.pw.route("**/api/rules", lambda route: route.fulfill(status=500, body="{}") if route.request.method == "POST" else route.continue_())
-    page.locator(f'.scr-row[data-scr="{THIMBLE}"]').get_by_role("button", name="Allow").click()
+    page.locator(f'.scr-row[data-scr="{THIMBLE}"]').get_by_role("button", name="Let in").click()
     expect(page.locator("#toast")).to_have_text("Couldn’t apply")
     expect(page.locator(f'.scr-row[data-scr="{THIMBLE}"]')).to_have_count(1)
     assert all("500" in x for x in page.problems), page.problems
@@ -158,7 +158,7 @@ def test_the_last_decision_leaves_the_all_clear(page, world):
     page.pw.route(re.compile(r"/api/screener\?"), lambda route: route.fulfill(json={"ok": True, "account": w.ADA, "items": [], "total": 0}))
     page.goto(f"/m/{w.ADA}/__screener__")
     expect(page.locator(".ac-h")).to_have_text("Screener clear")
-    expect(page.locator(".ac-b")).to_have_text("Every sender in this inbox has been allowed or screened out.")
+    expect(page.locator(".ac-b")).to_have_text("Every sender in this inbox has been let in or screened out.")
     expect(page.locator('a.frow[data-folder="__screener__"]')).to_have_count(0)
     clean(page)
 
