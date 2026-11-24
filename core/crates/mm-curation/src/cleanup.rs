@@ -106,7 +106,8 @@ impl Cleanup {
         Cleanup { rules, mail, clock, zone }
     }
 
-    /// `GET /api/cleanup/senders`: the ranked candidates, each with how much of its mail each account holds.
+    /// `GET /api/cleanup/senders`: the ranked candidates, each with how much of its mail each account holds and the
+    /// way out its newest mail stored names (`unsub_method`, null where none was read).
     pub fn senders(&self) -> Result<Value, Failure> {
         let sets = self.rules.load()?.sets();
         let rows: Vec<NoisySender> =
@@ -115,6 +116,7 @@ impl Cleanup {
         let ranked = ranked(&rows, now.seconds(), LIMIT);
         let addrs: Vec<String> = ranked.iter().map(|c| c.addr.clone()).collect();
         let by_account = if addrs.is_empty() { Default::default() } else { self.mail.accounts_by_sender(&addrs)? };
+        let ways = if addrs.is_empty() { Default::default() } else { self.mail.ways_out(&addrs)? };
         let senders: Vec<Value> = ranked
             .iter()
             .map(|c| {
@@ -125,7 +127,8 @@ impl Cleanup {
                 json!({
                     "from_addr": c.addr, "from_name": c.name, "domain": c.domain, "count": c.count, "unseen": c.unseen,
                     "unseen_ratio": c.unseen_ratio, "last_seen": rel_time(c.last_iso.as_deref(), now, &*self.zone),
-                    "bucket": c.bucket, "lu_likely": c.list_likely, "noise_score": c.score, "accounts": accounts,
+                    "bucket": c.bucket, "lu_likely": c.list_likely, "unsub_method": ways.get(&c.addr),
+                    "noise_score": c.score, "accounts": accounts,
                 })
             })
             .collect();

@@ -460,6 +460,9 @@ impl SenderMail for World {
     fn accounts_by_sender(&self, _: &[String]) -> Result<HashMap<String, Vec<(String, i64)>>, Fault> {
         Ok(HashMap::new())
     }
+    fn ways_out(&self, _: &[String]) -> Result<HashMap<String, String>, Fault> {
+        Ok(HashMap::new())
+    }
 }
 
 impl Filing for World {

@@ -19,6 +19,8 @@ use crate::text::{lower, strip};
 
 /// Seconds a preview's confirm token stands.
 pub const TOKEN_LIFE: i64 = 600;
+/// The ways out a list's headers name (`mime.list_unsub`), `none` among them.
+pub const WAYS_OUT: [&str; 4] = ["one-click", "mailto", "http-page", "none"];
 /// What a confirm token is for, which a token minted for anything else isn't.
 pub const TOKEN_PURPOSE: &str = "cleanup";
 /// What is never fired twice; anything else stays retryable.

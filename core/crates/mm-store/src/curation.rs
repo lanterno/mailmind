@@ -178,6 +178,21 @@ impl SenderMail for CurationStore {
         }
         Ok(by_sender)
     }
+
+    fn ways_out(&self, addrs: &[String]) -> Result<HashMap<String, String>, Fault> {
+        use mm_curation::unsubscribe::WAYS_OUT;
+        let marks = vec!["?"; addrs.len()].join(",");
+        let ways = vec!["?"; WAYS_OUT.len()].join(",");
+        let sql = format!(
+            "SELECT addr, way FROM (SELECT lower(from_addr) addr, list_unsub_method way, \
+             ROW_NUMBER() OVER (PARTITION BY lower(from_addr) ORDER BY ts DESC, pk DESC) newest \
+             FROM messages WHERE lower(from_addr) IN ({marks}) AND list_unsub_method IN ({ways})) WHERE newest=1"
+        );
+        let mut given: Vec<&dyn rusqlite::ToSql> = addrs.iter().map(|a| a as &dyn rusqlite::ToSql).collect();
+        given.extend(WAYS_OUT.iter().map(|w| w as &dyn rusqlite::ToSql));
+        self.db
+            .read(|c| c.prepare(&sql)?.query_map(given.as_slice(), |r| Ok((r.get("addr")?, r.get("way")?)))?.collect())
+    }
 }
 
 impl AuditTrail for CurationStore {

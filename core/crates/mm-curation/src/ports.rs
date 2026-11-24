@@ -76,6 +76,10 @@ pub trait SenderMail: Send + Sync + fmt::Debug {
     fn noisy_senders(&self, buckets: &[&str], min_count: i64) -> Result<Vec<NoisySender>, Fault>;
     /// How many messages from each of `addrs` each account holds: (account, count) by sender.
     fn accounts_by_sender(&self, addrs: &[String]) -> Result<HashMap<String, Vec<(String, i64)>>, Fault>;
+    /// The way out (`unsubscribe::WAYS_OUT`) each of `addrs`' newest message whose List-Unsubscribe ingest read names,
+    /// by sender: what a preview would most likely say, with no body read and no server asked. A sender none of whose
+    /// mail was read so is left out.
+    fn ways_out(&self, addrs: &[String]) -> Result<HashMap<String, String>, Fault>;
 }
 
 /// The accounts the app may use, by address.
