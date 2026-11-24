@@ -190,15 +190,20 @@ struct RowLook {
     /// Your addresses (`RowWords.mine`): a row of your own mail names whom it went to. Without them, the accounts'.
     let mine: Set<String>
 
-    init(inks: RowInks, measure: RowMeasure, accounts: [String], mine: Set<String>? = nil) {
+    /// The place kept for each account's colour (`AccountPlaces`), over its place in the list.
+    let places: [String: Int]
+
+    init(inks: RowInks, measure: RowMeasure, accounts: [String], mine: Set<String>? = nil,
+         places: [String: Int] = [:]) {
         self.inks = inks
         self.measure = measure
         self.accounts = accounts
         self.mine = mine ?? SendGuard.mineSet(accounts)
+        self.places = places
     }
 
     func colour(of account: String) -> NSColor {
-        inks.account(accounts.firstIndex(of: account) ?? 0)
+        inks.account(AccountPlaces.place(of: account, among: accounts, in: places))
     }
 }
 

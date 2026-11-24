@@ -95,7 +95,7 @@ struct MailboxSidebar: View {
                 .padding(EdgeInsets(top: 16, leading: 10, bottom: 6, trailing: 10))
         case .account(let account):
             RailAccountName(name: mailbox.name(of: account), address: account,
-                            colour: meadow.account(mailbox.accounts.firstIndex(of: account) ?? 0),
+                            colour: meadow.account(mailbox.colourPlace(of: account)),
                             folded: closed.contains(account)) {
                 if closed.contains(account) { closed.remove(account) } else { closed.insert(account) }
             }

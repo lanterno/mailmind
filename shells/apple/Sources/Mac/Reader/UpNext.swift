@@ -72,7 +72,7 @@ struct UpNext: View {
                     }
                     .padding(.bottom, 8)
                     if let next = list.copy(at: position + 1) {
-                        NextRow(row: next, account: mailbox.accounts.firstIndex(of: next.account),
+                        NextRow(row: next, account: mailbox.colourPlace(of: next.account),
                                 mine: RowWords.mine(mailbox.accounts),
                                 gist: UpNextPlace.gist(of: next, aiTurnedOff: mailbox.aiTurnedOff)) {
                             mailbox.move(by: 1)

@@ -119,7 +119,7 @@ struct ContactCard: View {
                 .foregroundStyle(meadow.ink3)
             ForEach(card.accounts, id: \.self) { account in
                 MeadowChip(mailbox.name(of: account),
-                           tone: .account(meadow.account(mailbox.accounts.firstIndex(of: account) ?? 0)))
+                           tone: .account(meadow.account(mailbox.colourPlace(of: account))))
             }
         }
         .accessibilityElement(children: .combine)

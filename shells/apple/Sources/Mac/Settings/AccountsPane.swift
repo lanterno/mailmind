@@ -42,8 +42,10 @@ struct AccountsPane: View {
                             .foregroundStyle(meadow.ink3)
                             .padding(.vertical, 6)
                     }
-                    ForEach(Array(status.accounts.enumerated()), id: \.element.email) { index, row in
-                        AccountListRow(status: status, row: row, colour: meadow.account(index),
+                    ForEach(status.accounts, id: \.email) { row in
+                        AccountListRow(status: status, row: row,
+                                       colour: meadow.account(of: row.email ?? "",
+                                                              among: status.accounts.map { $0.email ?? "" }),
                                        chosen: row.email == chosen) { chosen = row.email }
                     }
                     MeadowPopRule()

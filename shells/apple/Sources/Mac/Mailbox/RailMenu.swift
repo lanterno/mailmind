@@ -93,7 +93,7 @@ struct RailAccountButton: View {
     /// The colours stacked: every account's while the window shows them all, else the one's.
     private func colours(of account: String?) -> [Color] {
         let accounts = account.map { [$0] } ?? mailbox.accounts
-        return accounts.prefix(4).map { meadow.account(mailbox.accounts.firstIndex(of: $0) ?? 0) }
+        return accounts.prefix(4).map { meadow.account(mailbox.colourPlace(of: $0)) }
     }
 
     private func choose(_ choice: RailMenuChoice) {

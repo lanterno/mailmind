@@ -35,7 +35,8 @@ struct MailboxTable: View {
                              cursor: mailbox.marking ? mailbox.app?.selection.copy : nil, showsAccount: showsAccount,
                              look: RowLook(inks: RowInks.of(meadow, light: light, highContrast: status.highContrast),
                                            measure: measure, accounts: mailbox.accounts,
-                                           mine: RowWords.mine(mailbox.accounts, status: status)),
+                                           mine: RowWords.mine(mailbox.accounts, status: status),
+                                           places: mailbox.places),
                              brief: brief, briefChosen: place == .desk(.brief),
                              sections: DayGroup.sections(place), day: status.today)
                 .overlay(alignment: .top) {

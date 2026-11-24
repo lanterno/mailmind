@@ -18,6 +18,10 @@ final class Mailbox {
 
     // The sidebar, as /api/digest, /api/folders, /api/folders/across, /api/labels and /api/views say.
     private(set) var accounts: [String] = []
+    /// Each account's colour's place among the palette's, kept as accounts come and go (`AccountPlaces`).
+    private(set) var places: [String: Int] = [:]
+    /// Where the places are kept: this Mac's preferences, or a test's.
+    @ObservationIgnored var placesKept: UserDefaults = .standard
     private(set) var aliases: [String: String] = [:]
     private(set) var folders: [String: API.Folders] = [:]
     private(set) var labels: [String: [API.Label]] = [:]
@@ -261,9 +265,15 @@ final class Mailbox {
     func readDigest() async {
         guard let calls, let digest = try? await calls.get(API.Get.Digest.self) else { return }
         accounts = digest.accounts
+        places = AccountPlaces.remember(digest.accounts, in: placesKept)
         aliases = digest.aliases.compactMapValues { $0 }
         aiOn = digest.ai.isOn
         ai = digest.ai
+    }
+
+    /// The place of `account`'s colour among the palette's: one removed leaves the others' as they were.
+    func colourPlace(of account: String) -> Int {
+        AccountPlaces.place(of: account, among: accounts, in: places)
     }
 
     /// Each account's folders and its virtual folders' counts, and those over every account.

@@ -250,9 +250,9 @@ extension View {
 }
 
 extension MeadowPalette {
-    /// An account's colour by its place in the accounts' order, as the rail and the rows colour it.
+    /// An account's colour by the place kept for it (`AccountPlaces`), as the rail and the rows colour it.
     func account(of account: String, among accounts: [String]) -> Color {
-        self.account(accounts.firstIndex(of: account) ?? 0)
+        self.account(AccountPlaces.place(of: account, among: accounts))
     }
 }
 

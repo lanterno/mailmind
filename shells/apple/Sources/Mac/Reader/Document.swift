@@ -129,7 +129,7 @@ struct DocumentPlace {
         let mailbox = mailbox ?? app?.mailbox
         let rail = mailbox?.folders(of: copy.account) ?? []
         let me = mailbox?.name(of: copy.account) ?? Words.short(copy.account)
-        let index = mailbox?.accounts.firstIndex(of: copy.account) ?? 0
+        let index = mailbox?.colourPlace(of: copy.account) ?? 0
         let role = DocumentChip.role(of: copy.folder, rail: rail)
         let filed = rail.first { $0.name == copy.folder }.map(Words.role) ?? copy.folder
         var lane: Lane?
