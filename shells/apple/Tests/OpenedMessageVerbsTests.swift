@@ -769,6 +769,39 @@ final class OpenedMessageVerbsTests: XCTestCase {
         XCTAssertEqual(again, API.NamesThreadOrMessages(folder: message.folder, key: message.key, uid: message.uid))
     }
 
+    /// In an `is:unread` search, the row open stays where it stood once it is read and the search no longer finds it,
+    /// as the Unread tab keeps it, so e moves on to the next row; once left, it goes.
+    func testASearchKeepsTheRowOpenUntilItIsLeftSoEMovesOn() async throws {
+        let rows = [Fixture.row(50, seen: false), Fixture.row(51, seen: false), Fixture.row(52, seen: false)]
+        let server = Self.server(rows: rows)
+        func finds(_ keys: [Int]) {
+            server.on("GET", API.Get.Search.path, API.SearchAnswer.searchPage(API.SearchPage(
+                generated: "", hasMore: false, items: keys.map { Fixture.hit($0, subject: "Message \($0)", seen: false) },
+                offset: 0, ok: true, query: "is:unread", scope: "all")))
+        }
+        finds([50, 51, 52])
+        let world = await world(server)
+        let app = world.app
+        app.place = .search(Search(q: "is:unread", account: Fixture.ada))
+        await waiting(for: "the search's rows") { app.list?.copy(at: 2) != nil }
+        world.mailbox.chose([try XCTUnwrap(app.list?.copy(at: 0))])
+        XCTAssertEqual(app.selection.copy?.key, 50)
+
+        // Read, it is no longer found: the list read again keeps it where it stood.
+        finds([51, 52])
+        let asked = server.asked(API.Get.Search.path).count
+        world.mailbox.readAgain()
+        await waiting(for: "the search read again") { server.asked(API.Get.Search.path).count > asked }
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual((0..<3).compactMap { app.list?.copy(at: $0)?.key }, [50, 51, 52], "the row open stays")
+
+        // e moves on to the next row, and the row left goes.
+        await world.mailbox.fileNow(.archive)
+        XCTAssertEqual(app.selection.copy?.key, 51, "e chooses the next row")
+        await waiting(for: "the row left goes") { app.list?.copy(at: 0)?.key == 51 }
+        XCTAssertNil(app.list?.copy(at: 2))
+    }
+
     /// The stack's verb that takes the message open off it, as the pane's bar and the snooze chooser run it.
     private func leave(_ stack: VirtualFolder, _ world: World) async throws {
         let copies = [try XCTUnwrap(world.app.selection.copy)]
