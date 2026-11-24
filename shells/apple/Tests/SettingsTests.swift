@@ -147,6 +147,43 @@ final class AccountDraftTests: XCTestCase {
         XCTAssertNil(AccountDraft().test, "a new account with no password has nothing to test")
     }
 
+    /// An edit that changes only the signature sends no credential, whatever kind the account's is, so the server keeps
+    /// it as it is: a Proton account's own Keychain item stays (the edit once sent the Bridge's in its place, and the
+    /// server deleted the item). A Proton account with a password of its own says where it is kept, as its card does.
+    func testAnEditOfOnlyTheSignatureKeepsEveryKindOfCredential() {
+        let rows = [
+            F.account("ada@example.test"),
+            F.account("ada@example.test", type: "gmail"),
+            F.account("ada@example.test", style: "op", ref: "op://Vault/Ada/password"),
+            F.account("ada@example.test", style: "env", variable: "ADA_PASSWORD"),
+            F.account("ada@example.test", type: "proton", style: "proton_bridge"),
+            F.account("ada@example.test", type: "proton"),
+            F.account("ada@example.test", type: "proton", style: "op", ref: "op://Vault/Bea/password"),
+            F.account("ada@example.test", type: "proton", style: "env", variable: "BEA_PASSWORD"),
+        ]
+        for row in rows {
+            let said = "\(row.type), \(row.credential.style ?? "none")"
+            var draft = AccountDraft(editing: row)
+            draft.signature = "Ada, by the sea"
+            XCTAssertNil(draft.body.credential, said + ": the credential is kept as it is")
+            XCTAssertEqual(draft.body.signature, "Ada, by the sea", said)
+            XCTAssertNil(draft.problem, said)
+            XCTAssertEqual(draft.tries(firstRun: false), .never, said + ": a plain edit tries no login")
+        }
+
+        let own = AccountDraft(editing: F.account("bea@example.test", type: "proton"))
+        XCTAssertEqual(own.protonOwn?.style, "keychain", "its own Keychain item, as the card says")
+        XCTAssertNil(AccountDraft(editing: F.account("bea@example.test", type: "proton", style: "proton_bridge")).protonOwn,
+                     "the Bridge's password shows as the Bridge's")
+        XCTAssertNil(AccountDraft(editing: F.account("bea@example.test")).protonOwn)
+
+        var becomes = AccountDraft(editing: F.account("bea@example.test"))
+        becomes.pick(.proton)
+        XCTAssertEqual(becomes.body.credential, .object(["style": .string("proton_bridge")]),
+                       "an account made Proton by the edit logs in with the Bridge's")
+        XCTAssertNil(becomes.protonOwn)
+    }
+
     func testAProtonAccountIsTestedOnlyOnceItIsSavedWithTheBridgesPassword() {
         var draft = AccountDraft()
         draft.email = "ada@example.test"
