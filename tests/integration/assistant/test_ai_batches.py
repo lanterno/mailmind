@@ -144,6 +144,22 @@ def test_what_a_batch_may_cost_holds_back_background_work_but_not_someone_asking
     assert gw.ask("hello", feature="ask").text == fa.STUB_TEXT
 
 
+def test_the_status_says_what_waits_is_being_read_unless_the_limit_holds_it_back(backlog, ai):
+    from mailmind.bootstrap import assistant
+
+    def said():
+        report = assistant.status.report()
+        return report["summaries_waiting"], report["summarizing"]
+    waiting = said()[0]
+    assert said() == (waiting, True) and waiting > 0
+    assert assistant.assessments.batch_submit() > 0                                # out in a batch: still waiting
+    assert said() == (waiting, True)
+    assert assistant.gateway().ask("hello", feature="ask").text == fa.STUB_TEXT   # someone asking: only a moment
+    assert said() == (waiting, True)
+    _limit(backlog.dir, assistant.assessments.batch_status()["estimate_micros"] / 1_000_000)
+    assert said() == (waiting, False)
+
+
 def test_what_it_booked_is_released_when_its_answers_are_in(backlog, ai):
     from mailmind.bootstrap import assistant
     assert assistant.assessments.batch_submit() > 0

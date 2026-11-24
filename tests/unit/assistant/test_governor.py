@@ -179,6 +179,18 @@ def test_a_ledger_that_cant_be_read_stops_background_work_but_not_a_click(capsys
     assert "the usage ledger can't be read: OperationalError" in capsys.readouterr().out
 
 
+def test_what_stops_background_work_is_the_limit_or_the_breaker_never_someone_asking():
+    gov, _, box = governor(spent=0, limit=10_000)
+    with gov.call("interactive", "ask", "m", MODEL):
+        assert gov.held_back("background", "triage", "m", MODEL) == "yielding"
+        assert gov.stopped("triage", "m", MODEL) is None
+        box["spent"] = 10_000
+        assert gov.stopped("triage", "m", MODEL) == "limit"
+    box["spent"] = 0
+    gov.heard("triage", "m", MODEL, ModelError("Claude API 401: invalid x-api-key", 401))
+    assert gov.stopped("triage", "m", MODEL) == "breaker"
+
+
 # ── the breaker ──────────────────────────────────────────────────────────────
 
 def test_a_refused_key_stops_every_background_call_until_the_model_changes(capsys):

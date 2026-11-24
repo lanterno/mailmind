@@ -19,7 +19,8 @@
     "off": null,
     "provider": "anthropic",
     "spent_today_micros": 0,
-    "summaries_waiting": 14
+    "summaries_waiting": 14,
+    "summarizing": true
    },
    "aliases": {
     "ada@example.test": "Ada",
@@ -82,7 +83,8 @@
    "off": null,
    "provider": "anthropic",
    "spent_today_micros": 0,
-   "summaries_waiting": 14
+   "summaries_waiting": 14,
+   "summarizing": true
   }
  },
  {
@@ -100,7 +102,8 @@
    "off": null,
    "provider": "anthropic",
    "spent_today_micros": 0,
-   "summaries_waiting": 14
+   "summaries_waiting": 14,
+   "summarizing": true
   }
  }
 ]
