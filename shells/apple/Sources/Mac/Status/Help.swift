@@ -17,7 +17,7 @@ struct HelpWindow: View {
 
     /// The page's operators, as its legend lists them.
     static let operators = [
-        "from:", "to:", "cc:", "subject:", "body:", "is:unread", "is:flagged", "category:finance", "is:newsletter",
+        "from:", "to:", "cc:", "subject:", "body:", "is:unread", "is:starred", "category:finance", "is:newsletter",
         "is:snoozed", "bucket:receipt", "has:attachment", "in:Sent", "account:", "before:", "after:",
         "\"quoted phrase\"", "-exclude",
     ]
