@@ -161,6 +161,8 @@ export function CleanupPanel() {
     : method === "mailto" ? <>Email the list’s unsubscribe address <b>{d?.unsub?.mailto_to}</b> from your account</>
       : <>Open the unsubscribe <b>page</b> in a new tab (nothing is auto-submitted)</>;
   const accounts = d?.accounts ?? [];
+  // Only an unsubscribe that will go is marked as what Undo can't take back.
+  const sends = !!p && sendsUnsubscribe(method, p.unsubscribe);
   return (
     <ModalOverlay className="do-overlay show" isOpen={p !== null} isDismissable onOpenChange={(open) => { if (!open) cleaning.set(null); }}>
       <Modal className="modal-through">
@@ -176,14 +178,18 @@ export function CleanupPanel() {
               <div className="do-line rev"><span className="ic">✓</span><span>Move <b>{d.sweep_count}</b> inbox message{d.sweep_count === 1 ? "" : "s"}{p.scope === "domain" ? ` from ${d.from_addr}` : ""} to Trash</span><span className="tag">reversible</span></div>
               {method === "none"
                 ? <div className="do-line"><span className="ic">·</span><span style={{ color: "var(--faint)" }}>No List-Unsubscribe found — block + sweep only</span></div>
-                : <div className="do-line irrev"><span className="ic"><Icon name="alert" /></span><span>{unsubWords}</span><span className="tag">can’t undo</span></div>}
+                : sends
+                  ? <div className="do-line irrev"><span className="ic"><Icon name="alert" /></span><span>{unsubWords}</span><span className="tag">can’t undo</span></div>
+                  : p.unsubscribe
+                    ? <div className="do-line"><span className="ic">·</span><span>{unsubWords}</span></div>
+                    : <div className="do-line"><span className="ic">·</span><span style={{ color: "var(--faint)" }}>Not unsubscribing — block + sweep only</span></div>}
               {method !== "none" && (
                 <label className="do-unsubopt">
                   <input type="checkbox" checked={p.unsubscribe} onChange={(e) => cleaning.set({ ...p, unsubscribe: e.target.checked })} /> {method === "http-page" ? "open the unsubscribe page" : "also send the unsubscribe now"}
                 </label>
               )}
               {d.sweep_capped && <div className="do-cap"><Icon name="alert" /> Sweeps the most recent {d.sweep_count} — run again for the rest.</div>}
-              <div className="do-danger-note">Block + sweep undo with <b>z</b>. {sendsUnsubscribe(method, p.unsubscribe) ? "Unsubscribing can’t be undone." : ""}</div>
+              <div className="do-undo-note">Block + sweep undo with <b>z</b>.{sends && <span className="do-cant-undo"> Unsubscribing can’t be undone.</span>}</div>
               <div className="do-foot">
                 <button className={p.armed ? "btn-retry strong danger armed" : "btn-retry strong danger"} onClick={() => { if (p.armed) void runCleanup(qc, p); else cleaning.set({ ...p, armed: true }); }}>{p.armed ? "Click again to confirm" : "Clean up"}</button>
                 <button className="do-cancel" onClick={() => cleaning.set(null)}>Cancel</button>
