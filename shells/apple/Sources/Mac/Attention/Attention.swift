@@ -27,6 +27,12 @@ enum Snoozing: Hashable, Sendable {
     }
 }
 
+/// A whole conversation, as a verb on it names it to the server: its account and thread.
+struct Conversation: Hashable, Sendable {
+    let account: String
+    let thread: String
+}
+
 /// The places attention keeps mail in, by the names of their lists (`/api/messages` reads each as a folder): what a
 /// verb on a message there does differs, as the page's reader decides by `m.folder`.
 enum AttentionStack: String, Hashable, Sendable, CaseIterable {
@@ -63,6 +69,10 @@ final class AttentionModel {
     /// The subject of the one message a verb acts on when it isn't the one on screen, for words that say which
     /// (`Mailbox.subjectAway`); nil when it is, or for several.
     @ObservationIgnored var naming: @MainActor ([MailCopy]) -> String? = { _ in nil }
+    /// The conversation `copies` stand for, when they are one row of the list that stands for a whole one
+    /// (`Mailbox.conversation(of:)`): a snooze names its thread, so every message of it goes. Mute, Reply Later and a
+    /// follow-up's dismissal need none: the server takes any message of a thread as the thread.
+    @ObservationIgnored var conversation: @MainActor ([MailCopy]) -> Conversation? = { _ in nil }
 
     init(link: CoreLink, notices: DeskNotices) {
         self.link = link
@@ -76,7 +86,9 @@ final class AttentionModel {
         case .preset(let preset): body.preset = preset
         case .until(let date): body.until = .int(Int(date.timeIntervalSince1970.rounded(.up)))
         }
-        if let one = copies.first, copies.count == 1 {
+        if let whole = conversation(copies) {
+            (body.account, body.threadId) = (whole.account, whole.thread)
+        } else if let one = copies.first, copies.count == 1 {
             (body.folder, body.key, body.uid) = (one.folder, one.key, one.uid)
         } else {
             body.copies = copies.map(\.aCopy)
@@ -94,9 +106,13 @@ final class AttentionModel {
 
     /// Brought back now: off the Snoozed stack, the one place it is offered, so it leaves the list shown.
     func unsnooze(_ copies: [MailCopy]) async {
-        let body = copies.count == 1
-            ? API.NamesThreadOrMessages(folder: copies[0].folder, key: copies[0].key, uid: copies[0].uid)
-            : API.NamesThreadOrMessages(copies: copies.map(\.aCopy))
+        let body = if let whole = conversation(copies) {
+            API.NamesThreadOrMessages(account: whole.account, threadId: whole.thread)
+        } else if copies.count == 1 {
+            API.NamesThreadOrMessages(folder: copies[0].folder, key: copies[0].key, uid: copies[0].uid)
+        } else {
+            API.NamesThreadOrMessages(copies: copies.map(\.aCopy))
+        }
         await act(copies, left: leaving(copies), fail: { _ in String(localized: "Couldn’t unsnooze") }) { routes in
             _ = try await routes.post(API.Post.Unsnooze.self, body)
             return (String(localized: "Unsnoozed"), nil)

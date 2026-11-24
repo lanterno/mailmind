@@ -96,6 +96,8 @@ final class Desk {
         brief.leaving = { [weak self] copies in self?.app?.mailbox.leaving(copies) ?? {} }
         // A snooze from a row's clock or the brief says which message it was.
         attention.naming = { [weak self] copies in self?.app?.mailbox.subjectAway(copies) }
+        // A conversation's row snoozes the whole conversation, as the page's does.
+        attention.conversation = { [weak self] copies in self?.app?.mailbox.conversation(of: copies) }
         curate.changed = readAgain
         curate.openPage = { NSWorkspace.shared.open($0) }
         // Edit ▸ Undo on Curate's sheet takes back what the mailbox's still holds, as its toast's Undo does: once

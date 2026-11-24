@@ -501,6 +501,15 @@ extension Mailbox {
         return subject
     }
 
+    /// The conversation another area's verb acts on, when `copies` is one row that stands for a whole conversation
+    /// here, as filing reads one: a snooze then names its thread, as the page's names the thread it has open or a
+    /// conversation's row, so none of its messages stays behind as a row of its own. Nil for a message, or several.
+    func conversation(of copies: [MailCopy]) -> Conversation? {
+        guard copies.count == 1, let copy = copies.first, let row = heldRow(of: copy),
+              row.isConversation(grouped: grouped), let thread = row.threadId else { return nil }
+        return Conversation(account: row.account, thread: thread)
+    }
+
     /// Where the reader goes once `copies` leave the place shown by another area's verb (a snooze, Reply Later's Done):
     /// worked out now, while the list and the lane still hold them, and gone to once the server has taken them, as
     /// File goes.
