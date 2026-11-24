@@ -258,6 +258,7 @@ tests/e2e/browser/test_brief.py::test_read_opens_the_message_and_escape_comes_ba
 tests/e2e/browser/test_brief.py::test_refresh_writes_it_again
 tests/e2e/browser/test_brief.py::test_see_all_under_who_youre_waiting_on_says_how_many_waiting_holds
 tests/e2e/browser/test_brief.py::test_the_brief_is_written_once_when_the_inbox_opens
+tests/e2e/browser/test_brief.py::test_while_its_mail_waits_for_summaries_the_brief_says_it_is_reading_it_then_what_needs_you
 tests/e2e/browser/test_brief.py::test_the_page_has_nothing_axe_finds[day]
 tests/e2e/browser/test_brief.py::test_the_page_has_nothing_axe_finds[dusk]
 tests/e2e/browser/test_brief.py::test_the_page_has_nothing_axe_finds[night]

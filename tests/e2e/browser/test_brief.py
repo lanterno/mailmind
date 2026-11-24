@@ -92,6 +92,30 @@ def test_the_brief_is_written_once_when_the_inbox_opens(page, app, world, ai):
     clean(page)
 
 
+def test_while_its_mail_waits_for_summaries_the_brief_says_it_is_reading_it_then_what_needs_you(page, app, world, ai):
+    """Nothing is summarized yet, as after an account's first sync: nothing says that nothing needs you. Once the round
+    lands, the brief is read again and written."""
+    def answer(req):
+        if "narrative" in ((req.schema or {}).get("properties") or {}):
+            return fa.answer({"narrative": BRIEF, "groups": []})
+        if req.prompt.startswith("You are triaging ONE email"):
+            return fa.answer({"summary": "For your information.", "importance": 2, "category": "info", "action": ""})
+        return None
+    ai.responder = answer
+    page.goto("/")
+    reading = "Reading your new mail…"
+    expect(page.locator("[data-brief-row] small")).to_have_text(reading)
+    expect(page.locator(".bf-calm")).to_have_text(reading)
+    expect(page.locator("p.bf-wait")).to_have_text(reading)
+    assert briefs(ai) == []
+    app.work("assess")
+    expect(page.locator("[data-brief-row] small")).to_have_text("Nothing needs you")
+    expect(page.locator(".bf-calm")).to_have_text("Nothing needs you right now.")
+    expect(page.locator(".bf-narr")).to_have_text(BRIEF)
+    assert len(briefs(ai)) == 1
+    clean(page)
+
+
 def test_at_the_daily_limit_the_brief_waits_for_a_click(page, app, world, ai):
     lunch_needs_a_reply(app, world)
     spent_the_daily_limit(app, ai)
