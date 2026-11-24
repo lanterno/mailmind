@@ -385,6 +385,13 @@ final class MeadowOverlayTests: XCTestCase {
         let news = StatusMenu.state(of: "news@example.test", digest: digest, health: health, now: now)
         XCTAssertEqual(news.words, "Synced 6h ago", "its own last sync, not the round's")
         XCTAssertFalse(news.tryingAgain)
+
+        // Settings' row says the same as the status menu's, never "connected" while the pill says it couldn't reach
+        // the server.
+        let row = AccountListRow.says("ada@example.test", digest: digest, health: health)
+        XCTAssertEqual(row.words, "trying again")
+        XCTAssertTrue(row.tryingAgain, "the sun's dot, never moss")
+        XCTAssertEqual(AccountListRow.says("news@example.test", digest: digest, health: health).words, "connected")
     }
 
     // MARK: Which dialog
