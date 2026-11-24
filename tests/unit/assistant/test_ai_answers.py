@@ -143,12 +143,13 @@ def test_a_stored_review_leaves_out_a_message_that_has_gone(model, said, week):
     assert again["stale"] is True                        # and it says the mail changed
 
 
-def test_a_stored_review_keeps_what_it_said_when_the_mail_moves_on(model, said, week):
+def test_a_stored_review_keeps_what_it_said_when_the_mail_moves_on_and_counts_the_week_as_it_stands(model, said, week):
     reviews = reviews_over(model, said, week)
     first = review_of(model, reviews)
     week.received += 1
     again = reviews.build({ADA})
-    assert (again["narrative"], again["next"], again["stats"]) == (WEEK, ["Answer Lin"], first["stats"])
+    assert (again["narrative"], again["next"]) == (WEEK, ["Answer Lin"])
+    assert again["stats"] == {**first["stats"], "received": first["stats"]["received"] + 1}
     assert (again["cached"], again["stale"], len(model.sent)) == (True, True, 1)
 
 
