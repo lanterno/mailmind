@@ -15,6 +15,7 @@ from mailmind.bootstrap.compose import book
 from mailmind.bootstrap import compose
 from mailmind.compose.domain.draft_journal import PUSH_EVERY
 from mailmind.bootstrap.mailbox import store
+from mailmind.platform import sse
 
 
 def new(**kw):
@@ -274,6 +275,14 @@ def test_a_push_waits_its_turn_while_another_job_holds_the_gate(app, world):
         assert wait_until(lambda: gate.waits_for_a_gate(job))
     job.join(10)
     assert holds(world, "Two of each.") and waiting(did) is None
+
+
+def test_a_first_push_tells_the_open_lists_of_drafts(app, world, monkeypatch):
+    heard = []
+    real = sse.publish
+    monkeypatch.setattr(sse, "publish", lambda topic, data=None: (heard.append((topic, data)), real(topic, data))[1])
+    assert save(app)["pushed"] is True
+    assert ("reconcile", {"account": w.ADA, "folder": "Drafts", "pruned": 1}) in heard
 
 
 def test_a_close_and_the_job_pushing_at_once_leave_one_copy(app, world):
