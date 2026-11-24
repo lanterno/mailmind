@@ -98,6 +98,9 @@ struct ComposerForm: View {
             head
             if !composer.note.isEmpty { noteLine }
             fields
+                // Each row as tall as its chips wrap to: a short window takes the room from the text, never from a
+                // row, whose chips would stand over the rows beside it.
+                .fixedSize(horizontal: false, vertical: true)
                 .zIndex(1)   // a completion list hangs over the text below it
             if host.aiOn { aiRow }
             writing
@@ -878,15 +881,30 @@ struct ChipFlow: Layout {
     var fieldMin: CGFloat = 140
     var stretchesLast = true
 
+    /// Each item's own size, the field's width its least.
+    private func sizes(_ subviews: Subviews) -> [CGSize] {
+        subviews.enumerated().map { index, view in
+            var size = view.sizeThatFits(.unspecified)
+            if stretchesLast && index == subviews.count - 1 { size.width = fieldMin }
+            return size
+        }
+    }
+
+    /// Every item on one line, each its own width: the flow's ideal width, which it asks of a width it isn't given.
+    private func oneLine(_ subviews: Subviews) -> CGFloat {
+        let widths = sizes(subviews).map(\.width)
+        return widths.reduce(0, +) + spacing * CGFloat(max(0, widths.count - 1))
+    }
+
     private func lines(_ width: CGFloat, _ subviews: Subviews) -> [(frame: CGRect, index: Int)] {
         var x: CGFloat = 0, y: CGFloat = 0, line: CGFloat = 0
         var placed: [(CGRect, Int)] = []
-        for (index, view) in subviews.enumerated() {
+        for (index, measured) in sizes(subviews).enumerated() {
             let last = stretchesLast && index == subviews.count - 1
-            var size = view.sizeThatFits(.unspecified)
-            if last { size.width = fieldMin }
+            var size = measured
             size.width = min(size.width, width)
-            if x > 0 && x + size.width > width {
+            // A hair's leeway, so sums that come to the width exactly don't wrap by a rounding.
+            if x > 0 && x + size.width > width + 0.5 {
                 y += line + spacing
                 x = 0
                 line = 0
@@ -906,7 +924,9 @@ struct ChipFlow: Layout {
     }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? 400
+        // Given a width, the items wrap at it as `placeSubviews` places them, so the height said is the height they
+        // take there. Given none, or no limit, they stand on one line at their own widths: a size that is finite.
+        let width = proposal.width.flatMap { $0.isFinite ? $0 : nil } ?? oneLine(subviews)
         let placed = lines(width, subviews)
         return CGSize(width: width, height: placed.map(\.frame.maxY).max() ?? 0)
     }
