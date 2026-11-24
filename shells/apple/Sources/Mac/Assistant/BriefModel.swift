@@ -48,6 +48,10 @@ final class BriefModel {
     @ObservationIgnored let link: CoreLink
     @ObservationIgnored let notices: DeskNotices
     @ObservationIgnored var changed: () -> Void = {}
+    /// What the window does once a card's message is filed (a commitment's Done), worked out before it is sent, while
+    /// the list still holds it, and run once the server has taken it: the message open moves on as File moves it on,
+    /// or closes (`Mailbox.leaving`).
+    @ObservationIgnored var leaving: @MainActor ([MailCopy]) -> @MainActor () -> Void = { _ in {} }
     @ObservationIgnored private let defaults: UserDefaults
     static let tidyDismissedKey = "mm_tidy_dismissed"
 
@@ -325,12 +329,14 @@ final class BriefModel {
         guard let routes = link.routes else { return }
         let copy = Self.copy(of: item)
         filing.insert(copy)
+        let left = leaving([copy])
         let body = API.MoveBody(folder: copy.folder, key: copy.key, uid: copy.uid)
         do {
             let filed = verb == .trash
                 ? try await routes.post(API.Post.Trash.self, body)
                 : try await routes.post(API.Post.Archive.self, body)
             notices.say(Self.filedWords(verb, filed), undo: filed.undoable ? Mailbox.words(verb).undo : nil)
+            left()
         } catch {
             filing.remove(copy)
             notices.say(ReadOnlyWords.said(error, else: verb == .trash ? String(localized: "Couldn’t delete")

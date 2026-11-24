@@ -90,8 +90,10 @@ final class Desk {
         plan.changed = readAgain
         brief.changed = readAgain
         attention.changed = readAgain
-        // Snoozed, or done with in Reply Later, the message open moves on as File moves on.
+        // Snoozed, or done with in Reply Later, the message open moves on as File moves on; and filed from a card, as
+        // a commitment's Done files it.
         attention.leaving = { [weak self] copies in self?.app?.mailbox.leaving(copies) ?? {} }
+        brief.leaving = { [weak self] copies in self?.app?.mailbox.leaving(copies) ?? {} }
         // A snooze from a row's clock or the brief says which message it was.
         attention.naming = { [weak self] copies in self?.app?.mailbox.subjectAway(copies) }
         curate.changed = readAgain
