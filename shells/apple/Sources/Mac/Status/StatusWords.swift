@@ -60,6 +60,15 @@ enum StatusWords {
     /// The pill's quiet words while an account's last sync failed and it is trying again.
     static let tryingAgainWords = String(localized: "Couldn’t reach the server · trying again")
 
+    /// The same for `trying` among `accounts`: which account's server, where there are several to tell apart, or how
+    /// many.
+    static func tryingAgainWords(_ trying: [String], among accounts: [String], aliases: [String: String?]) -> String {
+        guard accounts.count > 1, let first = trying.first else { return tryingAgainWords }
+        return trying.count == 1
+            ? String(localized: "Couldn’t reach \(name(first, aliases: aliases))’s server · trying again")
+            : String(localized: "Couldn’t reach \(trying.count) accounts’ servers · trying again")
+    }
+
     /// When mail was last synced: the latest sync that worked, as each account's record of its syncs says. The
     /// digest's last round is set as a sync ends however it went, so it speaks only before the records are read, and
     /// never while an account's last sync failed.
@@ -104,8 +113,9 @@ enum StatusWords {
         if reconciling { return Pill(dot: .busy, text: String(localized: "Checking against the server…")) }
         let anySyncing = digest.accounts.contains { standing(of: $0, digest: digest, health: health) == .syncing }
         if syncing || digest.sync.running || anySyncing { return Pill(dot: .busy, text: String(localized: "Syncing…")) }
-        if digest.accounts.contains(where: { tryingAgain($0, digest: digest) }) {
-            return Pill(dot: .busy, text: tryingAgainWords)
+        let trying = digest.accounts.filter { tryingAgain($0, digest: digest) }
+        if !trying.isEmpty {
+            return Pill(dot: .busy, text: tryingAgainWords(trying, among: digest.accounts, aliases: digest.aliases))
         }
         if digest.profile == "read-only" { return Pill(dot: .none, text: String(localized: "Read only")) }
         if let last = lastSynced(digest: digest, health: health) {
