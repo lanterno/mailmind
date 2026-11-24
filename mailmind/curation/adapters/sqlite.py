@@ -90,6 +90,20 @@ class SenderMail:
                 by_acct.setdefault(row["addr"], []).append({"email": row["account"], "count": row["n"]})
         return by_acct
 
+    def ways_out(self, addrs):
+        """{sender: the way out its newest message whose List-Unsubscribe ingest read names}, for just these senders: what
+        a preview would most likely say, with no body read and no server asked. A sender none of whose mail was read
+        so is left out."""
+        aph = ",".join("?" for _ in addrs)
+        ways = ",".join("?" for _ in unsubscribe.WAYS_OUT)
+        with _uow.read() as c:
+            return {row["addr"]: row["way"] for row in c.execute(
+                f"""SELECT addr, way FROM (
+                        SELECT lower(from_addr) addr, list_unsub_method way,
+                               ROW_NUMBER() OVER (PARTITION BY lower(from_addr) ORDER BY ts DESC, pk DESC) newest
+                        FROM messages WHERE lower(from_addr) IN ({aph}) AND list_unsub_method IN ({ways}))
+                    WHERE newest=1""", [*addrs, *unsubscribe.WAYS_OUT])}
+
     def counts(self, addr):
         """(how many messages from this sender, how many unread)."""
         with _uow.read() as c:

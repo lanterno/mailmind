@@ -5,11 +5,14 @@ import re
 import urllib.parse
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from typing import Literal
 
 from mailmind.content import mime
 from mailmind.content.mime import UnsubWay
 from mailmind.kernel.row import Row
 
+type UnsubMethod = Literal["one-click", "mailto", "http-page", "none"]     # the ways out a list's headers name
+WAYS_OUT: tuple[str, ...] = ("one-click", "mailto", "http-page", "none")
 NO_METHOD: UnsubWay = {"method": "none", "https_uri": None, "mailto_uri": None, "mailto_to": None,
                        "mailto_subject": None, "mailto_body": None, "raw": ""}
 TOKEN_LIFE = 600           # seconds a preview's confirm token stands

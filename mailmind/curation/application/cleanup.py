@@ -35,18 +35,20 @@ class Cleanup:
     def senders(self) -> dict[str, Any]:
         """Ranked cleanup-candidate senders — pure local SQL, no AI, no IMAP, no outbound. Grouped by
         lower(from_addr) across all accounts+folders, bucket-filtered, post-filtered against rules so an
-        already-decided sender never reappears."""
+        already-decided sender never reappears. Each says its way out as its newest mail stored says it
+        (`unsub_method`), or None where none was read."""
         rows = rulebook.undecided(self._mail.noisy_senders(list(noise.BUCKETS), noise.MIN_COUNT), self._rules.sets())
         cands: list[dict[str, Any]] = [
             {"from_addr": c.addr, "from_name": c.name, "domain": c.domain, "count": c.count, "unseen": c.unseen,
              "unseen_ratio": c.unseen_ratio, "last_seen": rel_time(c.last_iso), "bucket": c.bucket, "lu_likely": c.list_likely,
              "noise_score": c.score} for c in noise.ranked(rows, time.time(), noise.LIMIT)]
-        # per-account rollup for just the shown senders
+        # per-account rollup and the way out, for just the shown senders
         addrs = [x["from_addr"] for x in cands]
         if addrs:
-            by_acct = self._mail.accounts_by_sender(addrs)
+            by_acct, ways = self._mail.accounts_by_sender(addrs), self._mail.ways_out(addrs)
             for x in cands:
                 x["accounts"] = by_acct.get(x["from_addr"], [])
+                x["unsub_method"] = ways.get(x["from_addr"])
         return {"ok": True, "generated": now_iso(), "senders": cands}
 
     def sender(self, qs: Query) -> dict[str, Any]:

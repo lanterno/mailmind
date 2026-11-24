@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from mailmind.curation.api import BlockScope, FilterVerb, RuleChange
+from mailmind.curation.api import BlockScope, FilterVerb, RuleChange, UnsubMethod
 from mailmind.http.schemas.common import Answer, Flag, NamesAMessage, Number, QueryArgs, RequestBody
 
 
@@ -143,6 +143,7 @@ class NoisySender(Answer):
     last_seen: str
     bucket: str
     lu_likely: bool
+    unsub_method: UnsubMethod | None             # the way out its newest mail stored names; None where none was read
     noise_score: float
     accounts: list[SenderAccount]
 
