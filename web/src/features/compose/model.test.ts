@@ -23,10 +23,16 @@ describe("addresses", () => {
 });
 
 describe("subjects", () => {
-  it("prefixes once, swapping what was there", () => {
+  it("prefixes once, and only a prefix of the same kind gives way", () => {
     expect(rePrefix("Lunch", "Re:")).toBe("Re: Lunch");
     expect(rePrefix("re: Lunch", "Re:")).toBe("Re: Lunch");
-    expect(rePrefix("Fwd: Lunch", "Re:")).toBe("Re: Lunch");
+    expect(rePrefix("RE : Lunch", "Re:")).toBe("Re: Lunch");
+    expect(rePrefix("Fwd: Fabric samples", "Re:")).toBe("Re: Fwd: Fabric samples");
+    expect(rePrefix("FW: Fabric samples", "Re:")).toBe("Re: FW: Fabric samples");
+    expect(rePrefix("Re: Plans", "Fwd:")).toBe("Fwd: Re: Plans");
+    expect(rePrefix("fw: Plans", "Fwd:")).toBe("Fwd: Plans");
+    expect(rePrefix("Fwd: Plans", "Fwd:")).toBe("Fwd: Plans");
+    expect(rePrefix("Rerun: the numbers", "Re:")).toBe("Re: Rerun: the numbers");
     expect(rePrefix("", "Fwd:")).toBe("Fwd:");
     expect(rePrefix(null, "Re:")).toBe("Re:");
   });
