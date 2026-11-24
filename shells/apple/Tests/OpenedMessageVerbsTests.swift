@@ -630,6 +630,48 @@ final class OpenedMessageVerbsTests: XCTestCase {
         await waiting(for: "a message opened from outside closes") { world.app.selection.copy == nil }
     }
 
+    /// Your Week leaves out what was filed since it was read, as the server reads it, once the mail changes: a
+    /// commitment's Done, or a command from anywhere (`commands-changed`). It once still listed and counted it.
+    func testYourWeekIsReadAgainOnceMailIsFiled() async throws {
+        final class Filed: @unchecked Sendable {
+            var yes = false
+        }
+        for viaDone in [true, false] {
+            let filed = Filed()
+            let server = Self.server()
+            server.on("GET", API.Get.Review.path) { _ in
+                var review = DeskFixture.review
+                if filed.yes {
+                    review.needs = []
+                    review.stats.needsYou = 0
+                }
+                return FakeServer.ok(API.ReviewAnswer.review(review))
+            }
+            server.on("POST", API.Post.Archive.path) { _ in
+                filed.yes = true
+                return FakeServer.ok(API.Filed(msg: "ok", ok: true, undoable: true))
+            }
+            let world = await world(server)
+            await world.desk.review.open()
+            XCTAssertEqual(world.desk.review.review?.needs.count, 1)
+            if viaDone {
+                let need = try XCTUnwrap(DeskFixture.review.needs.first)
+                var item = DeskFixture.item(try XCTUnwrap(need.key), from: "grace@example.test", name: "Grace Hopper",
+                                            subject: need.subject, action: need.action, commitment: true)
+                item.uid = try XCTUnwrap(need.uid)
+                await world.desk.brief.file(item, .archive)
+            } else {
+                filed.yes = true
+                await world.desk.heard(CoreEvent(id: "1", name: "commands-changed", data: "{}"))
+            }
+            await waiting(for: "the week read again") { world.desk.review.review?.needs.isEmpty == true }
+            XCTAssertEqual(world.desk.review.review?.stats.needsYou, 0, "nor counted")
+            XCTAssertEqual(world.desk.review.review?.narrative, DeskFixture.review.narrative, "nothing written again")
+            XCTAssertTrue(world.server.asked(API.Post.Review.path).allSatisfy { $0.method == "GET" }, "only read")
+            XCTAssertTrue(world.server.asked(API.Post.ReviewRefresh.path).isEmpty)
+        }
+    }
+
     /// Snooze and Mute offer Undo on their toast, and so on Edit ▸ Undo as "Undo Snooze" and "Undo Mute": ⌘Z, sent
     /// to the window as the menu sends it, asks the server to undo once, as z and the toast's Undo do; and once z has
     /// taken it back, Edit ▸ Undo has nothing of it left to take back again.
