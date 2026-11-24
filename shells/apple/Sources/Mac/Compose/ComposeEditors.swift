@@ -48,7 +48,12 @@ struct ComposeTextView: NSViewRepresentable {
         text.textContainerInset = NSSize(width: 12, height: 10)
         text.commandReturn = commandReturn
         text.escape = escape
+        // The caret where the composer has it, not where setting the text leaves it, at the end: a new message's is
+        // at the top, above the signature, so what is typed goes above it, as Mail has it.
+        let caret = composer.selection
         text.string = composer.body
+        text.setSelectedRange(Self.inside(caret, of: composer.body))
+        context.coordinator.synced = composer.body
         if let look {
             // The mockup's padding is the text's own distance from the edge, with no fragment padding inside it.
             text.textContainer?.lineFragmentPadding = 0
@@ -68,18 +73,32 @@ struct ComposeTextView: NSViewRepresentable {
         guard let view = scroll.documentView as? BodyTextView else { return }
         view.commandReturn = commandReturn
         view.escape = escape
-        if view.string != text {
-            // A change the composer made (a snippet, a draft, a picture's mark): the text takes it whole, in the look.
-            view.string = text
+        // The composer's text as it is now, not as this view's value was made: a value made before the last key
+        // reached the composer would put the older text back over what was just typed. `text` only says when to look.
+        let held = composer.body, coordinator = context.coordinator
+        if held != view.string && view.string == coordinator.synced {
+            // A change the composer made (a snippet, a draft, a picture's mark): the text takes it whole, in the look,
+            // and the caret stays where it was unless the composer asks for another place.
+            let caret = view.selectedRange()
+            view.string = held
             look?.dress(view)
-        } else if let look, context.coordinator.look != look {
+            if selectionRequest == nil { view.setSelectedRange(Self.inside(caret, of: held)) }
+            coordinator.synced = held
+        } else if held != view.string {
+            // Words in the text the composer never heard of: they are the person's, and the composer takes them,
+            // never the other way round.
+            let typed = view.string, caret = view.selectedRange()
+            coordinator.synced = typed
+            DispatchQueue.main.async { [composer = self.composer] in   // after this update, never during it
+                composer.setBody(typed, selection: caret)
+            }
+            if let look, coordinator.look != look { look.dress(view) }
+        } else if let look, coordinator.look != look {
             look.dress(view)
         }
-        context.coordinator.look = look
+        coordinator.look = look
         if let wanted = selectionRequest {
-            let length = (view.string as NSString).length
-            let range = NSRange(location: min(wanted.location, length),
-                                length: max(0, min(NSMaxRange(wanted), length) - min(wanted.location, length)))
+            let range = Self.inside(wanted, of: view.string)
             view.setSelectedRange(range)
             view.scrollRangeToVisible(range)
         }
@@ -96,12 +115,20 @@ struct ComposeTextView: NSViewRepresentable {
         }
     }
 
+    /// A range inside `text`: the text may have changed since the range was taken.
+    static func inside(_ range: NSRange, of text: String) -> NSRange {
+        let length = (text as NSString).length, start = min(range.location, length)
+        return NSRange(location: start, length: max(0, min(NSMaxRange(range), length) - start))
+    }
+
     @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         let composer: Composer
         weak var text: BodyTextView?
         /// The look the text was last dressed in.
         var look: ComposeTextLook?
+        /// The text the view and the composer last agreed on: which of them changed since says which way it goes.
+        var synced = ""
 
         init(composer: Composer) {
             self.composer = composer
@@ -109,6 +136,7 @@ struct ComposeTextView: NSViewRepresentable {
 
         func textDidChange(_ notification: Notification) {
             guard let text else { return }
+            synced = text.string
             composer.setBody(text.string, selection: text.selectedRange())
         }
 
