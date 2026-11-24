@@ -265,6 +265,17 @@ def test_a_send_scheduled_for_later_lets_its_draft_catch_up(app, world):
 
 # -- the job, the gate and the lists ----------------------------------------------------------
 
+def test_a_push_waits_its_turn_while_another_job_holds_the_gate(app, world):
+    did = save(app, autosave=True)["draft_id"]
+    a_minute_on(app)
+    with gate.held_elsewhere(w.ADA):
+        job = threading.Thread(target=compose.drafts.push_round, daemon=True)
+        job.start()
+        assert wait_until(lambda: gate.waits_for_a_gate(job))
+    job.join(10)
+    assert holds(world, "Two of each.") and waiting(did) is None
+
+
 def test_a_close_and_the_job_pushing_at_once_leave_one_copy(app, world):
     did = save(app, autosave=True, text="One.")["draft_id"]
     a_minute_on(app)
