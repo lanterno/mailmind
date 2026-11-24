@@ -311,17 +311,29 @@ final class MailFrameTests: XCTestCase {
         for owner in owners where owner.responds(to: selector) { owner.perform(selector, with: event) }
     }
 
-    /// A key pressed as a person presses one: through the app (`NSApp.sendEvent`) to the window's first responder,
-    /// and back through it should WebKit give the key back. A function key carries the flags AppKit gives one.
+    /// A key pressed as a person presses one. It is posted into the app's queue and taken out as the app's run takes
+    /// it, which makes it the app's current event, then goes the way AppKit sends a key-down in the key window: offered
+    /// first as a key equivalent to the window's views, as one is with ⌘ or ⌃ held or a function key's (the arrows,
+    /// Page Up and Down, Home and End), where WebKit claims every key while it has the keyboard; then, if nothing
+    /// took it, through the app (`NSApp.sendEvent`) to the window's first responder, and back through it should WebKit
+    /// give the key back. The app the tests run in is never active, so it has no key window and AppKit would skip the
+    /// first step: the test takes it for AppKit, since making the app active would take the keyboard from the Mac's
+    /// person. A function key carries the flags AppKit gives one.
     private func press(_ typed: String, _ code: UInt16, held: NSEvent.ModifierFlags = [], in frame: Shown) throws {
         let scalar = typed.unicodeScalars.first.map { Int($0.value) } ?? 0
         var flags = held
         if (0xF700...0xF8FF).contains(scalar) { flags.insert(.function) }
         if (NSUpArrowFunctionKey...NSRightArrowFunctionKey).contains(scalar) { flags.insert(.numericPad) }
-        NSApp.sendEvent(try XCTUnwrap(NSEvent.keyEvent(
+        NSApp.postEvent(try XCTUnwrap(NSEvent.keyEvent(
             with: .keyDown, location: .zero, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
             windowNumber: frame.window.windowNumber, context: nil, characters: typed, charactersIgnoringModifiers: typed,
-            isARepeat: false, keyCode: code)))
+            isARepeat: false, keyCode: code)), atStart: true)
+        let key = try XCTUnwrap(NSApp.nextEvent(matching: .keyDown, until: .distantFuture, inMode: .default,
+                                                dequeue: true))
+        XCTAssertTrue(NSApp.currentEvent === key, "the key is the app's current event, as WebKit expects")
+        let equivalent = !key.modifierFlags.isDisjoint(with: [.command, .control, .function])
+        if equivalent, frame.window.performKeyEquivalent(with: key) { return }
+        NSApp.sendEvent(key)
     }
 
     private func function(_ key: Int) -> String {
@@ -554,7 +566,8 @@ final class MailFrameTests: XCTestCase {
     /// Once the body has the keyboard (a click in a paragraph), the keys that page and scroll move the reader as they
     /// do from the list: Space a page down and ⇧Space back, Page Down and Up, ↓ and ↑ a line, End and Home. A frame as
     /// tall as its content has nothing of its own to scroll: WebKit gives back every key but Page Up and Down, which it
-    /// keeps all the same. The keys go through `NSApp.sendEvent` to the key window, as a person's do.
+    /// keeps all the same. The keys go as a person's do (`press`): the function keys offered to WebKit first as key
+    /// equivalents, which it claims.
     func testTheKeysThatPageAndScrollMoveTheReaderOnceTheBodyHasTheKeyboard() async throws {
         let frame = try await frame(Self.statement)
         let reader = read(frame)
