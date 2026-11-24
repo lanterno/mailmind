@@ -98,12 +98,13 @@ struct ComposerForm: View {
             head
             if !composer.note.isEmpty { noteLine }
             fields
-                // Each row as tall as its chips wrap to: a short window takes the room from the text, never from a
-                // row, whose chips would stand over the rows beside it.
-                .fixedSize(horizontal: false, vertical: true)
                 .zIndex(1)   // a completion list hangs over the text below it
             if host.aiOn { aiRow }
             writing
+                // The text takes the room the rest leave, down to its least: the recipient rows stop growing at a
+                // few lines and scroll inside, then give way down to a line each, so the head and Send stay in
+                // the window however many people a message is to.
+                .layoutPriority(-1)
             if let check = composer.check {
                 GuardStrip(composer: composer, check: check)
             }
@@ -421,6 +422,11 @@ struct ComposerForm: View {
 
     // MARK: The text
 
+    /// The least the text is given in a short window: a line, and its margin above.
+    static var textLeast: CGFloat {
+        ComposeTextLook.inset.height + (ComposeTextLook.size * ComposeTextLook.lineHeight).rounded(.up) + 6
+    }
+
     @ViewBuilder
     private var writing: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -442,6 +448,7 @@ struct ComposerForm: View {
                 ComposeTextView(composer: composer, text: composer.body, selectionRequest: composer.selectionRequest,
                                 focusBody: composer.focusRequest == .body, look: ComposeTextLook(meadow, light: light),
                                 commandReturn: { send(held: $0) })
+                    .frame(minHeight: Self.textLeast)
                     .overlay(alignment: .topLeading) {
                         if composer.body.isEmpty {
                             Text("Write your message…")
@@ -677,12 +684,19 @@ struct ChipField: View {
     @State private var completion = RecipientCompletion()
     @State private var lookup: Task<Void, Never>?
     @State private var editing = false
-    /// How tall the field stands with its chips, which the list hangs below.
+    /// How tall the field stands on screen, which the list hangs below.
     @State private var height: CGFloat = 34
+    /// How tall its chips and the typing field wrap to, which may be more than it shows.
+    @State private var wrapped: CGFloat = 34
     @Environment(\.meadow) private var meadow
 
     /// How far round its 13-point cross a chip's remove button takes a press: about 21 points across.
     static let removeReach: CGFloat = 4
+    /// A line of chips, and the most a field shows before it scrolls: four lines.
+    static let line: CGFloat = 34
+    static let most: CGFloat = 4 * line + 3 * 4
+    /// The typing field's place in the scroll, which the field keeps in sight.
+    private static let typing = "typing"
 
     /// What VoiceOver calls a chip's remove button: the address it takes away, and what the chip shows of it.
     static func removeLabel(_ recipient: Recipient, fresh: Bool) -> String {
@@ -701,6 +715,30 @@ struct ChipField: View {
 
     var body: some View {
         let chips = composer.recipients(field)
+        // Many people scroll inside the field, which stands at most four lines tall and gives way to one in a short
+        // window; the end, where the typing field is, stays in sight as chips are added.
+        let shown = min(wrapped, Self.most)
+        ScrollViewReader { scroller in
+            ScrollView(.vertical) {
+                flow(chips)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { wrapped = $0 }
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .onChange(of: wrapped) { scroller.scrollTo(Self.typing, anchor: .bottom) }
+            .onChange(of: height) { scroller.scrollTo(Self.typing, anchor: .bottom) }
+            .onChange(of: editing) { _, now in if now { scroller.scrollTo(Self.typing, anchor: .bottom) } }
+            .onAppear { scroller.scrollTo(Self.typing, anchor: .bottom) }
+        }
+        .frame(minHeight: min(shown, Self.line), idealHeight: shown, maxHeight: shown)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+        // The list hangs below the field, never over it or the rows above: the field's row stands over the rows
+        // after it (`fields`).
+        .overlay(alignment: .topLeading) {
+            if completion.shown { suggestions.offset(y: height + 4) }
+        }
+    }
+
+    private func flow(_ chips: [Recipient]) -> some View {
         ChipFlow(spacing: 4) {
             ForEach(Array(chips.enumerated()), id: \.offset) { index, recipient in
                 chip(recipient, at: index)
@@ -744,14 +782,9 @@ struct ChipField: View {
             .frame(minHeight: 34)
             // Named on SwiftUI's side too, where VoiceOver meets the field.
             .accessibilityLabel(Text(label))
+            .id(Self.typing)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
-        // The list hangs below the field, never over it or the rows above: the field's row stands over the rows
-        // after it (`fields`).
-        .overlay(alignment: .topLeading) {
-            if completion.shown { suggestions.offset(y: height + 4) }
-        }
     }
 
     private func chip(_ recipient: Recipient, at index: Int) -> some View {
