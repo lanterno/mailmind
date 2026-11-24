@@ -160,11 +160,12 @@ final class CurateModel {
     }
 
     /// The chip that says how a sender lets you unsubscribe: in one click, by an email sent from your account, on a
-    /// page of theirs, or no chip where there is no way out. Before the sender's preview has said how, the list knows
+    /// page of theirs, or no chip where there is no way out. The sender's preview says it for sure; before one, the
+    /// list says what its newest mail stored names (`unsubMethod`). Where none of its headers were read, the list knows
     /// only that it is a newsletter, which most likely offers a way out, and says no more than that: a `mailto` way
-    /// out is never called one click.
+    /// out is never called one click. The page's `wayOutChip` says the same.
     func unsubscribeChip(_ sender: API.NoisySender) -> String? {
-        switch waysOut[sender.fromAddr.lowercased()] {
+        switch waysOut[sender.fromAddr.lowercased()] ?? sender.unsubMethod?.rawValue {
         case "one-click": String(localized: "1-click")
         case "mailto": String(localized: "by email")
         case "http-page": String(localized: "web page")
