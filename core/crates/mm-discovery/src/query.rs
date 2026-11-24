@@ -4,6 +4,7 @@
 //! from:VALUE subject:VALUE body:VALUE to:VALUE cc:VALUE  -> words to find, in that field
 //! "a phrase"  bareword                            -> words to find anywhere
 //! is:unread|read|flagged|answered|junk            -> a flag
+//! is:starred                                     -> flagged, as the app calls it
 //! is:newsletter|receipt|notification              -> a bucket, by its shorthand
 //! is:snoozed                                      -> snoozed mail, which is otherwise out of sight
 //! bucket:VALUE  category:VALUE                    -> exact
@@ -29,6 +30,8 @@ pub const MAX_CHARS: usize = 512;
 pub const FIELDS: [&str; 5] = ["from", "subject", "body", "to", "cc"];
 /// The flags `is:` asks about.
 pub const FLAGS: [&str; 5] = ["unread", "read", "flagged", "answered", "junk"];
+/// The other words `is:` takes for a flag, and the flag each means: the app calls a flagged message starred.
+pub const FLAG_ALIAS: [(&str, &str); 1] = [("starred", "flagged")];
 /// The shorthand `is:` and `bucket:` take for a bucket, and the classifier's name for it.
 pub const BUCKET_ALIAS: [(&str, &str); 15] = [
     ("newsletter", "newsletters/marketing"),
@@ -53,13 +56,14 @@ pub const OPERATORS: [&str; 14] = [
     "category",
 ];
 /// The `is:` values worth a line of their own. Most buckets have several words, and one of each is enough to offer.
+/// A flag is offered by the word the app calls it: starred, not flagged.
 pub const IS_OFFERED: [&str; 9] =
-    ["unread", "read", "flagged", "answered", "junk", "snoozed", "newsletter", "receipt", "notification"];
+    ["unread", "read", "starred", "answered", "junk", "snoozed", "newsletter", "receipt", "notification"];
 /// The `has:` values worth offering.
 pub const HAS_OFFERED: [&str; 1] = ["attachment"];
 /// `is:` values that pick out part of the mailbox: a content lane or a minority flag. Not "read", which is usually
 /// most mail, though its inverse "unread" is.
-const NARROW_IS: [&str; 14] = [
+const NARROW_IS: [&str; 15] = [
     "newsletter",
     "newsletters",
     "marketing",
@@ -72,6 +76,7 @@ const NARROW_IS: [&str; 14] = [
     "spam",
     "scam",
     "flagged",
+    "starred",
     "unread",
     "junk",
 ];
@@ -211,7 +216,8 @@ fn clause(token: &str, dates: impl Fn(&str) -> Option<i64>) -> Option<Clause> {
         return Some(Clause { field: Some(field), ..Clause::text(Kind::Field, value, negated, true) });
     }
     if named("is") {
-        if let Some(flag) = FLAGS.into_iter().find(|f| *f == lower) {
+        let flag = FLAG_ALIAS.iter().find(|(word, _)| *word == lower).map_or(lower.as_str(), |&(_, flag)| flag);
+        if let Some(flag) = FLAGS.into_iter().find(|f| *f == flag) {
             return Some(Clause { field: Some(flag), ..Clause::new(Kind::Flag, None, negated, narrow_is) });
         }
         if lower == "snoozed" {
