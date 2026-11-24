@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import SwiftUI
+import WebKit
 import XCTest
 
 /// One composer's life, against routes the test answers: what it saves and when, what holds a send, what a fix
@@ -581,6 +582,35 @@ final class ComposerTests: XCTestCase {
         XCTAssertEqual(draft.preview?.formatted, true)
         draft.write()
         XCTAssertFalse(draft.previewing)
+    }
+
+    /// Preview takes the keyboard, so its keys scroll how the message will read, and Back to Writing gives it back to
+    /// the text, rather than leave it on the window with nothing to type in.
+    func testPreviewTakesTheKeyboardAndWritingGivesItBackToTheText() async throws {
+        routes.answer("/api/compose/preview", #"{"ok": true, "formatted": true, "html": "<p><b>Hi</b></p>"}"#)
+        let draft = written("**Hi**")   // to someone already: the text has the keyboard as it opens
+        let view = NSHostingView(rootView: ComposerForm(composer: draft, host: host, aliases: [:], lights: false) { _ in }
+            .frame(width: 720, height: 560)
+            .meadowLight(.day))
+        view.frame = CGRect(x: 0, y: 0, width: 720, height: 560)
+        let window = NSWindow(contentRect: view.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = view
+        defer { window.contentView = nil }
+        func settle() async {
+            view.layoutSubtreeIfNeeded()
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        for _ in 0..<50 where !(window.firstResponder is BodyTextView) { await settle() }
+        XCTAssertTrue(window.firstResponder is BodyTextView, "the text has the keyboard as it opens")
+
+        await draft.showPreview()
+        for _ in 0..<100 where !(window.firstResponder is WKWebView) { await settle() }
+        XCTAssertTrue(window.firstResponder is QuoteFrame.KeyedWebView, "the preview has it, so its keys scroll it")
+
+        draft.write()
+        for _ in 0..<100 where !(window.firstResponder is BodyTextView) { await settle() }
+        XCTAssertTrue(window.firstResponder is BodyTextView, "back to writing, the text has it again")
     }
 
     // MARK: What VoiceOver hears
