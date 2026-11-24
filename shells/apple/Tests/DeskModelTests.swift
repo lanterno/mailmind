@@ -795,6 +795,27 @@ final class DeskModelTests: XCTestCase {
         XCTAssertEqual(said, "AI is off: there is no API key")
     }
 
+    /// A sender's chip never calls a way out by email one click: before its preview the list knows only that it is a
+    /// newsletter, and once the preview has said how, the chip says it.
+    func testTheUnsubscribeChipSaysHowOnceThePreviewHasSaid() async {
+        let model = CurateModel(link: link, notices: notices)
+        let (news, alerts) = (DeskFixture.flood.senders[0], DeskFixture.flood.senders[1])
+        XCTAssertEqual(model.unsubscribeChip(news), "newsletter", "likely a way out, not yet how")
+        XCTAssertNil(model.unsubscribeChip(alerts), "nothing says it has a way out")
+        let ways: [(String, String?)] = [("mailto", "by email"), ("one-click", "1-click"), ("http-page", "web page"),
+                                         ("none", nil)]
+        for (method, _) in ways {
+            var preview = DeskFixture.senderPreview
+            preview.unsub = API.WayOut(httpsHost: method == "mailto" ? nil : "shop.example.test",
+                                       mailtoTo: method == "mailto" ? "leave@shop.example.test" : nil, method: method)
+            routes.answer("GET", "/api/cleanup/sender", preview)
+        }
+        for (method, chip) in ways {
+            await model.previewCleanup("news@shop.example.test")
+            XCTAssertEqual(model.unsubscribeChip(news), chip, method)
+        }
+    }
+
     func testASenderCleanupIsPreviewedArmedThenRunByItsToken() async {
         routes.answer("GET", "/api/cleanup/sender", DeskFixture.senderPreview)
         routes.answer("POST", "/api/cleanup/execute", API.CleanedUp(
