@@ -168,6 +168,9 @@ final class Composer: Identifiable {
     @ObservationIgnored private(set) var savedAt: Date?
     /// Why its last save didn't keep it, in the server's words.
     @ObservationIgnored private var unsavedWhy: String?
+    /// Its last save is kept on this Mac and its server's copy is still to go: an autosave leaves that to the push
+    /// job, a minute or more on, and a save the server's gate was too busy for leaves it there too.
+    @ObservationIgnored private(set) var waitsForServer = false
     private(set) var savedLine = ""
     let note: String
     /// A reply-all's copied-in people.
@@ -366,9 +369,12 @@ final class Composer: Identifiable {
         // Saved already, by the autosave a moment ago, and unchanged since: closing still says where the words went,
         // so a reply closed with Esc isn't closed in silence.
         let savedBefore = !force && !closingSave && isSaved
+        // Saved by an autosave only, which leaves its server's copy to the push job a minute or more on: closing
+        // saves it as a save someone asks for does, which tries its server now, so Drafts has it in seconds.
+        let reaches = savedBefore && waitsForServer && !host.readOnly
         if closingSave || savedBefore {
             // The save read the fields: the snapshot holds them.
-            let saved = closingSave ? save(silent: true) : Task<Bool?, Never> { true }
+            let saved = closingSave || reaches ? save(silent: true) : Task<Bool?, Never> { true }
             host.closing(self, save: saved, snapshot: snapshot())
         }
         closed = true
@@ -863,6 +869,7 @@ final class Composer: Identifiable {
                     draftId = saved.draftId
                     version = saved.version
                     adopt(saved)
+                    waitsForServer = !saved.pushed
                     if !autosave && !saved.pushed { host.outboxChanged() }   // it waits for its server: the tray says so
                 case .nothingToSave(let nothing):
                     draftId = nothing.draftId ?? draftId
