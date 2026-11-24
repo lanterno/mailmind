@@ -184,6 +184,40 @@ final class ComposerTests: XCTestCase {
         XCTAssertEqual(composing.notice?.text, "between", "and nothing said")
     }
 
+    /// A draft only an autosave kept waits on this Mac for the push job, a minute or more: closing it sends it to its
+    /// server then, as a save someone asks for does, so it is in Drafts within seconds. One the server has already is
+    /// left as it is.
+    func testADraftOnlyAnAutosaveKeptGoesToItsServerAsItCloses() async throws {
+        routes.answer("/api/draft") { body in
+            let pushed = body["autosave"] != .bool(true)   // an autosave is kept on this Mac only
+            return #"{"ok": true, "draft_id": 41, "version": 1, "message_id": "<d@example.test>", "pushed": \#(pushed)}"#
+        }
+        let draft = written("Kept by an autosave")
+        draft.autosaveTick()
+        await draft.settled()
+        XCTAssertEqual(routes.calls(to: "/api/draft").map { $0.body["autosave"] }, [.bool(true)])
+        XCTAssertTrue(draft.isSaved)
+        XCTAssertTrue(draft.waitsForServer)
+
+        draft.close()
+        let closing = try XCTUnwrap(host.closings.first)
+        let saved = await closing.save.value
+        XCTAssertEqual(saved, true)
+        let calls = routes.calls(to: "/api/draft")
+        XCTAssertEqual(calls.count, 2, "closing sends it to its server")
+        XCTAssertNotEqual(calls.last?.body["autosave"], .bool(true), "as a save someone asks for")
+        XCTAssertEqual(calls.last?.body["draft_id"]?.number, 41)
+        XCTAssertFalse(draft.waitsForServer)
+
+        // Saved by hand, it reached its server: closing has nothing more to send.
+        let other = written("Saved by hand")
+        _ = await other.save().value
+        XCTAssertFalse(other.waitsForServer)
+        other.close()
+        _ = await host.closings.last?.save.value
+        XCTAssertEqual(routes.calls(to: "/api/draft").count, 3, "one save, and none as it closed")
+    }
+
     func testDiscardThrowsAwayTheServersCopyToo() async throws {
         let draft = written("Gone soon")
         _ = await draft.save().value
