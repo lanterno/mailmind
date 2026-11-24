@@ -211,12 +211,22 @@ struct CleanupSheet: View {
                 Step(icon: .check, tag: String(localized: "reversible")) {
                     Text("Move **\(preview.sweepCount)** inbox \(preview.sweepCount == 1 ? "message" : "messages")\(asked.scope == .domain ? " from \(preview.fromAddr)" : "") to Trash")
                 }
-                if asked.method == "none" {
+                switch asked.unsubscribeLine {
+                case .none:
                     Step(icon: .minus, tag: nil) {
                         Text("No List-Unsubscribe found — block + sweep only").foregroundStyle(meadow.ink3)
                     }
-                } else {
+                case .sends:
+                    // Only what will go is marked as what Undo can't take back.
                     Step(icon: .alert, tag: String(localized: "can’t undo")) { Self.unsubscribeWords(preview) }
+                case .opensPage:
+                    Step(icon: .info, tag: nil) { Self.unsubscribeWords(preview) }
+                case .notAsked:
+                    Step(icon: .minus, tag: nil) {
+                        Text("Not unsubscribing — block + sweep only").foregroundStyle(meadow.ink3)
+                    }
+                }
+                if asked.method != "none" {
                     Toggle(asked.method == "http-page" ? "open the unsubscribe page" : "also send the unsubscribe now",
                            isOn: Binding(get: { asked.unsubscribe }, set: { model.cleaning?.unsubscribe = $0 }))
                         .toggleStyle(.checkbox)
@@ -228,9 +238,10 @@ struct CleanupSheet: View {
                         Text("Sweeps the most recent \(preview.sweepCount) — run again for the rest.")
                     }
                 }
-                Text(asked.undoNote)
+                // What Undo takes back in the plain ink, and only an unsubscribe that will go in the warning's.
+                (Text(CurateModel.Cleaning.undoes).foregroundStyle(meadow.ink2)
+                    + Text(asked.sendsUnsubscribe ? " " + CurateModel.Cleaning.cantUndo : "").foregroundStyle(meadow.rust))
                     .font(.meadow(.ui, 13, .semibold))
-                    .foregroundStyle(meadow.rust)
                 HStack(spacing: 8) {
                     Spacer()
                     Button("Cancel", role: .cancel) { model.cleaning = nil }

@@ -22,11 +22,25 @@ final class CurateModel {
         /// email. A page opened in the browser sends nothing; the person unsubscribes there or not.
         var sendsUnsubscribe: Bool { unsubscribe && (method == "one-click" || method == "mailto") }
 
+        /// What the sheet says of unsubscribing: there is no way to, one goes that Undo can't take back, the page
+        /// opens in the browser, or the box is unticked and nothing goes.
+        enum UnsubscribeLine: Equatable {
+            case none, sends, opensPage, notAsked
+        }
+
+        var unsubscribeLine: UnsubscribeLine {
+            if method == "none" { return .none }
+            if sendsUnsubscribe { return .sends }
+            return unsubscribe && method == "http-page" ? .opensPage : .notAsked
+        }
+
         /// The sheet's note on what Undo takes back.
         var undoNote: String {
-            String(localized: "Block + sweep undo with Undo.")
-                + (sendsUnsubscribe ? " " + String(localized: "Unsubscribing can’t be undone.") : "")
+            Self.undoes + (sendsUnsubscribe ? " " + Self.cantUndo : "")
         }
+
+        static let undoes = String(localized: "Block + sweep undo with Undo.")
+        static let cantUndo = String(localized: "Unsubscribing can’t be undone.")
     }
 
     /// Several senders' cleanup, previewed, with why each is here once the AI has said.
