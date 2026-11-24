@@ -335,6 +335,23 @@ def test_the_whole_domain_can_be_chosen_and_changes_what_the_plan_says(page, wor
     clean(page)
 
 
+def test_only_an_unsubscribe_that_goes_is_marked_as_what_undo_cant_take_back(page, world):
+    issues(world)
+    d = drawer(page)
+    d.get_by_role("button", name=f"Clean up {LOOM}").click()
+    plan = page.get_by_role("dialog", name="Clean up a sender")
+    expect(plan.locator(".do-line.irrev")).to_have_count(1)
+    expect(plan.locator(".do-cant-undo")).to_have_text("Unsubscribing can’t be undone.")
+    plan.locator(".do-unsubopt input").uncheck()
+    expect(plan.locator(".do-line.irrev")).to_have_count(0)                  # nothing goes that Undo can't take back
+    expect(plan.locator(".do-line").last).to_contain_text("Not unsubscribing — block + sweep only")
+    expect(plan.locator(".do-cant-undo")).to_have_count(0)
+    expect(plan.locator(".do-undo-note")).to_have_text("Block + sweep undo with z.")
+    plan.get_by_role("button", name="Cancel").click()
+    expect(plan).to_have_count(0)
+    clean(page)
+
+
 def test_the_audit_trail_shows_what_was_done(page, world):
     issues(world)
     d = drawer(page)
