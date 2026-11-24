@@ -208,8 +208,7 @@ class Outbox:
                             self._accounts.get(dr["account"]), dr["folder"], dr["uid"], dr["uidvalidity"])
                         with self._uow.read() as c:
                             waiting = self._book.journal_get(c, row["draft_id"])
-                        left = draft_journal.left_by_a_try(waiting, dr["account"])
-                        if left:
+                        for left in draft_journal.left_by_a_try(waiting, dr["account"]):
                             self._copies.delete_left_copy(self._accounts.get(dr["account"]), left)
 
                         def forget(c: Connection) -> None:

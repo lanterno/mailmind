@@ -70,14 +70,29 @@ def holds_a_save(j: Row | None) -> TypeGuard[Row]:
     return j is not None and bool(j["raw"])
 
 
+def tried_ids(j: Row | None) -> list[str]:
+    """The Message-IDs of the copies tries since the last push that landed may have left, oldest first. `tried` keeps each,
+    between spaces, which no Message-ID holds: a try that fails after its APPEND, and another after it, may each have left
+    one, and the next try, or a discard, takes all of them."""
+    return str(j["tried"] or "").split() if j is not None else []
+
+
+def trying(j: Row, message_id: str | None) -> str | None:
+    """What `tried` keeps once a try at this save's `message_id` may reach the server: every copy before it too."""
+    ids = tried_ids(j)
+    if message_id and message_id not in ids:
+        ids.append(message_id)
+    return " ".join(ids) or None
+
+
 def copy_may_be_there(row: Row, j: Row | None) -> bool:
     """Is there a copy for a discard to wait on: the one the row tracks, or one a try may have left?"""
-    return bool(row["uid"] or (j is not None and j["tried"]))
+    return bool(row["uid"] or tried_ids(j))
 
 
-def left_by_a_try(j: Row | None, account: str) -> str | None:
-    """The Message-ID of a copy a try at this save may have left in `account`, which a delivered send takes with it."""
-    return j["tried"] if j is not None and j["tried"] and j["account"] == account else None
+def left_by_a_try(j: Row | None, account: str) -> list[str]:
+    """The Message-IDs of the copies tries at this draft may have left in `account`, which a delivered send takes with it."""
+    return tried_ids(j) if j is not None and j["account"] == account else []
 
 
 def next_round_in(now: int, due: int | None) -> int:

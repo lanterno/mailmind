@@ -218,10 +218,11 @@ def journal_discard(c, did, version, account, now):
               (did, version, account, now, now))
 
 
-def journal_tried(c, did, version, message_id):
-    """A try may reach the server from here on. False if the row or this version has gone meanwhile."""
+def journal_tried(c, did, version, tried):
+    """A try may reach the server from here on: `tried` names every copy one may have left (`draft_journal.trying`). False
+    if the row or this version has gone meanwhile."""
     return c.execute("UPDATE draft_journal SET tried=? WHERE draft_id=? AND version=? AND discard=0",
-                     (message_id, did, version)).rowcount == 1
+                     (tried, did, version)).rowcount == 1
 
 
 def journal_settled(c, did, version):

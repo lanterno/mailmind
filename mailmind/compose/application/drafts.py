@@ -222,12 +222,12 @@ class Drafts:
     def _push(self, prev: Row, j: Row) -> Pushed:
         """APPEND the save, drop the copy it replaces, and move the row with them. Returns the new copy's UID."""
         with self._uow.write() as c:
-            going = self._book.journal_tried(c, prev["id"], j["version"], j["message_id"])
+            going = self._book.journal_tried(c, prev["id"], j["version"], draft_journal.trying(j, j["message_id"]))
         if not going:                                # a newer save or a discard came first: the next try takes that
             return False
         acct = self._accounts.get(j["account"])
         folder, uid, uidv, replaced = self._copies.append_to_drafts(
-            acct, j["raw"], **draft.replaced_in_place(prev, j), message_id=j["message_id"], tried=j["tried"])
+            acct, j["raw"], **draft.replaced_in_place(prev, j), message_id=j["message_id"], tried=draft_journal.tried_ids(j))
         self._screen.touched(j["account"], folder)   # its list shows the new copy on its next open
         gone = [(j["account"], folder, old) for old in replaced]   # and no longer the copies it replaced
         # Only now that the new copy is saved, so a save that fails never leaves no copy at all. Best-effort; a message
@@ -269,8 +269,9 @@ class Drafts:
         if acct is not None and row["uid"] and self._ours_to_remove(row):
             removed = self._copies.delete_draft_uid(acct, row["folder"], row["uid"], row["uidvalidity"])
         left_in = self._reach(j["account"])          # From may have changed since the row's copy
-        if left_in is not None and j["tried"]:
-            self._copies.delete_left_copy(left_in, j["tried"])
+        if left_in is not None:
+            for left in draft_journal.tried_ids(j):
+                self._copies.delete_left_copy(left_in, left)
         with self._uow.write() as c:
             self._book.draft_delete(c, row["id"])
             if removed:

@@ -1,6 +1,6 @@
 """Copies Compose keeps on the server: a sent message in Sent, a draft in Drafts. Each opens a session
 of its own and closes it. Standard library only."""
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import datetime
 import imaplib
 
@@ -49,15 +49,15 @@ class Copies:
 
     def append_to_drafts(self, acct: Account, raw: bytes, prev_uid: int | None = None, prev_uidvalidity: int | None = None,
                          prev_msgid: str | None = None, prev_folder: str | None = None, message_id: str | None = None,
-                         tried: str | None = None) -> tuple[FolderName, int | None, int | None, list[int]]:
+                         tried: Sequence[str] = ()) -> tuple[FolderName, int | None, int | None, list[int]]:
         """APPEND a draft (flagged \\Seen and \\Draft, as a mail app files its own) to the account's Drafts folder,
         then delete the copies it replaces (single-UID expunges — NEVER a bulk expunge). Returns
         (folder, new_uid|None, uidvalidity|None, the UIDs removed). Append first, so a save that fails or
         a crash never leaves none: at worst the old copy stays beside the new one. prev_folder: where the
         previous copy is; when that isn't this Drafts folder, nothing is deleted here (its UID means
-        nothing in this one), and the caller removes it there. tried: the Message-ID of a copy an earlier
-        try may have left, which it never heard of. If that's this very message (message_id) it stands, and
-        nothing is appended; if not, it goes once the new copy is there."""
+        nothing in this one), and the caller removes it there. tried: the Message-IDs of the copies earlier
+        tries may have left, which they never heard of. One that's this very message (message_id) stands, and
+        nothing is appended; every other goes once the new copy is there."""
         s = self._open_session(acct)
         try:
             drafts = FolderName(find_role(s, "drafts") or "Drafts")
@@ -83,15 +83,16 @@ class Copies:
                                  if u not in replaced]
                 except Exception:
                     pass
-            left = self._left_by(s, tried)
-            landed = left if left and tried == message_id else None
+            lefts = [(mid, self._left_by(s, mid)) for mid in tried]
+            landed = next((uid for mid, uid in lefts if uid and mid == message_id), None)
             new_uid = landed or s.append(drafts, raw, flags=["\\Seen", "\\Draft"], when=datetime.now().astimezone())
-            if left and not landed:
-                try:
-                    s.add_flags([left], ["\\Deleted"])
-                    s.expunge([left])
-                except Exception:
-                    pass
+            for _, left in lefts:
+                if left and left != landed:
+                    try:
+                        s.add_flags([left], ["\\Deleted"])
+                        s.expunge([left])
+                    except Exception:
+                        pass
             for old in replaced:
                 if old == new_uid:
                     continue
