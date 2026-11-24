@@ -13,6 +13,8 @@ use mm_kernel::seams::{Clock, Moment};
 use mm_kernel::zone::Zone;
 use serde_json::{Value, json};
 
+use crate::assessments::recent;
+use crate::background_ports::Backlog;
 use crate::brief::{self, DELTA_TOP_N, Group, number, or, who};
 use crate::calls::Calls;
 use crate::digest::fingerprint;
@@ -132,6 +134,8 @@ pub struct Briefs {
     zone: Arc<dyn Zone>,
     briefs: SingleFlight<(String, String)>,
     deltas: SingleFlight<(String, i64, String)>,
+    /// Where it counts what waits for a summary: nowhere, for briefs that never ask.
+    backlog: Option<Arc<dyn Backlog>>,
 }
 
 impl Briefs {
@@ -142,7 +146,31 @@ impl Briefs {
         clock: Arc<dyn Clock>,
         zone: Arc<dyn Zone>,
     ) -> Briefs {
-        Briefs { calls, cards, overview, clock, zone, briefs: SingleFlight::default(), deltas: SingleFlight::default() }
+        Briefs {
+            calls,
+            cards,
+            overview,
+            clock,
+            zone,
+            briefs: SingleFlight::default(),
+            deltas: SingleFlight::default(),
+            backlog: None,
+        }
+    }
+
+    /// The same, never calling the Inbox quiet while mail from the last 30 days waits for its summary, as `backlog`
+    /// counts it: what needs you there is known only once it is read.
+    pub fn with_backlog(mut self, backlog: Arc<dyn Backlog>) -> Briefs {
+        self.backlog = Some(backlog);
+        self
+    }
+
+    /// Whether mail from the last 30 days waits for its summary.
+    fn unread(&self) -> Result<bool, Fault> {
+        match &self.backlog {
+            Some(backlog) => Ok(backlog.summaries_waiting(recent(self.clock.now().whole_seconds()))? > 0),
+            None => Ok(false),
+        }
     }
 
     fn now(&self) -> String {
@@ -197,9 +225,12 @@ impl Briefs {
             return self.stored(&cached, &fp);
         }
         if rows.is_empty() {
-            return Ok(json!({"ok": true, "narrative": "Nothing needs you right now \u{2014} your inbox is quiet.",
-                             "groups": [], "model": "empty", "generated": self.now(), "cached": false,
-                             "stale": false}));
+            // Nothing summarized to brief from. Mail still waiting for its summary may need you, so the Inbox isn't
+            // called quiet: there is nothing to brief yet.
+            let narrative =
+                if self.unread()? { "" } else { "Nothing needs you right now \u{2014} your inbox is quiet." };
+            return Ok(json!({"ok": true, "narrative": narrative, "groups": [], "model": "empty",
+                             "generated": self.now(), "cached": false, "stale": false}));
         }
         if !generate {
             return Ok(json!({"ok": true, "missing": true, "narrative": "", "groups": [], "cached": false,

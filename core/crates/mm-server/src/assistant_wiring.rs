@@ -376,8 +376,10 @@ impl Assistant {
         let digest = Arc::new(ThreadDigest::new(calls.clone(), database.clone(), context.clone(), clock.clone()));
         let extractor = Arc::new(Extractor::new(calls.clone(), context.clone(), clock.clone(), zone.clone()));
         let replies = Arc::new(ReplyDrafts::new(calls.clone(), context.clone()));
-        let briefs =
-            Arc::new(Briefs::new(calls.clone(), database.clone(), database.clone(), clock.clone(), zone.clone()));
+        let briefs = Arc::new(
+            Briefs::new(calls.clone(), database.clone(), database.clone(), clock.clone(), zone.clone())
+                .with_backlog(database.clone()),
+        );
         let reviews = Arc::new(Reviews::new(
             calls.clone(),
             database.clone(),
