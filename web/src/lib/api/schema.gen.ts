@@ -2494,7 +2494,9 @@ export interface components {
          *     is on). `model` is what a person's asks go to, and `background_model` what background summaries ask: "" while AI is off.
          *     `cloud_model` is whether the model chosen for a server on this Mac (a model on this Mac, or a compatible service on
          *     loopback) runs in a cloud, as Ollama's `-cloud` models do, so mail asked of it leaves this Mac: said whether AI is on
-         *     or off. `summaries_waiting` is how many Inbox messages from the last 30 days wait for a summary, there while AI is on.
+         *     or off. `summaries_waiting` is how many Inbox messages from the last 30 days wait for a summary, and `summarizing` whether
+         *     the background reads them, now or at its next round, with neither today's limit nor the breaker holding them back: each
+         *     there while AI is on. Until those summaries land, what needs you isn't known.
          */
         AiStatus: {
             /** Background Model */
@@ -2523,6 +2525,8 @@ export interface components {
             spent_today_micros: number | null;
             /** Summaries Waiting */
             summaries_waiting?: number | null;
+            /** Summarizing */
+            summarizing?: boolean | null;
         };
         /** AiToday */
         AiToday: {
