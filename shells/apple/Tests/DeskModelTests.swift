@@ -837,6 +837,23 @@ final class DeskModelTests: XCTestCase {
         XCTAssertEqual(note("none", ticked: false), undoes)
     }
 
+    /// The line Undo can't take back stands only over an unsubscribe that will go: unticked, the sheet says nothing
+    /// will, and a page opened in the browser sends nothing either.
+    func testTheCantUndoLineStandsOnlyOverAnUnsubscribeThatGoes() {
+        func line(_ method: String, ticked: Bool) -> CurateModel.Cleaning.UnsubscribeLine {
+            var preview = DeskFixture.senderPreview
+            preview.unsub.method = method
+            return CurateModel.Cleaning(preview: preview, scope: .sender, unsubscribe: ticked).unsubscribeLine
+        }
+        XCTAssertEqual(line("one-click", ticked: true), .sends)
+        XCTAssertEqual(line("mailto", ticked: true), .sends)
+        XCTAssertEqual(line("one-click", ticked: false), .notAsked, "unticked, nothing goes")
+        XCTAssertEqual(line("mailto", ticked: false), .notAsked)
+        XCTAssertEqual(line("http-page", ticked: true), .opensPage, "a page opened sends nothing")
+        XCTAssertEqual(line("http-page", ticked: false), .notAsked)
+        XCTAssertEqual(line("none", ticked: false), .none)
+    }
+
     func testASweepIsPlannedThenRunOnConfirm() async {
         let going = [API.SweepBucket(bucket: "newsletters/marketing", count: 12, senders: [
             API.SweepSender(count: 9, fromAddr: "news@loom.example.test"),
