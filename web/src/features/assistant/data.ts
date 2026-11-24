@@ -1,5 +1,6 @@
 // The brief's reads. A GET reads only what is stored; a POST writes one. Opening the Inbox writes the day's brief if there
 // is none, and never asks at the daily limit: only a click does.
+import { useEffect, useRef } from "react";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, get, post } from "../../lib/api/client";
 import type { GetAnswers } from "../../lib/api/types";
@@ -18,8 +19,9 @@ export function whatWentWrong(e: unknown): string | null {
 }
 
 // `ai`: whether AI answers, once the digest says. The brief is read apart for each, so AI turning on writes the one that AI
-// off left unwritten.
-export function useBrief(ai: boolean | undefined) {
+// off left unwritten. `reading`: whether the AI is reading mail that waits for its summary; a brief with nothing to say
+// while it was is read again once it has.
+export function useBrief(ai: boolean | undefined, reading = false) {
   const qc = useQueryClient();
   const read = useQuery({
     queryKey: ["brief", ai],
@@ -38,6 +40,13 @@ export function useBrief(ai: boolean | undefined) {
       if (again) void qc.invalidateQueries({ queryKey: ["briefSide"] });
     },
   });
+  const empty = read.data !== undefined && !read.data.narrative;
+  const { refetch } = read;
+  const wasReading = useRef(reading);
+  useEffect(() => {
+    if (wasReading.current && !reading && empty) void refetch();
+    wasReading.current = reading;
+  }, [reading, empty, refetch]);
   return {
     brief: read.data,
     writing: read.isFetching || write.isPending,

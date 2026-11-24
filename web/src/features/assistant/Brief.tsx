@@ -23,7 +23,7 @@ import { filing, bulk, fromDigest, needsYou, safeToFile, topicItems, useFoldersA
 import { snoozeAsk } from "../attention";
 import type { Mailbox } from "../mailbox";
 import { LIMIT, useBrief, useSide } from "./data";
-import { BRIEF_CAP, commitments, eventWhen, greeting, nameIn, waitAge } from "./model";
+import { BRIEF_CAP, commitments, eventWhen, greeting, nameIn, needsNote, READING, summarizing, waitAge } from "./model";
 import { panel } from "./Panels";
 import { useTasks } from "./tasks";
 
@@ -182,7 +182,8 @@ export function BriefPane({ m }: { m: Mailbox }) {
   const ai = m.digest?.ai;
   const aiOn = ai ? ai.engine !== "none" : undefined;
   const offered = aiOffered(ai);     // AI turned off: the brief is what the digest says, with nothing of AI's and no word of it
-  const { brief, writing, error, write } = useBrief(aiOn);
+  const reading = summarizing(ai);
+  const { brief, writing, error, write } = useBrief(aiOn, reading);
   const needs = needsYou(items);
   const shown = needs.slice(0, BRIEF_CAP);
   const tidy = safeToFile(items);
@@ -205,6 +206,7 @@ export function BriefPane({ m }: { m: Mailbox }) {
   else if (brief?.narrative) narrative = <p className="ai-tldr bf-narr">{brief.narrative}</p>;
   else if (error === LIMIT) narrative = <p className="bf-wait">Today’s AI limit is reached, so the brief isn’t written yet. <button className="btn-retry" onClick={() => write(false)}>Write it</button></p>;
   else if (error) narrative = <p className="bf-wait">The brief isn’t available right now ({failing || error}). <button className="btn-retry" onClick={() => write(false)}>Try again</button></p>;
+  else if (reading) narrative = <p className="bf-wait"><span className="spin"><Icon name="wind" /></span> {READING}</p>;
   else narrative = <p className="bf-wait">{EMPTY.briefNone}</p>;
 
   const fileTidy = async () => {
@@ -251,7 +253,7 @@ export function BriefPane({ m }: { m: Mailbox }) {
                 {needs.length > BRIEF_CAP && <button className="bf-tally" data-brief="needs" onClick={() => openDigestList(m.source, { list: "needs" }, needs)}>Show all {needs.length}</button>}
               </>
             )
-            : <p className="bf-calm">{EMPTY.briefCalm}</p>}
+            : <p className="bf-calm">{reading ? READING : EMPTY.briefCalm}</p>}
           <TidyRun />
           {offered && tidy.length > 0 && (
             <div className="bf-tidy">
@@ -271,7 +273,7 @@ export function BriefPane({ m }: { m: Mailbox }) {
 export function BriefRow({ m }: { m: Mailbox }) {
   const hidden = filing.useValue();
   const n = needsYou((m.digest?.items ?? []).filter((it) => !hidden.has(copyId(it)))).length;
-  const word = n ? `${n} need${n === 1 ? "s" : ""} you` : "Nothing needs you";
+  const word = needsNote(n, summarizing(m.digest?.ai));
   return (
     <button className={m.opened ? "brief-row" : "brief-row sel"} data-brief-row onClick={m.showBrief}>
       <span className="bthumb" aria-hidden="true"><Scene p="bt" seed={4} par="xMaxYMax slice" /></span>

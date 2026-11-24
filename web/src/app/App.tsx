@@ -8,6 +8,7 @@ import { asking, keepLiteral, stopAsking, translating } from "../features/assist
 import { AskPane } from "../features/assistant/AskPane";
 import { DoPanel } from "../features/assistant/Do";
 import { backFromDigest, BriefRow } from "../features/assistant/Brief";
+import { READING, summarizing } from "../features/assistant/model";
 import { cameBack, lookedAt, NewMailPill } from "../features/assistant/NewMail";
 import { Panels } from "../features/assistant/Panels";
 import { ComposerModal, SendFloatView } from "../features/compose/Composer";
@@ -295,7 +296,7 @@ export function App() {
   else if (list.isError) empty = <div className="nores" role="status">{searching ? "Search failed." : "Couldn’t load messages."} <button className="btn-retry" onClick={() => void list.refetch()}>Retry</button></div>;
   else if (list.isPending && source) empty = <div className="nores" role="status">Loading…</div>;
   else if (last?.error) empty = <div className="nores">{last.error}</div>;
-  else if (inInbox && !searching && tab !== "all" && all.length) empty = <div className="nores">{tab === "needs" ? EMPTY.needsYou : EMPTY.unread} Everything else is in <button className="linkbtn" onClick={() => setInboxTab("all")}>Everything</button>.</div>;
+  else if (inInbox && !searching && tab !== "all" && all.length) empty = <div className="nores">{tab === "needs" ? (summarizing(m.digest?.ai) ? READING : EMPTY.needsYou) : EMPTY.unread} Everything else is in <button className="linkbtn" onClick={() => setInboxTab("all")}>Everything</button>.</div>;
   else if (last?.syncing) empty = <FirstRead />;
   else if (last?.syncFailed) empty = <div className="nores" role="status">Couldn’t sync this folder. <button className="btn-retry" onClick={() => void list.refetch()}>Retry</button></div>;
 

@@ -17,7 +17,13 @@ export function greeting(hour: number): string {
 export const commitments = (items: DigestItem[]) =>
   items.filter((it) => it.commitment_worthy).sort((a, b) => (b.importance || 0) - (a.importance || 0));
 
-export const needsNote = (n: number) => (n ? `${n} need${n === 1 ? "s" : ""} you` : "Nothing needs you");
+// While the AI reads mail that waits for its summary (AI's status says `summarizing`, as after an account's first sync),
+// what needs you isn't known yet, so nothing says that nothing does.
+export const READING = "Reading your new mail…";
+export const summarizing = (ai: { summarizing?: boolean | null } | undefined) => ai?.summarizing === true;
+
+export const needsNote = (n: number, reading = false) =>
+  (n ? `${n} need${n === 1 ? "s" : ""} you` : reading ? READING : "Nothing needs you");
 
 // A Your Week list's count: how many it shows, and of how many the week holds where it shows fewer ("8 of 13"), so
 // its heading never says less than its tile does.
