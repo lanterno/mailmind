@@ -162,13 +162,14 @@ enum Fixture {
             readWidth: .medium, searchScope: scope, singleKeys: singleKeys, theme: .day, undoSendSeconds: 10, weeklyReview: false))
     }
 
+    /// `colours` is the places the core keeps; none, as a server that keeps none says.
     static func digest(accounts: [String] = [ada, work], ai: Bool = true, off: API.AiOff = .noKey,
-                       readOnly: Bool = false) -> API.Digest {
+                       readOnly: Bool = false, colours: [String: Int] = [:]) -> API.Digest {
         API.Digest(accounts: accounts,
                    ai: API.AiStatus(backgroundModel: ai ? "test" : "", cloudModel: false, engine: ai ? "api" : "none", keyFrom: "test",
                                     lastTs: 0, limitMicros: 0,
                                     model: ai ? "test" : "", off: ai ? nil : off, provider: .anthropic),
-                   aliases: [ada: "Ada", work: nil], generated: "2026-11-15T09:00:00Z", items: [],
+                   aliases: [ada: "Ada", work: nil], colours: colours, generated: "2026-11-15T09:00:00Z", items: [],
                    profile: readOnly ? "read-only" : "full", sendAccounts: accounts, signatureDefault: "", signatures: [:],
                    stats: API.DigestStats(kept: 0, needs: 1, summarized: 0, total: 40, verified: 0),
                    status: [:], sync: API.SyncState(result: "ok", running: false))

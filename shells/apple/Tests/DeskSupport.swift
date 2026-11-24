@@ -238,7 +238,7 @@ enum DeskFixture {
                              keyFrom: ai == "none" ? "" : "keychain", lastTs: 0, limitMicros: 15_000_000,
                              model: ai == "none" ? "" : "claude-haiku-4-5", off: ai == "none" ? off : nil,
                              provider: .anthropic),
-            aliases: ["ada@example.test": "Work"], generated: "2026-11-15T09:00:00Z",
+            aliases: ["ada@example.test": "Work"], colours: ["ada@example.test": 0], generated: "2026-11-15T09:00:00Z",
             items: items ?? [
                 item(101, from: "grace@example.test", name: "Grace Hopper", subject: "Q3 figures before the board",
                      importance: 5, action: "Send the figures by Friday",

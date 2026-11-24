@@ -851,6 +851,26 @@ final class MailboxAccountsTests: XCTestCase {
         XCTAssertEqual(AccountPlaces.place(of: cy, among: [ada, cy, dee], in: kept), 2, "so do Settings and the desk")
     }
 
+    /// The core keeps each account's place, so the page and the Mac colour an account the same: the digest's places
+    /// stand over any this Mac kept, and are kept here for what reads them before the digest comes.
+    func testTheCoresPlacesStandOverTheOnesThisMacKept() async throws {
+        let suite = "AccountPlaces-\(UUID().uuidString)"
+        let kept = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { kept.removePersistentDomain(forName: suite) }
+        let (ada, bea, cy) = ("ada@example.test", "bea@example.test", "cy@example.test")
+        kept.set([ada: 0, bea: 1, cy: 2], forKey: AccountPlaces.key)
+        let server = Fixture.server()
+        server.on("GET", API.Get.Digest.path, Fixture.digest(accounts: [ada, bea, cy], colours: [ada: 4, bea: 0, cy: 2]))
+        let mailbox = Mailbox()
+        mailbox.placesKept = kept
+        mailbox.wire = server.wire
+        await mailbox.readDigest()
+        XCTAssertEqual([ada, bea, cy].map(mailbox.colourPlace), [4, 0, 2], "the core's, not the order or this Mac's")
+        XCTAssertEqual(AccountPlaces.place(of: ada, among: [ada, bea, cy], in: kept), 4, "kept for Settings and the desk")
+        XCTAssertEqual(AccountPlaces.placed([ada, bea, cy], kept: [ada: 0, bea: 1, cy: 2], core: [ada: 1]),
+                       [ada: 1, bea: 0, cy: 2], "one the core names takes its place; a place kept here it holds goes free")
+    }
+
     /// Every account's Inbox unread, for the brief's line: counted only once each account's Inbox is read, never a
     /// part of it.
     func testTheInboxesUnreadIsCountedOnceEveryAccountsInboxIsRead() async {
