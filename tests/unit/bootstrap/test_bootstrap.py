@@ -186,3 +186,14 @@ def test_the_sync_jobs_first_round_resolves_the_credentials_and_no_other_does(mo
     sync_round()
     sync_round()
     assert calls == ["credentials", "sync", "sync"]
+
+
+def test_a_kick_of_a_job_no_worker_runs_is_kept_by_name_until_asked_for_once(monkeypatch):
+    """What the served suites' `work kicked` runs: the rounds that would have run now."""
+    monkeypatch.setattr(background, "JOBS", Scheduler())
+    background.JOBS.add("sync", lambda: None, every=300)
+    assert background.kicked() == []
+    for job in ("tidy", "assess", "assess", "sync"):     # a scheduled one's worker hears it: nothing is kept
+        background._kick(job)
+    assert background.kicked() == ["assess", "tidy"]
+    assert background.kicked() == []
