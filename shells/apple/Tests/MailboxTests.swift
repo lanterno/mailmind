@@ -823,6 +823,34 @@ final class MailboxAccountsTests: XCTestCase {
         return app
     }
 
+    /// An account removed leaves every other account's colour as it was, and one added after takes the colour left
+    /// free; the places outlive the window, kept in the Mac's preferences.
+    func testAnAccountRemovedLeavesTheOthersColoursAsTheyWere() async throws {
+        let suite = "AccountPlaces-\(UUID().uuidString)"
+        let kept = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { kept.removePersistentDomain(forName: suite) }
+        let (ada, bea, cy, dee) = ("ada@example.test", "bea@example.test", "cy@example.test", "dee@example.test")
+        func read(_ accounts: [String]) async -> Mailbox {
+            let server = Fixture.server()
+            server.on("GET", API.Get.Digest.path, Fixture.digest(accounts: accounts))
+            let mailbox = Mailbox()
+            mailbox.placesKept = kept
+            mailbox.wire = server.wire
+            await mailbox.readDigest()
+            return mailbox
+        }
+        let three = await read([ada, bea, cy])
+        XCTAssertEqual([ada, bea, cy].map(three.colourPlace), [0, 1, 2], "first seen, in the accounts' order")
+        let two = await read([ada, cy])
+        XCTAssertEqual([ada, cy].map(two.colourPlace), [0, 2], "Cy keeps its colour once Bea is removed")
+        let added = await read([ada, cy, dee])
+        XCTAssertEqual([ada, cy, dee].map(added.colourPlace), [0, 2, 1], "an account added takes the colour left free")
+        let look = RowLook(inks: RowInks.of(.day, light: .day, highContrast: false), measure: RowMeasure(.comfortable),
+                           accounts: added.accounts, places: added.places)
+        XCTAssertEqual(look.colour(of: cy), look.inks.account(2), "the rows colour it so")
+        XCTAssertEqual(AccountPlaces.place(of: cy, among: [ada, cy, dee], in: kept), 2, "so do Settings and the desk")
+    }
+
     /// Every account's Inbox unread, for the brief's line: counted only once each account's Inbox is read, never a
     /// part of it.
     func testTheInboxesUnreadIsCountedOnceEveryAccountsInboxIsRead() async {
