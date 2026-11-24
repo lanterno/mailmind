@@ -399,7 +399,7 @@ impl Drafting {
         let folder = appended.folder.clone();
         self.parts.screen.touched(&j.account, &folder);
         let mut gone: Vec<(String, String, i64)> =
-            appended.removed.map(|uid| (j.account.clone(), folder.clone(), uid)).into_iter().collect();
+            appended.removed.iter().map(|uid| (j.account.clone(), folder.clone(), *uid)).collect();
         // Only now that the new copy is saved, so a save that fails never leaves no copy at all.
         if draft::left_elsewhere(prev, &j.account, &folder) && self.ours_to_remove(prev) {
             let removed = match self.parts.accounts.sending(&prev.account) {

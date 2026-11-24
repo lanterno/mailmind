@@ -370,13 +370,14 @@ pub struct InPlace {
 }
 
 /// What a draft's APPEND came to: the folder, the new copy's UID and the folder's UIDVALIDITY where the server said,
-/// and the UID of the copy it replaced, where that went.
+/// and the UIDs of the copies it replaced that went.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Appended {
     pub folder: String,
     pub uid: Option<i64>,
     pub uidvalidity: Option<i64>,
-    pub removed: Option<i64>,
+    /// The copies it replaced that went: the one the draft's row named, and any other there under its Message-ID.
+    pub removed: Vec<i64>,
 }
 
 /// The copies Compose keeps on a mail server, in the Mailbox (`mailbox.application.copies`). Each opens a session of
@@ -387,7 +388,7 @@ pub trait Copies: Send + Sync + fmt::Debug {
     fn append_to_sent(&self, account: &str, raw: &[u8], message_id: Option<&str>) -> Result<String, CopyFailed>;
     /// Whether a message under this Message-ID is in the account's Sent.
     fn in_sent(&self, account: &str, message_id: &str) -> Result<bool, CopyFailed>;
-    /// APPEND a draft to the account's Drafts, \Draft, then remove the copy it replaces.
+    /// APPEND a draft to the account's Drafts, \Draft, then remove the copies it replaces.
     fn append_to_drafts(
         &self,
         account: &str,

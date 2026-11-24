@@ -200,19 +200,30 @@ impl Copies for ImapCopies {
         let elsewhere = prev.prev_folder.as_deref().is_some_and(|f| f != drafts);
         let (prev_uid, prev_msgid) = if elsewhere { (None, None) } else { (prev.prev_uid, prev.prev_msgid.as_deref()) };
         // Refused, no copy is deleted, but the APPEND still goes.
-        let uidvalidity = match s.0.select(&drafts, false) {
-            Ok(selected) => selected.uidvalidity.map(i64::from),
-            Err(ServerError::Refused(_)) => None,
+        let (uidvalidity, selected) = match s.0.select(&drafts, false) {
+            Ok(selected) => (selected.uidvalidity.map(i64::from), true),
+            Err(ServerError::Refused(_)) => (None, false),
             Err(e) => return Err(failed(e)),
         };
-        // The copy it replaces, where it can be told for sure: asked before the new copy can answer too.
-        let replaced = match prev_uid.and_then(uid32) {
-            Some(uid) if prev.prev_uidvalidity.is_none() || prev.prev_uidvalidity == uidvalidity => Some(uid),
-            _ => match prev_msgid.filter(|m| !m.is_empty()) {
-                Some(m) => s.0.search(Search::MessageId(m)).ok().and_then(|uids| uids.first().copied()),
-                None => None,
-            },
-        };
+        let (prev_uid, prev_msgid) = if selected { (prev_uid, prev_msgid) } else { (None, None) };
+        // The copies it replaces, where they can be told for sure, asked before the new copy can answer too: the one the
+        // row names, and every other in Drafts under the Message-ID it was saved with. Another app may have left more
+        // than one there (Thunderbird's earlier saves of it), both copies of the one message, by its key.
+        let mut replaced: Vec<u32> = Vec::new();
+        if let Some(uid) = prev_uid.and_then(uid32)
+            && (prev.prev_uidvalidity.is_none() || prev.prev_uidvalidity == uidvalidity)
+        {
+            replaced.push(uid);
+        }
+        if let Some(m) = prev_msgid.filter(|m| !m.is_empty())
+            && let Ok(uids) = s.0.search(Search::UndeletedMessageId(m))
+        {
+            for uid in uids {
+                if !replaced.contains(&uid) {
+                    replaced.push(uid);
+                }
+            }
+        }
         let left = ImapCopies::left_by(&mut s, tried)?;
         let landed = left.filter(|_| tried == message_id);
         let uid = match landed {
@@ -225,12 +236,11 @@ impl Copies for ImapCopies {
         {
             let _ = ImapCopies::remove(&mut s, left);
         }
-        let mut removed = None;
-        if let Some(old) = replaced
-            && Some(old) != uid
-            && ImapCopies::remove(&mut s, old).is_ok()
-        {
-            removed = Some(i64::from(old));
+        let mut removed = Vec::new();
+        for old in replaced {
+            if Some(old) != uid && ImapCopies::remove(&mut s, old).is_ok() {
+                removed.push(i64::from(old));
+            }
         }
         Ok(Appended { folder: drafts, uid: uid.map(i64::from), uidvalidity, removed })
     }
