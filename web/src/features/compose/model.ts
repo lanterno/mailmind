@@ -105,9 +105,13 @@ export function rcptAddr(v: unknown): string {
   const m = String(v ?? "").match(/<([^<>]+)>\s*$/);
   return ((m ? m[1] : addrOf(v)) || String(v ?? "")).trim().toLowerCase();
 }
+// A subject with a reply's or forward's prefix, once. Only a prefix of the same kind gives way: a reply to
+// "Fwd: Fabric samples" is "Re: Fwd: Fabric samples", and a forward of "Re: Plans" is "Fwd: Re: Plans", as Mail has
+// them and as the Mac's `Addresses.prefixed` does.
 export function rePrefix(subject: string | null | undefined, pre: string): string {
   const s = (subject ?? "").trim();
-  return /^(re|fwd?|fw)\s*:/i.test(s) ? `${pre} ${s.replace(/^(re|fwd?|fw)\s*:\s*/i, "")}` : s ? `${pre} ${s}` : pre;
+  const same = /^re/i.test(pre) ? /^re\s*:\s*/i : /^(fwd?|fw)\s*:\s*/i;
+  return same.test(s) ? `${pre} ${s.replace(same, "")}` : s ? `${pre} ${s}` : pre;
 }
 export function looksLikeAddr(v: string): boolean {
   const m = v.match(/<([^>]+)>/);
