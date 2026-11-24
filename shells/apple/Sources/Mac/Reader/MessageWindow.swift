@@ -386,7 +386,10 @@ struct MessageWindowKeys: NSViewRepresentable {
         }
 
         func takeIfNowhere() {
-            guard let window, DialogFocus.nowhere(window.firstResponder, in: window) else { return }
+            guard let window else { return }
+            // Still last before the window, should SwiftUI have set its content view again.
+            Catcher.hang(on: window)
+            guard DialogFocus.nowhere(window.firstResponder, in: window) else { return }
             window.makeFirstResponder(self)
         }
 
@@ -406,26 +409,24 @@ struct MessageWindowKeys: NSViewRepresentable {
         }
     }
 
-    /// The responder after a message's window, which the window holds: the single keys nothing in the window took,
-    /// run on its message (`MessageWindowVerbs.key`), never while text is typed there.
+    /// The responder last before a message's window, which the window holds: the single keys nothing in the window
+    /// took, run on its message (`MessageWindowVerbs.key`), never while text is typed there. It stands before the
+    /// window, whose own `keyDown` would hand e and d to Edit's menu (`BeforeTheWindow`).
     final class Catcher: NSResponder {
         weak var verbs: MessageWindowVerbs?
         weak var window: NSWindow?
         private nonisolated(unsafe) static var held: UInt8 = 0
 
-        /// Stand after `window` in its chain, once.
+        /// Stand last before `window` in its chain: one catcher a window, put back in should its content view change.
         @discardableResult
         static func hang(on window: NSWindow) -> Catcher {
-            var next = window.nextResponder
-            while let responder = next {
-                if let held = responder as? Catcher { return held }
-                next = responder.nextResponder
-            }
-            let catcher = Catcher()
-            catcher.window = window
-            catcher.nextResponder = window.nextResponder
-            window.nextResponder = catcher
-            objc_setAssociatedObject(window, &held, catcher, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            let catcher = objc_getAssociatedObject(window, &held) as? Catcher ?? {
+                let made = Catcher()
+                made.window = window
+                objc_setAssociatedObject(window, &held, made, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+                return made
+            }()
+            BeforeTheWindow.hang(catcher, on: window)
             return catcher
         }
 

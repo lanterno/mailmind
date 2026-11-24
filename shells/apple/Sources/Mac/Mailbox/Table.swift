@@ -1096,11 +1096,19 @@ struct UntakenKeys: NSViewRepresentable {
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            if let window { Catcher.hang(on: window, for: mailbox) }
+            guard let window else { return }
+            Catcher.hang(on: window, for: mailbox)
+            // Again once SwiftUI has set the window's content view, which the catcher stands just after.
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    if let window = self.window { Catcher.hang(on: window, for: self.mailbox) }
+                }
+            }
         }
     }
 
-    /// The responder after the window, once a window, which the window holds: its chain doesn't.
+    /// The responder last before the window, once a window, which the window holds: its chain doesn't. It stands
+    /// before the window, whose own `keyDown` would hand e and d to Edit's menu (`BeforeTheWindow`).
     final class Catcher: NSResponder {
         weak var mailbox: Mailbox?
         weak var window: NSWindow?
@@ -1108,23 +1116,17 @@ struct UntakenKeys: NSViewRepresentable {
         private var chordAt: Date?
         private nonisolated(unsafe) static var held: UInt8 = 0
 
-        /// Stand after `window` in its chain, once.
+        /// Stand last before `window` in its chain: one catcher a window, put back in should its content view change.
         @discardableResult
         static func hang(on window: NSWindow, for mailbox: Mailbox) -> Catcher {
-            var next = window.nextResponder
-            while let responder = next {
-                if let held = responder as? Catcher {
-                    held.mailbox = mailbox
-                    return held
-                }
-                next = responder.nextResponder
-            }
-            let catcher = Catcher()
+            let catcher = objc_getAssociatedObject(window, &held) as? Catcher ?? {
+                let made = Catcher()
+                made.window = window
+                objc_setAssociatedObject(window, &held, made, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+                return made
+            }()
             catcher.mailbox = mailbox
-            catcher.window = window
-            catcher.nextResponder = window.nextResponder
-            window.nextResponder = catcher
-            objc_setAssociatedObject(window, &held, catcher, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            BeforeTheWindow.hang(catcher, on: window)
             return catcher
         }
 

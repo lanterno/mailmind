@@ -79,4 +79,44 @@ enum SingleKey {
         }
     }
 }
+
+/// Where a window's catcher of single keys stands in its chain of responders: last before the window, between its
+/// content view and it. A key nothing in the window took then reaches the catcher before the window's own `keyDown`,
+/// which offers a key with no ⌘ to the menu bar as an equivalent: Edit's Emoji & Symbols and Start Dictation, which
+/// AppKit adds, hold fn-E and fn-D, and a menu matches them on e and d alone, so those two never went further.
+@MainActor
+enum BeforeTheWindow {
+    /// Stand `catcher` last before `window`, where it isn't already: a content view set again stands before the window
+    /// with no catcher, so the catcher goes back in. With no content view it stands after the window.
+    static func hang(_ catcher: NSResponder, on window: NSWindow) {
+        guard let content = window.contentView else {
+            if !holds(catcher, from: window.nextResponder, until: nil) {
+                catcher.nextResponder = window.nextResponder
+                window.nextResponder = catcher
+            }
+            return
+        }
+        guard !holds(catcher, from: content.nextResponder, until: window) else { return }
+        // Once after the window, it comes out of there first, so a key never reaches it twice.
+        var before: NSResponder = window
+        while let next = before.nextResponder {
+            if next === catcher {
+                before.nextResponder = catcher.nextResponder
+                break
+            }
+            before = next
+        }
+        catcher.nextResponder = content.nextResponder ?? window
+        content.nextResponder = catcher
+    }
+
+    private static func holds(_ catcher: NSResponder, from start: NSResponder?, until end: NSResponder?) -> Bool {
+        var next = start
+        while let responder = next, responder !== end {
+            if responder === catcher { return true }
+            next = responder.nextResponder
+        }
+        return false
+    }
+}
 #endif
