@@ -247,8 +247,18 @@ a first scan reading 64 KiB a message).
 
 **Wall time on a quiet machine.** Times run nightly in the performance lab: a Mac with nothing else running,
 median of seven. Results go into a history file per measure; a regression of more than the noise band against the last
-fortnight's median opens an issue rather than failing a PR. Before a release, every shell budget in `budgets.toml` must
-pass there.
+fortnight's median opens an issue rather than failing a PR.
+
+**What a missed wall-time budget does to a release.** Each wall-time entry in `budgets.toml` has its `limit` and a
+`tolerance`, 10% unless the entry says otherwise (about the run-to-run noise on a quiet Mac). Before a release, every
+such budget is measured in the lab:
+
+- At or under its limit, the release goes.
+- Over its limit but within the tolerance, the release still goes, and an issue is opened for the budget.
+- Over the limit by more than the tolerance, the release stops until the time is back within it or a commit raises
+  the limit and says why.
+
+The deterministic counts have no tolerance: a count over its limit fails the PR.
 
 **Benchmarks in the core** use `divan`, one bench per hot path: list paging, grouping, the sanitizer, MIME parsing,
 search. They replace the ad-hoc ratio tests where they can.
@@ -362,6 +372,5 @@ CI, the flake count, and the number of budgets and security claims with a check 
   settles, and is slow.
 - **The scenario format:** plain Python on pytest, not Gherkin; the readable catalogue is written from what ran.
 
-One stays open:
-
-- **What blocks a release.** Whether a wall-time budget missed in the lab blocks a release or opens an issue.
+The fourth was the owner's: **a missed wall-time budget** is fine within a reasonable margin and stops the release
+beyond it (section 5: a 10% tolerance by default).

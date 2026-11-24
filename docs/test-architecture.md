@@ -368,4 +368,4 @@ Each step is useful on its own, and the first ones pay off before the Mac driver
 - An in-app driver, not XCUITest: XCUITest needs the app active, can't read the core at the settled mark, and is slow.
 - Scenarios in plain Python on pytest, not Gherkin, for the reasons in section 2.
 
-Whether a missed wall-time budget blocks a release stays with the owner.
+A missed wall-time budget stops a release only beyond its tolerance ([test-strategy.md](test-strategy.md) section 5).
