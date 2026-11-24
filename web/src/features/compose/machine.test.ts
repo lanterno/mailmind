@@ -666,6 +666,24 @@ describe("sending", () => {
     expect(m.float.get()?.kind).toBe("done");
   });
 
+  it("saves a Later send's draft first, and the send names the copy it left", async () => {
+    const { m, calls, posted } = setup();
+    ready(m);
+    m.send(1_000_000 + 3600);
+    await flush();
+    expect(calls.map((c) => c.path).filter((p) => p !== "/api/contacts/known")).toEqual(["/api/draft", "/api/send"]);
+    expect(posted("/api/draft")[0].autosave).toBeUndefined();   // a save asked for: it goes to the server now
+    expect(posted("/api/send")[0].draft_id).toBe(7);
+  });
+
+  it("sends at once with no save of its own", async () => {
+    const { m, posted } = setup();
+    ready(m);
+    m.send();
+    await flush();
+    expect(posted("/api/draft")).toEqual([]);
+  });
+
   it("counts the server's window with an Undo, and Undo brings the words back", async () => {
     const { m, posted, toasts } = setup();
     ready(m);
