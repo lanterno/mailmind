@@ -3380,8 +3380,9 @@ extension API {
         public var noiseScore: Double
         public var unseen: Int
         public var unseenRatio: Double
+        public var unsubMethod: UnsubMethod?
 
-        public init(accounts: [SenderAccount], bucket: String, count: Int, domain: String, fromAddr: String, fromName: String, lastSeen: String, luLikely: Bool, noiseScore: Double, unseen: Int, unseenRatio: Double) {
+        public init(accounts: [SenderAccount], bucket: String, count: Int, domain: String, fromAddr: String, fromName: String, lastSeen: String, luLikely: Bool, noiseScore: Double, unseen: Int, unseenRatio: Double, unsubMethod: UnsubMethod? = nil) {
             self.accounts = accounts
             self.bucket = bucket
             self.count = count
@@ -3393,6 +3394,7 @@ extension API {
             self.noiseScore = noiseScore
             self.unseen = unseen
             self.unseenRatio = unseenRatio
+            self.unsubMethod = unsubMethod
         }
 
         enum CodingKeys: String, CodingKey {
@@ -3407,6 +3409,7 @@ extension API {
             case noiseScore = "noise_score"
             case unseen
             case unseenRatio = "unseen_ratio"
+            case unsubMethod = "unsub_method"
         }
     }
 
@@ -6245,6 +6248,13 @@ extension API {
             self.count = count
             self.ok = ok
         }
+    }
+
+    public enum UnsubMethod: String, Codable, Hashable, Sendable, CaseIterable {
+        case oneClick = "one-click"
+        case mailto
+        case httpPage = "http-page"
+        case none
     }
 
     public struct Upcoming: Codable, Hashable, Sendable {
