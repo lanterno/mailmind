@@ -940,6 +940,31 @@ fn the_status_counts_what_waits_for_a_summary_from_the_last_thirty_days_those_ou
 }
 
 #[test]
+fn the_status_says_what_waits_is_being_read_unless_the_limit_holds_it_back() {
+    let w = world(3, true, Some(15_000_000));
+    let status = Status::new(w.calls.gateway().clone(), w.clock.clone()).with_backlog(w.book.clone());
+    let said = || {
+        let report = status.report().expect("a report");
+        (report.get("summaries_waiting").cloned(), report.get("summarizing").cloned())
+    };
+    assert_eq!(said(), (Some(json!(3)), Some(json!(true))));
+    // Someone asking the AI something has them wait only a moment.
+    w.calls.call_claude("Asked for.", "thread").expect("someone asked just now");
+    assert_eq!(said(), (Some(json!(3)), Some(json!(true))));
+    // At the limit they wait for tomorrow: none is being read, whether or not someone is asking something now.
+    w.ledger.spent.store(15_000_000, Ordering::SeqCst);
+    assert_eq!(said(), (Some(json!(3)), Some(json!(false))));
+    w.governor.forget();
+    assert_eq!(said(), (Some(json!(3)), Some(json!(false))));
+    w.ledger.spent.store(0, Ordering::SeqCst);
+    assert_eq!(w.assessments(false).summarize_pending(10, 1).expect("a round"), 3);
+    assert_eq!(said(), (Some(json!(0)), Some(json!(false))));
+    // With AI off it says nothing of them.
+    *lock(&w.engine.0) = None;
+    assert_eq!(said(), (None, None));
+}
+
+#[test]
 fn the_assessments_say_what_is_out_in_a_batch_and_nothing_without_batches() {
     let w = world(30, true, None);
     assert_eq!(w.assessments(false).batch_status(), w.batching.status());
