@@ -337,8 +337,22 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
         // below it gives that row its day's head, and its height already made room for it.
         redraw(rows: IndexSet(reshown.map { row(at: $0) }))
         // New mail above the rows chosen moves them: keep the rows, not the positions.
-        follow(mailbox?.marked ?? [], scroll: false)
+        let chosen = mailbox?.marked ?? []
+        follow(chosen, scroll: false)
+        if !firstRowsShown { showChosen(chosen) }
         table.rowsShown()
+    }
+
+    /// Whether the list's first rows have come: the row chosen as they came was scrolled into view then.
+    private var firstRowsShown = false
+
+    /// A list opened with a row chosen in its first rows (Esc out of a search, back to its Inbox with the message still
+    /// open) scrolls to that row, once, as they come: a row further down, chosen later, never pulls the list away
+    /// from where a person scrolled it.
+    private func showChosen(_ chosen: [MailCopy]) {
+        firstRowsShown = true
+        guard chosen.count == 1, let position = list.position(of: chosen[0]) else { return }
+        table.scrollRowToVisible(row(at: position))
     }
 
     /// Run a change to the rows' heights, then put the rows on screen back where they stood, unless the list is at
