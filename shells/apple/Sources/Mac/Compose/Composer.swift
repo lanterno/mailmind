@@ -1131,13 +1131,19 @@ final class Composer: Identifiable {
                 account: from, instruction: instruction, key: origKey, tone: tone ?? host.tone),
                 asking: quiet ? nil : host.asksOverLimit)
             guard !closed else { return }   // closed while drafting: not this composer's text
-            if let unless, body != unless { return }   // a quick reply you've started editing: yours wins
+            if let unless, body != unless { return }   // a reply you've started writing since: yours wins
+            // No words came back: what is in the box stays, rather than leave only the signature to go.
+            guard !drafted.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                if !quiet { say("Couldn’t draft a reply") }
+                return
+            }
             let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty && trimmed != sigBlock.trimmingCharacters(in: .whitespacesAndNewlines) {
                 undoRewrite = (body, selection)   // what you'd written is one Undo away
             }
             placeBody(drafted.body + sigBlock)   // the signature stays below the AI's reply
             focusRequest = .body
+            selectionRequest = NSRange(location: (drafted.body as NSString).length, length: 0)   // above the signature
             say("Draft ready — review and edit before sending")
         } catch {
             if !closed && !quiet { say("Couldn’t draft: \(said(error))") }
@@ -1190,11 +1196,16 @@ final class Composer: Identifiable {
         selectionRequest = NSRange(location: (line as NSString).length, length: 0)
     }
 
-    /// A draft written ahead, in the box.
-    func place(_ text: String) {
+    /// A draft written ahead, in the box, unless the box no longer holds `unless`: words typed while it was asked
+    /// for are the person's, and stay. Says whether it went in.
+    @discardableResult
+    func place(_ text: String, unless: String? = nil) -> Bool {
+        if let unless, body != unless { return false }
         placeBody(text + sigBlock)
         focusRequest = .body
+        selectionRequest = NSRange(location: (text as NSString).length, length: 0)   // above the signature
         say("Draft ready — review and edit before sending")
+        return true
     }
 }
 #endif

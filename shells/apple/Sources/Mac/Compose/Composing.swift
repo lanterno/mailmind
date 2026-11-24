@@ -797,6 +797,8 @@ final class Composing: ComposeHost {
         guard let composer = await reply(copy) else { return }
         // The reply saved to the message opened, with its words: the AI's never take their place.
         if composer.draftId != nil { return }
+        // Nor do they take the place of words typed while they were asked for.
+        let start = composer.body
         var written: String?
         if let core, case .draftAheadReady(let ready)? = try? await core.get(API.Get.AiDraftAhead.self, query(copy, peek: true)),
            ready.status == "ready", !ready.body.isEmpty
@@ -806,12 +808,12 @@ final class Composing: ComposeHost {
         // Turned off while it was asked: the plain reply stands, with nothing of the AI's in it.
         guard !composer.closed, !aiTurnedOff else { return }
         if let written {
-            composer.place(written)
-            if inline?.composer === composer { inline?.drafted = true }
+            if composer.place(written, unless: start), inline?.composer === composer { inline?.drafted = true }
         } else {
             chips.removeValue(forKey: copy.key)
+            guard composer.body == start else { return }
             composer.say("Thread moved on — drafting a fresh reply…")
-            await composer.draftReply()
+            await composer.draftReply(unless: start)
         }
     }
 
