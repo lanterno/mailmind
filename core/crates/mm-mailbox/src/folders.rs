@@ -90,6 +90,9 @@ pub struct Folders {
     forgets: OnceLock<Arc<dyn ForgetsFolders>>,
     /// The changes MailMind makes to each account's folders (`changing`).
     changes: Mutex<HashMap<String, Changes>>,
+    /// The part each folder played in the last LIST of each account that worked, by name: kept after the list itself
+    /// goes (`invalidate`), so a folder's SPECIAL-USE attribute still says what it is between loads of the rail.
+    listed_roles: Mutex<HashMap<String, HashMap<String, &'static str>>>,
 }
 
 impl Folders {
@@ -112,6 +115,7 @@ impl Folders {
             caught_up: Mutex::new(HashMap::new()),
             forgets: OnceLock::new(),
             changes: Mutex::new(HashMap::new()),
+            listed_roles: Mutex::new(HashMap::new()),
         }
     }
 
@@ -212,6 +216,17 @@ impl Folders {
         })
     }
 
+    /// The part `folder` plays on this account: what the last LIST that worked said of it, its SPECIAL-USE attribute
+    /// first, however long ago; else what its whole name says (`role_by_name`). Sent Mail counted for the week goes by
+    /// it, so a Sent folder of any name counts, and a folder whose name merely holds "sent" doesn't.
+    pub fn role_as_listed(&self, account: &str, folder: &str) -> Result<&'static str, Fault> {
+        let listed = self.listed_roles.lock().map_err(|_| POISONED)?;
+        Ok(listed
+            .get(account)
+            .and_then(|roles| roles.get(folder).copied())
+            .unwrap_or_else(|| roles::role_by_name(folder, None)))
+    }
+
     /// Refuse a move a person asked for into anything but a folder of this account's own that takes filing. What
     /// the last LIST said is enough, however old, then what is stored; only a folder neither knows (made since, on
     /// another client) waits for a LIST. A folder gone by then is the server's to refuse.
@@ -289,6 +304,8 @@ impl Folders {
             }
         }
         let at = self.clock.now().seconds();
+        let named = folders.iter().map(|f| (f.name.clone(), f.role)).collect();
+        self.listed_roles.lock().map_err(|_| failed(POISONED))?.insert(account.to_owned(), named);
         self.listed
             .lock()
             .map_err(|_| failed(POISONED))?

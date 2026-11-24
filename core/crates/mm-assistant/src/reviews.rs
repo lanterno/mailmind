@@ -31,6 +31,8 @@ pub const TOP_OPEN: i64 = 8;
 pub const CAP_TOTAL: usize = 9000;
 const WAIT: Duration = Duration::from_secs(60);
 const MICROS: i64 = 1_000_000;
+/// The numbers of what the week did, which a review kept today reads as they stand.
+const TALLIES: [&str; 5] = ["sent", "received", "by_bucket", "cleaned", "handled"];
 
 pub fn schema() -> Value {
     json!({
@@ -110,7 +112,8 @@ impl Reviews {
     /// Every number and list is local SQL.
     fn aggregate(&self, accounts: &[String], since: i64) -> Result<Week, Fault> {
         let since_iso = mm_kernel::when::iso(Moment::from_micros(since));
-        let rows = self.overview.week(accounts, since as f64 / MICROS as f64, &since_iso, TOP_OPEN)?;
+        let sent = self.around.sent_folders(accounts)?;
+        let rows = self.overview.week(accounts, since as f64 / MICROS as f64, &since_iso, TOP_OPEN, &sent)?;
         let mut by_bucket = Map::new();
         for (bucket, n) in rows.by_bucket {
             by_bucket.insert(or(&bucket, "other").to_owned(), json!(n));
@@ -229,8 +232,11 @@ impl Reviews {
             _ => Map::new(),
         };
         let since = if written_on == today {
-            // An Undo changes it: as it stands, not as it was written.
-            said.insert("handled".into(), week.stats["handled"].clone());
+            // Today's week, as it stands, not as it was written: a message sent since, mail come in, a sender cleaned
+            // up, an Undo. What needs the person and whom they wait on stay with their lists, as written.
+            for tally in TALLIES {
+                said.insert(tally.into(), week.stats[tally].clone());
+            }
             since
         } else {
             // An earlier day's, read all week: the week it looked back on, as it said it.

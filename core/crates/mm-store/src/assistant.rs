@@ -410,21 +410,31 @@ fn counted(c: &Connection, sql: &str, params: Vec<Sql>) -> rusqlite::Result<i64>
     c.prepare(sql)?.query_row(params_from_iter(params), |r| r.get(0))
 }
 
+/// How many stored messages since `since_ts` the folders in `sent` hold, each (account, folder).
+fn sent_in(c: &Connection, sent: &[(String, String)], since_ts: f64) -> rusqlite::Result<i64> {
+    if sent.is_empty() {
+        return Ok(0);
+    }
+    let each = vec!["(account=? AND folder=?)"; sent.len()].join(" OR ");
+    let params = [Sql::Real(since_ts)]
+        .into_iter()
+        .chain(sent.iter().flat_map(|(a, f)| [Sql::Text(a.clone()), Sql::Text(f.clone())]))
+        .collect();
+    counted(c, &format!("SELECT COUNT(*) FROM messages WHERE ts>=? AND ({each})"), params)
+}
+
 fn week_in(
     c: &Connection,
     accounts: &[String],
     since_ts: f64,
     since_iso: &str,
     top: i64,
+    sent: &[(String, String)],
 ) -> rusqlite::Result<WeekRows> {
     let since = || Sql::Real(since_ts);
     let with = |first: Sql, more: &[Sql]| [first].into_iter().chain(more.iter().cloned()).collect::<Vec<_>>();
     let (ac, ap) = among(accounts, "account");
-    let sent = counted(
-        c,
-        &format!("SELECT COUNT(*) FROM messages WHERE lower(folder) LIKE '%sent%' AND ts>=?{ac}"),
-        with(since(), &ap),
-    )?;
+    let sent = sent_in(c, sent, since_ts)?;
     let received =
         counted(c, &format!("SELECT COUNT(*) FROM messages WHERE folder='INBOX' AND ts>=?{ac}"), with(since(), &ap))?;
     let by_bucket = c
@@ -525,6 +535,18 @@ fn week_in(
     Ok(WeekRows { sent, received, by_bucket, needs, needs_you, waiting, waiting_on, reply_later, cleaned, handled })
 }
 
+impl Database {
+    /// Each (account, folder) holding stored mail of `accounts`, or of every account when none is named.
+    pub fn stored_folders_of(&self, accounts: &[String]) -> Result<Vec<(String, String)>, Fault> {
+        let (ac, ap) = among(accounts, "account");
+        self.read(|c| {
+            c.prepare(&format!("SELECT account, folder FROM messages WHERE 1=1{ac} GROUP BY account, folder"))?
+                .query_map(params_from_iter(ap), |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect()
+        })
+    }
+}
+
 impl Overview for Database {
     fn brief_rows(&self, accounts: &[String], n: i64) -> Result<Vec<Glance>, Fault> {
         let (ac, ap) = among(accounts, "m.account");
@@ -579,8 +601,15 @@ impl Overview for Database {
         })
     }
 
-    fn week(&self, accounts: &[String], since_ts: f64, since_iso: &str, top: i64) -> Result<WeekRows, Fault> {
-        self.read(|c| week_in(c, accounts, since_ts, since_iso, top))
+    fn week(
+        &self,
+        accounts: &[String],
+        since_ts: f64,
+        since_iso: &str,
+        top: i64,
+        sent: &[(String, String)],
+    ) -> Result<WeekRows, Fault> {
+        self.read(|c| week_in(c, accounts, since_ts, since_iso, top, sent))
     }
 }
 

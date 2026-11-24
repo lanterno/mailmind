@@ -633,7 +633,14 @@ impl Overview for Glances {
     fn copies_now(&self, copies: &[(i64, Option<String>)]) -> Result<Vec<CopyNow>, Fault> {
         Ok(copies.iter().map(|(key, _)| (*key != 20).then(|| (Some("INBOX".to_owned()), Some(key + 100)))).collect())
     }
-    fn week(&self, _accounts: &[String], since_ts: f64, since_iso: &str, _top: i64) -> Result<WeekRows, Fault> {
+    fn week(
+        &self,
+        _accounts: &[String],
+        since_ts: f64,
+        since_iso: &str,
+        _top: i64,
+        _sent: &[(String, String)],
+    ) -> Result<WeekRows, Fault> {
         assert_eq!((since_ts, since_iso), ((NOW - 7 * 86_400) as f64, "2026-10-26T12:00:00+00:00"));
         let ivo = Needing {
             message_key: Some(10),
@@ -671,7 +678,14 @@ impl Overview for Crowded {
     fn copies_now(&self, copies: &[(i64, Option<String>)]) -> Result<Vec<CopyNow>, Fault> {
         Ok(copies.iter().map(|(key, _)| Some((Some("INBOX".to_owned()), Some(*key)))).collect())
     }
-    fn week(&self, _accounts: &[String], _since_ts: f64, _since_iso: &str, top: i64) -> Result<WeekRows, Fault> {
+    fn week(
+        &self,
+        _accounts: &[String],
+        _since_ts: f64,
+        _since_iso: &str,
+        top: i64,
+        _sent: &[(String, String)],
+    ) -> Result<WeekRows, Fault> {
         let needs = (1..=top.min(13))
             .map(|n| Needing {
                 message_key: Some(n),
@@ -700,6 +714,9 @@ impl Around for NoCalendar {
     }
     fn weekly_review(&self) -> Result<bool, Fault> {
         Ok(false)
+    }
+    fn sent_folders(&self, _accounts: &[String]) -> Result<Vec<(String, String)>, Fault> {
+        Ok(vec![(ADA.to_owned(), "Sent Items".to_owned())])
     }
 }
 

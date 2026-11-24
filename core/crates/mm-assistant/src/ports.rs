@@ -561,8 +561,16 @@ pub trait Overview: Send + Sync + fmt::Debug {
     /// The copy each stored message has now in the folder it was read from; None for one that has gone from it, filed
     /// or deleted, though its row follows a filed copy to where it went.
     fn copies_now(&self, copies: &[(i64, Option<String>)]) -> Result<Vec<CopyNow>, Fault>;
-    /// The week since `since_ts` (`since_iso` as text), with at most `top` of each list.
-    fn week(&self, accounts: &[String], since_ts: f64, since_iso: &str, top: i64) -> Result<WeekRows, Fault>;
+    /// The week since `since_ts` (`since_iso` as text), with at most `top` of each list: what was sent counted in
+    /// `sent`, the folders that play each account's Sent (`Around::sent_folders`).
+    fn week(
+        &self,
+        accounts: &[String],
+        since_ts: f64,
+        since_iso: &str,
+        top: i64,
+        sent: &[(String, String)],
+    ) -> Result<WeekRows, Fault>;
 }
 
 /// What a review reads beyond the mail: the calendar, and whether it is written ahead and read all week.
@@ -572,6 +580,9 @@ pub trait Around: Send + Sync + fmt::Debug {
     fn events_from(&self, at: i64, limit: usize) -> Result<Vec<Value>, Fault>;
     /// The `weekly_review` preference.
     fn weekly_review(&self) -> Result<bool, Fault>;
+    /// The folders that play Sent on `accounts` (every account when none is named), as (account, folder): by the
+    /// SPECIAL-USE attribute the server's last LIST gave, else by the folder's whole name.
+    fn sent_folders(&self, accounts: &[String]) -> Result<Vec<(String, String)>, Fault>;
 }
 
 /// A brief, or a delta, as it is kept: `text` is its narrative or headline, `body` its groups or items as JSON.

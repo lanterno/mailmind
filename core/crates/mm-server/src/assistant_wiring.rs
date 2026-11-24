@@ -337,7 +337,7 @@ impl Assistant {
     pub(crate) fn assemble(parts: Parts, environment: &Environment) -> Assistant {
         let Parts { database, accounts, servers, gates, folders, config, keychain, op, outside, clock, zone, local_ai } =
             parts;
-        let around = Arc::new(Surroundings::over(&database, config.clone(), &outside, &clock, &zone));
+        let around = Arc::new(Surroundings::over(&database, folders.clone(), config.clone(), &outside, &clock, &zone));
         let engine = Arc::new(ApiEngine {
             file: config.clone(),
             keychain,
@@ -513,12 +513,14 @@ impl PlanSearch for Planning {
     }
 }
 
-/// What a review reads beyond the mail: the calendar's invites, as Today & next reads them (`calendar.agenda`), and the
-/// `weekly_review` preference.
+/// What a review reads beyond the mail: the calendar's invites, as Today & next reads them (`calendar.agenda`), the
+/// `weekly_review` preference, and which stored folders play Sent (the Mailbox's `Folders`).
 #[derive(Debug)]
 pub(crate) struct Surroundings {
     config: Arc<dyn ConfigFile>,
     agenda: Agenda,
+    database: Arc<Database>,
+    folders: Arc<Folders>,
 }
 
 /// The days of mail Today & next reads invites from (`upcoming`'s `days`).
@@ -528,6 +530,7 @@ impl Surroundings {
     /// Over the invites stored mail holds, a TZID read in the system's zone database.
     fn over(
         database: &Arc<Database>,
+        folders: Arc<Folders>,
         config: Arc<dyn ConfigFile>,
         outside: &Arc<dyn Outside>,
         clock: &Arc<dyn Clock>,
@@ -535,7 +538,8 @@ impl Surroundings {
     ) -> Surroundings {
         let zones = Arc::new(mm_store::calendar::SystemZones::new(outside.clone()));
         let roles = Arc::new(crate::calendar_wiring::NamedRoles);
-        Surroundings { config, agenda: Agenda::new(database.clone(), roles, zones, clock.clone(), zone.clone()) }
+        let agenda = Agenda::new(database.clone(), roles, zones, clock.clone(), zone.clone());
+        Surroundings { config, agenda, database: database.clone(), folders }
     }
 }
 
@@ -547,6 +551,16 @@ impl Around for Surroundings {
     fn weekly_review(&self) -> Result<bool, Fault> {
         let raw = self.config.read()?;
         Ok(mm_accounts::preferences::said(&raw, "weekly_review").and_then(Value::as_bool).unwrap_or(false))
+    }
+
+    fn sent_folders(&self, accounts: &[String]) -> Result<Vec<(String, String)>, Fault> {
+        let mut sent = Vec::new();
+        for (account, folder) in self.database.stored_folders_of(accounts)? {
+            if self.folders.role_as_listed(&account, &folder)? == "sent" {
+                sent.push((account, folder));
+            }
+        }
+        Ok(sent)
     }
 }
 

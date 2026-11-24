@@ -717,7 +717,14 @@ impl Overview for Glances {
     fn copies_now(&self, copies: &[(i64, Option<String>)]) -> Result<Vec<CopyNow>, Fault> {
         Ok(copies.iter().map(|(key, _)| Some((Some("INBOX".to_owned()), Some(key + 100)))).collect())
     }
-    fn week(&self, _accounts: &[String], _since_ts: f64, _since_iso: &str, _top: i64) -> Result<WeekRows, Fault> {
+    fn week(
+        &self,
+        _accounts: &[String],
+        _since_ts: f64,
+        _since_iso: &str,
+        _top: i64,
+        _sent: &[(String, String)],
+    ) -> Result<WeekRows, Fault> {
         Ok(WeekRows { sent: 2, received: 5, ..WeekRows::default() })
     }
 }
@@ -732,6 +739,9 @@ impl Around for NoCalendar {
     }
     fn weekly_review(&self) -> Result<bool, Fault> {
         Ok(true)
+    }
+    fn sent_folders(&self, _accounts: &[String]) -> Result<Vec<(String, String)>, Fault> {
+        Ok(vec![(ADA.to_owned(), "Sent Items".to_owned())])
     }
 }
 
