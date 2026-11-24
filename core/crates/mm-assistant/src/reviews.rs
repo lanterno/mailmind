@@ -31,8 +31,10 @@ pub const TOP_OPEN: i64 = 8;
 pub const CAP_TOTAL: usize = 9000;
 const WAIT: Duration = Duration::from_secs(60);
 const MICROS: i64 = 1_000_000;
-/// The numbers of what the week did, which a review kept today reads as they stand.
-const TALLIES: [&str; 5] = ["sent", "received", "by_bucket", "cleaned", "handled"];
+/// The numbers a review kept today reads as they stand: what the week did, and how many need the person, they wait
+/// on and they pinned to answer now, as its lists leave out what has gone.
+const TALLIES: [&str; 8] =
+    ["sent", "received", "by_bucket", "needs_you", "waiting_on", "reply_later", "cleaned", "handled"];
 
 pub fn schema() -> Value {
     json!({
@@ -233,7 +235,7 @@ impl Reviews {
         };
         let since = if written_on == today {
             // Today's week, as it stands, not as it was written: a message sent since, mail come in, a sender cleaned
-            // up, an Undo. What needs the person and whom they wait on stay with their lists, as written.
+            // up, an Undo, a thing that needed the person done. Its lists stay as written, less what has gone.
             for tally in TALLIES {
                 said.insert(tally.into(), week.stats[tally].clone());
             }
