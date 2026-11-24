@@ -518,6 +518,33 @@ final class MailboxVerbsTests: XCTestCase {
         XCTAssertFalse(undo.canUndo, "the undo went through Edit ▸ Undo")
     }
 
+    /// A cleanup undone from the toast floods the Inbox again: Curate, open, reads its senders again once the Undo
+    /// lands, rather than go on saying no sender is flooding you until it is opened again. Closed, it reads nothing:
+    /// it reads them as it opens.
+    func testCurateOpenReadsItsSendersAgainOnceAnUndoLands() async throws {
+        let server = Fixture.server()
+        server.on("GET", API.Get.CleanupSenders.path,
+                  API.NoisySenders(generated: "2026-11-15T09:00:00Z", ok: true, senders: []))
+        server.on("POST", API.Post.Undo.path, API.Undone(label: "Clean Up", ok: true, remaining: 0, reversed: 31))
+        let app = await opened(server)
+        let desk = Desk()
+        desk.use(app, routes: server.wire)
+        desk.sheet = .curate
+        await desk.curate.load()
+        XCTAssertEqual(desk.curate.flood?.senders.count, 0, "no sender is flooding you, the cleanup done")
+
+        server.on("GET", API.Get.CleanupSenders.path, DeskFixture.flood)
+        await app.mailbox.undoNow()
+        await until { desk.curate.flood?.senders.count == DeskFixture.flood.senders.count }
+
+        desk.sheet = nil
+        let reads = server.asked(API.Get.CleanupSenders.path).count
+        await app.mailbox.undoNow()
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(server.asked(API.Get.CleanupSenders.path).count, reads, "Curate closed reads nothing")
+        withExtendedLifetime(desk) {}
+    }
+
     func testReadAndStarGoByTheRowAndTheConversation() async throws {
         let server = Fixture.server()
         server.on("POST", API.Post.Seen.path, filed())
