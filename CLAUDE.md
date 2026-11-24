@@ -124,6 +124,7 @@ The docs below say why. These are the ones a change can break without noticing:
 | You're touching | Read |
 | --- | --- |
 | Tests, fixtures, goldens, what `just verify` runs | [docs/testing.md](docs/testing.md) |
+| What to test, at which ring, on which machine: features, performance, security, CI's tiers | [docs/test-strategy.md](docs/test-strategy.md) |
 | The page, its generated types, ESLint rules | [docs/frontend.md](docs/frontend.md) |
 | The layers, `platform`, `kernel`, `content`, `bootstrap` | [docs/architecture.md](docs/architecture.md) |
 | One context's model and adapters | [docs/contexts.md](docs/contexts.md) |

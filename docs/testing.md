@@ -1,5 +1,7 @@
 # Testing
 
+This says how to run the tests that exist. [test-strategy.md](test-strategy.md) says what to test, at which ring and why.
+
 ## Which tests to run first
 
 Tests — `just test` (`uv run pytest -n auto`) runs them all, in a process for each core (pytest-xdist). `just test -n0`, or
