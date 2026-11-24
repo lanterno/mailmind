@@ -306,7 +306,7 @@ def assemble():
     assessments = Assessments(calls, lambda: gateway(), answers, _uow, _mail, lambda: _preferences()["ai_provider"])
     context = ContextAssembler(_mail)
     threads = ThreadDigest(calls, answers, _uow, context)
-    briefs = Briefs(calls, answers, _uow, _mail)
+    briefs = Briefs(calls, answers, _uow, _mail, lambda: assessments.summaries_waiting())
     reviews = Reviews(calls, answers, _uow, _mail)
     replies = ReplyDrafts(calls, context, _uow, _mail)
     rewriter = Rewriter(calls)

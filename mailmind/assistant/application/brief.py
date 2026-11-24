@@ -5,7 +5,7 @@ caches it keyed on (sorted enabled-account set + local date) so the daily cost i
 and re-renders are instant. Single-flight + shares summarize_thread's 2-proc cap. The row
 text is fed as UNTRUSTED DATA; model-supplied pks are intersected with real pks (never trusted).
 """
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import datetime, timezone
 import json
 from typing import Any, TypedDict
@@ -77,11 +77,13 @@ class StoredGroup(TypedDict):
 
 
 class Briefs:
-    def __init__(self, calls: Calls, answers: Answers, uow: UnitOfWork, mail: Mail):
+    def __init__(self, calls: Calls, answers: Answers, uow: UnitOfWork, mail: Mail,
+                 waiting: Callable[[], int] | None = None):
         self._calls = calls
         self._answers = answers
         self._uow = uow
         self._mail = mail
+        self._waiting = waiting       # how many recent messages wait for a summary: while any do, the Inbox isn't quiet
         self._FLIGHTS = SingleFlight()
 
     def _now(self) -> str:
@@ -211,7 +213,10 @@ class Briefs:
         if cached and not force:
             return stored(cached)
         if not rows:
-            return {"ok": True, "narrative": "Nothing needs you right now — your inbox is quiet.",
+            # Nothing summarized to brief from. Mail still waiting for its summary may need you, so the Inbox isn't called
+            # quiet: there is nothing to brief yet.
+            unread = self._waiting is not None and self._waiting() > 0
+            return {"ok": True, "narrative": "" if unread else "Nothing needs you right now — your inbox is quiet.",
                     "groups": [], "model": "empty", "generated": self._now(), "cached": False, "stale": False}
         if not generate:
             return {"ok": True, "missing": True, "narrative": "", "groups": [], "cached": False, "stale": False}
