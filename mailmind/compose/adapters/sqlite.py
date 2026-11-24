@@ -51,6 +51,11 @@ def outbox_set(c, oid, **flags):
     c.execute(f"UPDATE outbox SET {sets} WHERE id=?", [*cols.values(), oid])
 
 
+def outbox_set_raw(c, oid, raw):
+    """The bytes a queued send goes out as, from now on: its Date restamped as it leaves."""
+    c.execute("UPDATE outbox SET raw=? WHERE id=?", (raw, oid))
+
+
 def outbox_send_now(c, oid, now_ts):
     """Bring a queued send with a time to wait forward to now."""
     cur = c.execute("UPDATE outbox SET next_attempt_at=?, wait_kind='grace' WHERE id=? AND state='queued'",

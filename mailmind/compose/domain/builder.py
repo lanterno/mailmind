@@ -107,6 +107,27 @@ def thread_ids(in_reply_to: object, references: object) -> tuple[str | None, lis
 _BCC_HEADER = re.compile(rb"(?im)^bcc[ \t]*:")
 
 
+def restamped(raw: bytes, now: datetime) -> bytes:
+    """The message with its Date header saying `now`: a message goes out with the moment it leaves, not the one it was
+    written. Only the header block's own Date changes, folded lines and all; with none, the bytes are as they were."""
+    blank = raw.find(b"\r\n\r\n")
+    head_ends = len(raw) if blank < 0 else blank + 2
+
+    def line_end(start: int) -> int:
+        n = raw.find(b"\r\n", start, head_ends)
+        return head_ends if n < 0 else n + 2
+    at = 0
+    while at < head_ends:
+        ends = line_end(at)
+        if raw[at:at + 5].lower() == b"date:":
+            while ends < head_ends and raw[ends:ends + 1] in (b" ", b"\t"):
+                ends = line_end(ends)
+            date = email.utils.format_datetime(now.astimezone(timezone.utc).replace(microsecond=0))
+            return raw[:at] + f"Date: {date}\r\n".encode() + raw[ends:]
+        at = ends
+    return raw
+
+
 def _each_once(addrs: Iterable[str]) -> list[str]:
     """A person named in To and again in Cc or Bcc gets one RCPT TO."""
     first: dict[str, str] = {}

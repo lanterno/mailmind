@@ -23,7 +23,7 @@ from typing import Any
 
 from mailmind.compose.application.ports import Accounts, Account, Book, Copies, Effects, Messages, Screen, Transport
 from mailmind.compose.domain import draft, draft_journal, outbox_item
-from mailmind.compose.domain.builder import Built
+from mailmind.compose.domain.builder import Built, restamped
 from mailmind.compose.domain.errors import Unanswered
 from mailmind.compose.domain.events import DraftCopyRemoved, Failed, Sent
 from mailmind.compose.domain.outbox_item import SendMeta
@@ -39,6 +39,16 @@ log = get_logger("outbox")
 
 def _now() -> int:
     return int(time.time())
+
+
+class _Restamped:
+    """A claimed row with the bytes it goes out as now in place of those it was queued with."""
+
+    def __init__(self, row: Row, raw: bytes) -> None:
+        self._row, self._raw = row, raw
+
+    def __getitem__(self, key: str, /) -> Any:
+        return self._raw if key == "raw" else self._row[key]
 
 
 class Outbox:
@@ -235,6 +245,11 @@ class Outbox:
         # Deliver exactly once. A recovered row (delivered=1, requeued by reset_stuck) skips
         # the wire send and only finishes bookkeeping — so a crash after send never re-sends.
         if not row["delivered"]:
+            # Its Date says when it leaves, not when it was written: a send scheduled for later, or one that waited out
+            # its server, went out dated hours back. The copy in Sent is these bytes too, and the Message-ID stays.
+            raw = restamped(row["raw"], datetime.now(timezone.utc))
+            self._commit(lambda c: self._book.outbox_set_raw(c, oid, raw))
+            row = _Restamped(row, raw)
             try:
                 self._transport.send(acct, row["raw"], json.loads(row["envelope"]),  # lock-free: SMTP != IMAP ops
                               before_dot=lambda: self._commit(lambda c: self._book.outbox_set(c, oid, wire_begun=1)))
