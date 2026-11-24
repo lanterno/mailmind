@@ -2,7 +2,7 @@
 //! down what each account was sent: the Inbox's newest 500 stored at once, the rest newest first a few steps a round,
 //! each step one transaction, so a round that stops goes on where the last left off; each message's text read from
 //! its first 64 KiB, only an invite cut off fetched whole; how far the scan has got in the sync's status; none of it
-//! new mail; each account syncing on its own; and an Inbox opened while its first sync runs joining it, holding no
+//! new mail, though what it kept is summarized at once; each account syncing on its own; and an Inbox opened while its first sync runs joining it, holding no
 //! gate, so a message opens meanwhile.
 //!
 //! A process that only reads reads the older mail too. A message whose opening the server won't send costs only its
@@ -616,6 +616,26 @@ fn a_first_sync_is_no_new_mail_and_what_comes_after_it_is() {
         "{frames}"
     );
     assert_eq!(w.app.syncing.sync().unwrap().result, "2 new");
+}
+
+#[test]
+fn what_a_first_sync_kept_is_summarized_at_once_not_at_the_next_round() {
+    let imap = Imap::start();
+    imap.add(ADA, notes(1, 3));
+    let w = world(imap, &[ADA, BEA]);
+    // Bea's Inbox is empty: her first sync keeps nothing to summarize.
+    w.app.syncing.sync_guarded(Some(BTreeSet::from([BEA.to_owned()])));
+    assert!(w.app.jobs.kicked().is_empty());
+    // Ada's keeps three, none of them new: the summaries' round is asked for now all the same.
+    w.app.syncing.sync_guarded(Some(BTreeSet::from([ADA.to_owned()])));
+    assert_eq!(w.app.syncing.sync().unwrap().result, "0 new");
+    assert_eq!(w.app.jobs.kicked(), ["assess"]);
+    // A sync that finds nothing more asks for none; one that finds new mail does, as before.
+    w.app.syncing.sync_once();
+    assert!(w.app.jobs.kicked().is_empty());
+    w.imap.add(ADA, notes(4, 4));
+    w.app.syncing.sync_once();
+    assert_eq!(w.app.jobs.kicked(), ["assess"]);
 }
 
 #[test]
