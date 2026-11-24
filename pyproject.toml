@@ -57,6 +57,9 @@ testpaths = ["tests"]
 pythonpath = [".", "tests", "tests/support"]
 # importlib mode: test modules are imported by path, so a folder like tests/unit/calendar never shadows a module.
 addopts = ["--import-mode=importlib", "-ra"]
+# A test that hangs (a promise in the page that never settles, a fake that never answers) fails after five minutes
+# with its stack, rather than holding the run until the job's own limit. The slowest tests take well under one.
+timeout = "300"
 markers = [
     "browser: drives the page in Chromium; skipped unless pytest runs with --browser",
     "dovecot: runs against Dovecot in Docker; skipped unless pytest runs with --dovecot",
