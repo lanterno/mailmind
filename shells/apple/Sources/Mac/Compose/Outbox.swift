@@ -88,6 +88,12 @@ final class OutboxTray {
         item.scheduled ? "scheduled" : item.retrying ? "retrying" : item.unsure ? "unsure" : item.state
     }
 
+    /// What a cancelled send says: where its words are, when MailMind keeps its draft, which cancelling leaves in
+    /// Drafts to send another time.
+    static func cancelled(_ item: API.OutboxItem?) -> String {
+        item?.draftId == nil ? String(localized: "Send cancelled") : String(localized: "Send cancelled — kept in Drafts")
+    }
+
     /// Said of a send that waits for its time: MailMind sends only while it is open.
     static let whileOpen = String(localized: "goes while MailMind is open")
 
@@ -135,9 +141,10 @@ final class OutboxTray {
     }
 
     func cancel(_ id: Int) async {
+        let item = items.first { $0.id == id }
         do {
             _ = try await routes.post(API.Post.OutboxCancel.self, API.NamesASend(id: id))
-            say("Send cancelled")
+            say(Self.cancelled(item))
         } catch {
             say((error as? Problem)?.isRefusal == true ? "Too late to cancel" : "Cancel failed")
         }

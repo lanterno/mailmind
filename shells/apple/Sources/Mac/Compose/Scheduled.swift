@@ -37,7 +37,7 @@ extension Composing {
         defer { outboxChanged() }
         do {
             _ = try await core.post(API.Post.OutboxCancel.self, API.NamesASend(id: item.id))
-            say("Send cancelled")
+            say(OutboxTray.cancelled(item))
             return true
         } catch {
             say(ReadOnlyWords.said(error, else: (error as? Problem)?.isRefusal == true ? "Too late to cancel"
