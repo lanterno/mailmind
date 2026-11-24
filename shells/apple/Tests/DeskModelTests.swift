@@ -795,13 +795,28 @@ final class DeskModelTests: XCTestCase {
         XCTAssertEqual(said, "AI is off: there is no API key")
     }
 
-    /// A sender's chip never calls a way out by email one click: before its preview the list knows only that it is a
-    /// newsletter, and once the preview has said how, the chip says it.
+    /// A sender's chip says the way out the senders route names, before any preview: a way out by email is never
+    /// called one click.
+    func testTheUnsubscribeChipSaysTheWayOutTheListNames() {
+        let model = CurateModel(link: link, notices: notices)
+        let ways: [(API.UnsubMethod, String?)] = [(.mailto, "by email"), (.oneClick, "1-click"),
+                                                  (.httpPage, "web page"), (.none, nil)]
+        for (method, chip) in ways {
+            var news = DeskFixture.flood.senders[0]
+            news.unsubMethod = method
+            XCTAssertEqual(model.unsubscribeChip(news), chip, method.rawValue)
+        }
+    }
+
+    /// Where the list names no way out, none of the sender's headers read, the chip says only that it is a newsletter,
+    /// and once the preview has said how, the chip says it, over what the list named.
     func testTheUnsubscribeChipSaysHowOnceThePreviewHasSaid() async {
         let model = CurateModel(link: link, notices: notices)
         let (news, alerts) = (DeskFixture.flood.senders[0], DeskFixture.flood.senders[1])
         XCTAssertEqual(model.unsubscribeChip(news), "newsletter", "likely a way out, not yet how")
         XCTAssertNil(model.unsubscribeChip(alerts), "nothing says it has a way out")
+        var named = news
+        named.unsubMethod = .oneClick
         let ways: [(String, String?)] = [("mailto", "by email"), ("one-click", "1-click"), ("http-page", "web page"),
                                          ("none", nil)]
         for (method, _) in ways {
@@ -813,6 +828,7 @@ final class DeskModelTests: XCTestCase {
         for (method, chip) in ways {
             await model.previewCleanup("news@shop.example.test")
             XCTAssertEqual(model.unsubscribeChip(news), chip, method)
+            XCTAssertEqual(model.unsubscribeChip(named), chip, "the preview's, over the list's: \(method)")
         }
     }
 
