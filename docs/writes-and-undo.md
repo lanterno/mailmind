@@ -18,7 +18,9 @@
   folder's UIDVALIDITY (`params.epoch`) still holds, and searches for nothing. A later try asks the server first
   (`ServerOps._target`, `_already_in`): the Message-ID says where the message is, a folder with none by that id means it
   has left, and a UID from another epoch is never acted on. A send's `\Answered` (`server_ops.mark_answered`) goes
-  straight to the server, since the outbox retries it.
+  straight to the server, since the outbox retries it. Once it is stored the lists hear `flags-changed` for the original's
+  folder, and the account's follow-ups are resolved at once (`FollowUps.resolve`), so Waiting lets the thread go with a
+  `followup` event rather than at the next minute's round.
 - `mailbox.commands` runs the worker when IMAP returns, using the `applied` flag as an
   exactly-once gate. It and Compose's `Outbox` each run a `DurableQueue`, `QUEUE`, over their table:
   one claim wins a row, a failure backs off from 20 s doubling to 15 minutes, and the last allowed attempt goes to `error`,
@@ -255,9 +257,11 @@
   another app shows none of; one of Bcc goes only into the save's record, never the bytes. Reopening reads them back
   after the addresses (`resume.recipients`, `resume.bcc_of`). A send is refused at the first, in words naming it as it
   was typed, on one line, cut short past 80 characters.
-- A try sets `tried` to its Message-ID before the APPEND. The next try looks for that copy in Drafts: it stands if it is
-  this very save, and goes if a newer one has taken over. A discard takes it too, and the row leaves only after the copy
-  has (a server that refuses has the last word: the row goes, and the copy stays listed).
+- A try adds its Message-ID to `tried` before the APPEND (`draft_journal.trying`), keeping every earlier try's, since each
+  save has a Message-ID of its own and each failed try may have left its copy. The next try looks for each of them in
+  Drafts: the one of this very save stands, and every other goes once a newer copy has taken over. A discard and a send
+  take them all too, and the row leaves only after the copies have (a server that refuses has the last word: the row goes,
+  and the copy stays listed).
 - A save names the `version` it saw (`base_version`). One that never saw the latest gets a 409 with `conflict: true`, unless
   the last save was this composer's (`saved_by`), whose answer was lost. Autosave then stops, a closing save fails into
   `failedSend`, and only a save someone asks for leaves `base_version` out and overwrites.
