@@ -735,7 +735,9 @@ export function createComposing(env: Env) {
     const payload: Payload = { ...payloadOf(x), send_after: scheduled ? sendAfter : 0 };
     const replyKey = x.mode === "reply" || x.mode === "replyall" ? x.origKey : null;
     const snap = snapshot(x);   // Undo → resend unchanged isn't asked again
-    const saving = x.saving;   // a save still in flight: the send must name the copy it leaves
+    // A save still in flight: the send must name the copy it leaves. One sent later saves first, as the Mac's does, so
+    // its draft waits on its server with these words, and a person who cancels it finds them there.
+    const saving = scheduled ? save(true) : x.saving;
     x.dirty = false;
     failedSend = null;
     close(true);
