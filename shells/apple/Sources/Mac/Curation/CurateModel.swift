@@ -108,6 +108,11 @@ final class CurateModel {
     @ObservationIgnored var changed: () -> Void = {}
     /// Opens a sender's unsubscribe page in the person's browser, where nothing is sent on its own.
     @ObservationIgnored var openPage: (URL) -> Void = { _ in }
+    /// Curate's own undo manager while its sheet is open: a sheet is a window of its own, whose Edit ▸ Undo never
+    /// reaches the mail window's, where the mailbox puts what can be taken back. What Curate did goes on both.
+    @ObservationIgnored weak var sheetUndo: UndoManager?
+    /// Takes back, by its name, what the mailbox's Edit ▸ Undo still holds: Edit ▸ Undo on the sheet does it.
+    @ObservationIgnored var undoFromSheet: (String) -> Void = { _ in }
 
     init(link: CoreLink, notices: DeskNotices) {
         self.link = link
@@ -188,8 +193,8 @@ final class CurateModel {
             openPage(page)
         }
         let extra = Self.cleaned(done.status)
-        notices.say(String(localized: "Blocked · swept \(done.swept)") + (extra.isEmpty ? "" : " · \(extra)"),
-                    undo: String(localized: "Clean Up"))
+        offer(String(localized: "Blocked · swept \(done.swept)") + (extra.isEmpty ? "" : " · \(extra)"),
+              undo: String(localized: "Clean Up"))
         await again()
     }
 
@@ -249,8 +254,8 @@ final class CurateModel {
             let done = try await routes.post(API.Post.CleanupBatch.self, API.BatchCleanupBody(
                 senders: senders, undoGroup: newUndoGroup()))
             let failed = done.sweepFailed > 0 ? String(localized: " · \(done.sweepFailed) failed") : ""
-            notices.say(String(localized: "Blocked \(done.blocked.count) · swept \(done.swept)") + failed,
-                        undo: String(localized: "Clean Up"))
+            offer(String(localized: "Blocked \(done.blocked.count) · swept \(done.swept)") + failed,
+                  undo: String(localized: "Clean Up"))
         } catch {
             notices.say(ReadOnlyWords.said(error, else: String(localized: "Cleanup failed")), refused: true)
             return
@@ -307,7 +312,7 @@ final class CurateModel {
                 // Whatever went, or may have, one Undo brings it back from the Trash: a sweep stopped where the server
                 // couldn't be asked again keeps a way back for all of it. One that moved nothing offers none.
                 let undoable = swept.undoGroup != nil && ((result.moved ?? 0) > 0 || result.error != nil)
-                notices.say(words, undo: undoable ? String(localized: "Sweep") : nil)
+                offer(words, undo: undoable ? String(localized: "Sweep") : nil)
             }
         } catch {
             notices.say(Self.sweepFailed(error, planning: false), refused: true)
@@ -456,6 +461,15 @@ final class CurateModel {
     static func does(_ filter: API.MailFilter) -> String {
         filter.star && filter.read ? String(localized: "Star and mark read")
             : filter.star ? String(localized: "Star") : String(localized: "Mark read")
+    }
+
+    /// Say what was done, and where it can be taken back, offer it on the sheet's Edit ▸ Undo too.
+    private func offer(_ words: String, undo name: String?) {
+        notices.say(words, undo: name)
+        guard let name, let sheetUndo else { return }
+        sheetUndo.removeAllActions(withTarget: self)
+        sheetUndo.registerUndo(withTarget: self) { model in model.undoFromSheet(name) }
+        sheetUndo.setActionName(name)
     }
 
     /// Read the lists and everything here again, as the page does after a cleanup or sweep.

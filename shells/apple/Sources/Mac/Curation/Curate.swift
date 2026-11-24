@@ -28,6 +28,8 @@ struct CurateSheet: View {
     var mailbox: Mailbox?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.meadow) private var meadow
+    /// The sheet's own, which its Edit ▸ Undo asks while it is in front.
+    @Environment(\.undoManager) private var undoManager
 
     var body: some View {
         VStack(spacing: 0) {
@@ -56,6 +58,8 @@ struct CurateSheet: View {
         .frame(width: 620, height: 600)
         .background(meadow.paper)
         .task { await model.load() }
+        .onAppear { model.sheetUndo = undoManager }
+        .onChange(of: undoManager) { _, now in model.sheetUndo = now }
         .sheet(item: Binding(get: { model.cleaning.map(Asked.init) }, set: { if $0 == nil { model.cleaning = nil } })) { _ in
             CleanupSheet(model: model)
         }

@@ -96,6 +96,15 @@ final class Desk {
         attention.naming = { [weak self] copies in self?.app?.mailbox.subjectAway(copies) }
         curate.changed = readAgain
         curate.openPage = { NSWorkspace.shared.open($0) }
+        // Edit ▸ Undo on Curate's sheet takes back what the mailbox's still holds, as its toast's Undo does: once
+        // between them, so neither undoes something older once the other has.
+        curate.undoFromSheet = { [weak self] name in
+            guard let mailbox = self?.app?.mailbox else { return }
+            if let undo = mailbox.undoManager {
+                guard undo.canUndo, undo.undoActionName == name else { return }
+            }
+            mailbox.undo()
+        }
         brief.paperTrailQuery = { [weak self] in self?.paperTrail?.search?.q }
         // The tallies count the stacks they open (`goToStack`).
         brief.stacksAccount = { [weak self] in self?.stacksAccount }
