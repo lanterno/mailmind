@@ -69,7 +69,7 @@ final class StatusWordsTests: XCTestCase {
         failed.status["news@example.test"] = API.AccountSync(health: "", msg: "", tryingAgain: true)
         let worked = [F.standing("ada@example.test", ok: "2026-11-14T14:05:00Z"),
                       F.standing("news@example.test", ok: "2026-11-14T13:00:00Z")]
-        let trying = StatusWords.Pill(dot: .busy, text: "Couldn’t reach the server · trying again")
+        let trying = StatusWords.Pill(dot: .busy, text: "Couldn’t reach 2 accounts’ servers · trying again")
         XCTAssertEqual(pill(failed, worked), trying)
         XCTAssertEqual(pill(failed), trying, "before the accounts' records are read too")
         XCTAssertEqual(pill(failed, worked, syncing: true).text, "Syncing…", "what runs comes first")
@@ -79,7 +79,17 @@ final class StatusWordsTests: XCTestCase {
 
         var one = F.digest(status: ["ada@example.test": "ok"], last: "2026-11-14T14:59:00Z")
         one.status["news@example.test"] = API.AccountSync(health: "", msg: "", tryingAgain: true)
-        XCTAssertEqual(pill(one, worked), trying, "one account trying again is enough")
+        XCTAssertEqual(pill(one, worked), .init(dot: .busy, text: "Couldn’t reach news’s server · trying again"),
+                       "one account trying again is enough, and the pill names it among several")
+        var ada = F.digest(accounts: ["ada@example.test", "news@example.test"], status: ["news@example.test": "ok"],
+                           last: "2026-11-14T14:59:00Z")
+        ada.status["ada@example.test"] = API.AccountSync(health: "", msg: "", tryingAgain: true)
+        XCTAssertEqual(pill(ada, worked).text, "Couldn’t reach Ada’s server · trying again", "by its alias")
+        var alone = F.digest(accounts: ["news@example.test"], aliases: [:], status: ["news@example.test": "ok"],
+                             last: "2026-11-14T14:59:00Z")
+        alone.status["news@example.test"]?.tryingAgain = true
+        XCTAssertEqual(pill(alone, worked).text, "Couldn’t reach the server · trying again",
+                       "with one account there is no other server to tell it from")
 
         let again = F.digest(status: ["ada@example.test": "ok", "news@example.test": "ok"],
                              last: "2026-11-14T14:59:00Z")
