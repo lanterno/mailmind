@@ -62,6 +62,9 @@
 - On an account whose server files sent mail itself, a person's Retry of an `unsure` send looks in Sent first
   (`Outbox._in_sent_already`, on the gate for `LOOK_IN_SENT_WAIT`). A copy there marks it delivered, only its bookkeeping
   is left, and the answer says `gone: true`. A look that can't tell sends it again, as they were told it might.
+- A message goes out dated as it leaves: before each try on the wire the outbox restamps its own Date header
+  (`builder.restamped`) and keeps the bytes, so the copy in Sent is the same and its Message-ID stays. A send scheduled
+  for later, or one that waited out its server, no longer goes dated as it was written.
 - A message MailMind sends for itself goes through the outbox too: a mailto unsubscribe (`SystemSend`), keyed
   `unsub:<sender>:<account>`, waits out a server that's away and is filed in Sent.
 - The read-only profile writes nothing to a mail server or anywhere else outside (decision D4); what AI is asked still
@@ -239,7 +242,9 @@
   still asks of its server: a save's bytes and record, or `discard`. An autosave (`autosave: true`) comes due a minute after
   the last push (`PUSH_EVERY`). Any other save tries at once, on the account's gate for `PUSH_WAIT`, and answers
   `pushed: true`, or else `pushed: false` and the `draft-push` job (`Drafts.push_round`) has it, backing off from 20 s to 15
-  minutes for as long as it takes. A push that lands deletes the row only if no newer save has replaced it. Read-only the job
+  minutes for as long as a server refuses or is away. The job waits its turn for the gate for `PUSH_WAIT` too, at
+  AFTER_USER, ahead of the upkeep waiting but behind a person's own change: one that only asked whenever the gate was
+  free met it taken, round after round, and a draft closed reached its server minutes on. A push that lands deletes the row only if no newer save has replaced it. Read-only the job
   doesn't run and a save is kept on this Mac: it asks no server, and its row's due time is `draft_journal.KEPT_HERE`,
   which never comes, so no full run pushes it either. The tray lists it at once, `kept: true`, until a save in a full run
   gives it a due time again, an autosave the one a first save gets. A discard that would take a copy off the server is
@@ -257,7 +262,8 @@
   the last save was this composer's (`saved_by`), whose answer was lost. Autosave then stops, a closing save fails into
   `failedSend`, and only a save someone asks for leaves `base_version` out and overwrites.
 - A send about to go holds its draft: the job leaves it, a save answers 423, and delivery removes the copy and the row, the
-  journal with it. One scheduled more than a minute off lets the copy catch up.
+  journal with it. One scheduled more than a minute off lets the copy catch up. Both clients save a Send Later's draft
+  first, a save asked for, so its copy waits on its server with the words that go.
 - Reopening prefers the journal when the copy opened is the one pushed. Where another app changed it, `Drafts._keep_apart`
   gives the waiting save a row of its own, so both stay. `/api/outbox` also answers `drafts` (`Drafts.waiting`), what should
   have reached its server and hasn't and what a read-only run kept here (`kept`), for the tray, and `/api/draft/resume`
@@ -285,7 +291,9 @@
   so `Drafts._push` and the outbox's draft cleanup also move that row's copy only under the gate. Edit
   answers 423 while a queued or sending outbox row holds the draft. A save appends the new copy
   first and only then removes the old one (`Copies.append_to_drafts`), wherever it was, so one that
-  fails or a crash leaves the old copy, at worst beside the new.
+  fails or a crash leaves the old copy, at worst beside the new. In Drafts it removes every copy under the Message-ID the
+  draft was saved with too (`UNDELETED HEADER Message-ID`, asked before the APPEND): another app may have left more than
+  one there, Thunderbird its earlier saves, and a draft opened from one of them would otherwise stay on the server twice.
 - A message is a draft if the server flags it `\Draft` or its folder is the account's Drafts
   (`Drafts.is_draft`): the role the last LIST gave it, else `roles.names_drafts`, the whole name
   at the top of the tree or under INBOX or Gmail's parent. A name that merely holds "draft" counts
@@ -299,7 +307,8 @@
   archive deleted the row.
 - A copy that leaves the server takes its `messages` row with it, in the step that records the save,
   discard or send, and `reconcile` names the folder so a list of it on screen loads again (its
-  catch-up brings the new copy). A copy the server wouldn't remove stays listed.
+  catch-up brings the new copy). Every push names its Drafts so, a first push too, which removes none. A copy the
+  server wouldn't remove stays listed.
 - A composer's saves go in turn. `save` (`features/compose/machine.ts`) chains on `x.saving` and names the copy the
   last save left, autosave skips a tick while one is in flight, and Send and Discard wait for it.
   It clears `dirty` only if `x.edits` hasn't moved since it began, so call `markEdited(x)` at

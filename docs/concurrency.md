@@ -39,7 +39,8 @@ opened there is read to its oldest message. Opening an Inbox whose first scan ha
   (`mailbox.reconciler._reconcile_folders`) goes further: one job per folder with a `sync_state` row
   (`reconciler.reconciled_folders`), so it never holds a gate across folders.
 - Background work passes `wait=False` and skips its turn on `gates.Busy`, so it never stalls
-  the user. `deadline=` (seconds) raises `Busy` for a job not let in by then, and it never runs.
+  the user. The draft push job is the exception: it waits `PUSH_WAIT` at AFTER_USER, so a draft closed reaches its server
+  in seconds while the account is busy, and a person's own change still goes first. `deadline=` (seconds) raises `Busy` for a job not let in by then, and it never runs.
   A job that waits on a gate from inside a job raises `RuntimeError` instead of hanging; one that
   takes another account's gate with `wait=False` may.
 - Tests ask `gates.held(account)`, and hold the gate with `held_elsewhere()` from
