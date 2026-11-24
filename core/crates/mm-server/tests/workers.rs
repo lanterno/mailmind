@@ -1,5 +1,6 @@
 //! The background jobs' timetable: a lane runs its job's rounds one after another, at its interval or when its round
-//! says, now when kicked, and a stop ends it; and what each job last did, as `/api/debug/jobs` shows it.
+//! says, now when kicked, and a stop ends it; what each job last did, as `/api/debug/jobs` shows it; and the kicks of
+//! jobs no lane runs, kept for the served suites' `work kicked`.
 
 #![allow(clippy::unwrap_used)]
 
@@ -94,6 +95,20 @@ fn a_lane_runs_its_first_round_after_its_delay_then_whenever_kicked_until_stoppe
     assert!(began.elapsed() < Duration::from_secs(30));
     assert_eq!(rounds.load(Ordering::SeqCst), 2);
     assert_eq!(jobs.snapshot()[0]["runs"], json!(2));
+}
+
+#[test]
+fn a_kick_of_a_job_no_lane_runs_is_kept_by_name_until_asked_for_once() {
+    let jobs = Jobs::new(Arc::new(Frozen));
+    jobs.add("sync", 300, 0);
+    assert!(jobs.kicked().is_empty());
+    jobs.kick("tidy");
+    jobs.kick("assess");
+    jobs.kick("assess");
+    // Scheduled, its lane hears it: nothing is kept.
+    jobs.kick("sync");
+    assert_eq!(jobs.kicked(), ["assess", "tidy"]);
+    assert!(jobs.kicked().is_empty());
 }
 
 #[test]
