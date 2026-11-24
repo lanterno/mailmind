@@ -332,14 +332,15 @@ impl Accounts for SendingAccounts {
 }
 
 /// What a delivered send sets off elsewhere (`bootstrap.compose._Effects`): \Answered on its original, on its server
-/// and then in its row (`server_ops.mark_answered`), and a follow-up on its thread (Attention's), with what the
-/// answer met resolved at once.
+/// and then in its row (`server_ops.mark_answered`), which the lists showing its folder hear, and a follow-up on its
+/// thread (Attention's), with what the answer met resolved at once.
 #[derive(Debug)]
 pub(crate) struct SendEffects {
     pub(crate) servers: Arc<dyn MailServers>,
     pub(crate) database: Arc<Database>,
     pub(crate) attention: Arc<AttentionStore>,
     pub(crate) follow_ups: Arc<FollowUps>,
+    pub(crate) events: Arc<dyn Events>,
     pub(crate) read_only: bool,
 }
 
@@ -368,6 +369,9 @@ impl SendEffects {
         drop(s);
         let flags = [("answered".to_owned(), true)];
         command_ports::write(&*self.database, |tx| tx.set_local_flags(pk, &flags))?;
+        // As a sync that found it answered elsewhere says it: a list showing the folder reads it again, ↩ and all.
+        self.events
+            .publish(Topic::FlagsChanged, json!({"account": field("account"), "folder": field("folder"), "count": 1}));
         Ok(true)
     }
 }
@@ -549,8 +553,11 @@ impl Compose {
             ingest: parts.ingest.clone(),
             clock: parts.clock.clone(),
         });
-        let screen: Arc<dyn Screen> =
-            Arc::new(ComposeScreen { folders: parts.folders.clone(), events: parts.events, stats: parts.stats });
+        let screen: Arc<dyn Screen> = Arc::new(ComposeScreen {
+            folders: parts.folders.clone(),
+            events: parts.events.clone(),
+            stats: parts.stats,
+        });
         let kick = Arc::new(Kick::default());
         let gate: Arc<dyn Gate> = Arc::new(ComposeGate(parts.gates));
         let writes = !parts.read_only;
@@ -569,6 +576,7 @@ impl Compose {
                 database: parts.database.clone(),
                 attention: Arc::new(AttentionStore::new(parts.database.clone())),
                 follow_ups: parts.follow_ups,
+                events: parts.events.clone(),
                 read_only: parts.read_only,
             }),
             screen: screen.clone(),
