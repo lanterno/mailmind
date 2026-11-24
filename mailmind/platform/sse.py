@@ -38,7 +38,8 @@ TOPICS = frozenset({
     "reconcile",          # rows of mail gone from the server went, in `folder` if it names one; or an account was
                           # removed (`removed`), and its mail left the lists (`pruned`: how many copies this Mac let
                           # go of it)
-    "flags-changed",      # a sync found mail read, starred or answered elsewhere, in `folder`
+    "flags-changed",      # a sync found mail read, starred or answered elsewhere, in `folder`; or a reply sent here
+                          # marked its original answered
     "folder-synced",      # the first scan of a folder ended (ok: whether it read the folder)
     "snooze-wake",        # snoozed mail came back
     "followup",           # the follow-ups changed

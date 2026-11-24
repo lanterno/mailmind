@@ -14,8 +14,9 @@ from mailmind.mailbox.application.ports import Account, Accounts, OpenSession, S
 from mailmind.mailbox.application.session import MailSession
 from mailmind.mailbox.domain import command, destination, move_strategy, try_target
 from mailmind.mailbox.domain import flags as mail_flags
+from mailmind.mailbox.domain.events import FlagsChanged
 from mailmind.mailbox.domain.move_strategy import Way
-from mailmind.platform import profile
+from mailmind.platform import bus, profile
 from mailmind.platform.db.uow import UnitOfWork
 
 # Connection-level failures = the op never reached/landed on the server → QUEUE + retry.
@@ -211,11 +212,15 @@ class ServerOps:
     def mark_answered(self, pk: int | None, account: str | None, message_id: str | None) -> tuple[bool, str]:
         """\\Answered on the message a send replied to, wherever it is by now: where its row says, or
         with no row left (archiving right after replying deletes it), in the inbox and the folders filing
-        moves mail to. A custom folder it was moved to isn't looked through. Answers as set_flags does."""
+        moves mail to. A custom folder it was moved to isn't looked through. Answers as set_flags does. A stored row marked
+        is told as a sync's flag changes are (FlagsChanged)."""
         with self._uow.read() as c:
             row = self._store.get_message_by_msgid(c, account, message_id) or (self._store.get_message(c, pk) if pk else None)
         if row:
-            return self.set_flags(row["pk"], {"answered": True})
+            marked = self.set_flags(row["pk"], {"answered": True})
+            if marked[0]:                            # a list showing its folder reads it again, the ↩ with it
+                bus.publish(FlagsChanged(row["account"], row["folder"], 1))
+            return marked
         if not (account and message_id):
             return False, "not found"
         profile.refuse_writes("a flag change")

@@ -20,7 +20,7 @@ class Restored:
 
 @dataclass(frozen=True)
 class FlagsChanged:
-    """A sync found mail read, starred or answered elsewhere."""
+    """A sync found mail read, starred or answered elsewhere, or a reply sent here marked its original answered."""
     account: str
     folder: str
     count: int
