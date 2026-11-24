@@ -486,9 +486,9 @@ impl Drafting {
     pub fn push_round(&self) -> Result<i64, Fault> {
         let now = self.now();
         let soon = now + draft_journal::PUSH_EVERY;
-        // Each waits its turn for a moment, ahead of the syncs and the upkeep waiting too, as a person's own change and
-        // IDLE stay ahead of it: one that only asked whenever the gate was free met it taken, round after round, while
-        // the account synced, and a draft closed reached its server minutes on.
+        // Each waits its turn for a moment, ahead of the upkeep waiting too (the body backfill, a sync's), as a person's
+        // own change stays ahead of it and IDLE takes no gate: one that only asked whenever the gate was free met it
+        // taken, round after round, while the account was busy, and a draft closed reached its server minutes on.
         for id in self.read(|book| book.journal_due(now, soon))? {
             self.try_push(id, Priority::AfterUser, GateWait::For(PUSH_WAIT));
         }
