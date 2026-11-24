@@ -25,7 +25,7 @@
   "note": "sent: on the wire",
   "value": [
    {
-    "data": "From: Cy <cy@example.test>\r\nTo: mae@guild.example.test\r\nCc: guild@example.test\r\nSubject: Re: Guild meetup venue\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <msg 1>\r\nIn-Reply-To: <venue-3@guild.example.test>\r\nReferences: <venue-1@guild.example.test> <venue-2@cy.example.test>\r\n <venue-3@guild.example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nPerfect, thanks!\r\n\r\nOn Wed, 28 Oct 2026 15:30:00 +0000, Mae Lindqvist <mae@guild.example.test> wr=\r\note:\r\n> Booked for the 14th.\r\n",
+    "data": "From: Cy <cy@example.test>\r\nTo: mae@guild.example.test\r\nCc: guild@example.test\r\nSubject: Re: Guild meetup venue\r\nDate: Mon, 02 Nov 2026 12:00:11 +0000\r\nMessage-ID: <msg 1>\r\nIn-Reply-To: <venue-3@guild.example.test>\r\nReferences: <venue-1@guild.example.test> <venue-2@cy.example.test>\r\n <venue-3@guild.example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nPerfect, thanks!\r\n\r\nOn Wed, 28 Oct 2026 15:30:00 +0000, Mae Lindqvist <mae@guild.example.test> wr=\r\note:\r\n> Booked for the 14th.\r\n",
     "login": "cy@example.test",
     "mail_from": "cy@example.test",
     "rcpts": [
