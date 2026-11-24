@@ -92,6 +92,19 @@ def test_a_stored_brief_counts_what_it_still_holds(model, said):
     assert (group["count"], group["messages"]) == (1, [copy(LUNCH, inbox)])
 
 
+def test_an_inbox_whose_mail_waits_for_its_summaries_is_never_called_quiet(model, said):
+    """Nothing summarized to brief from: while mail waits for its summary it may need you, so the brief says nothing yet,
+    keeps nothing and asks nothing; once none waits, the Inbox is quiet."""
+    waiting = [10]
+    briefs = Briefs(calls_on(model), said, Uow(), Inbox(), lambda: waiting[0])
+    for generate in (False, True):
+        card = briefs.build({ADA}, generate=generate)
+        assert (card["narrative"], card["groups"], card["model"], card["cached"]) == ("", [], "empty", False)
+    assert (model.sent, said.briefs) == ([], {})
+    waiting[0] = 0
+    assert briefs.build({ADA})["narrative"] == "Nothing needs you right now — your inbox is quiet."
+
+
 # -- the review ------------------------------------------------------------------------------------
 
 def needing(row):
