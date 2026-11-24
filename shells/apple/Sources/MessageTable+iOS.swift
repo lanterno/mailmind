@@ -43,11 +43,11 @@ final class MessageTableController: NSObject, UICollectionViewDataSource, UIColl
         collectionView.register(MessageCell.self, forCellWithReuseIdentifier: MessageCell.identifier)
         collectionView.dataSource = self
         collectionView.delegate = self
-        model.display = self
+        model.displays.add(self)
     }
 
     func stop() {
-        if model.display === self { model.display = nil }
+        model.displays.remove(self)
     }
 
     // MARK: The scroll position, once a frame

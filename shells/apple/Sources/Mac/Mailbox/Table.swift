@@ -170,12 +170,12 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
             self, selector: #selector(moved), name: NSView.boundsDidChangeNotification, object: clip)
         NotificationCenter.default.addObserver(
             self, selector: #selector(moved), name: NSView.frameDidChangeNotification, object: clip)
-        list.display = self
+        list.displays.add(self)
     }
 
     func stop() {
         NotificationCenter.default.removeObserver(self)
-        if list.display === self { list.display = nil }
+        list.displays.remove(self)
     }
 
     // MARK: Positions

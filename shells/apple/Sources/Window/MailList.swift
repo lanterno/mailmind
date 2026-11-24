@@ -71,7 +71,8 @@ final class MailListModel: MessageRows {
     static let margin = 1
 
     @ObservationIgnored private(set) var total = 0
-    @ObservationIgnored weak var display: (any ListDisplay)?
+    /// The tables drawing the list: one in each mail window open, as every window shows the process's one list.
+    @ObservationIgnored let displays = ListDisplays()
     /// Set once, when the first page has come: whether there is mail to show, and when it came.
     private(set) var firstRowsAt: Date?
     /// What a person is told when a page couldn't be read.
@@ -183,7 +184,7 @@ final class MailListModel: MessageRows {
             change(&row)
             guard row != page[index] else { return false }
             pages[number]?[index] = row
-            display?.rowsChanged(IndexSet(integer: number * Self.pageSize + index), totalChanged: false)
+            displays.rowsChanged(IndexSet(integer: number * Self.pageSize + index), totalChanged: false)
             return true
         }
         return false
@@ -243,7 +244,7 @@ final class MailListModel: MessageRows {
             if firstRowsAt == nil { firstRowsAt = Date() }
             if totalChanged || !changed.isEmpty {
                 held += 1
-                display?.rowsChanged(changed, totalChanged: totalChanged)
+                displays.rowsChanged(changed, totalChanged: totalChanged)
             }
         }
         if let once = onceRead {

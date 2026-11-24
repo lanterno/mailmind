@@ -110,7 +110,7 @@ struct ReaderPane: View {
                 Task { await app?.mailbox.readCounts() }
             }
             composing.scheduledChanged = { [weak app] in
-                (app?.list?.display as? MailboxTableController)?.redrawShown()
+                for table in app?.list?.displays.all ?? [] { (table as? MailboxTableController)?.redrawShown() }
             }
             if let core = app.core { composing.attach(core) }
             joinMailbox()

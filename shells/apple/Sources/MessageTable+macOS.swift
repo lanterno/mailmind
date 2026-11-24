@@ -69,12 +69,12 @@ final class MessageTableController: NSObject, NSTableViewDataSource, NSTableView
             self, selector: #selector(moved), name: NSView.boundsDidChangeNotification, object: clip)
         NotificationCenter.default.addObserver(
             self, selector: #selector(moved), name: NSView.frameDidChangeNotification, object: clip)
-        model.display = self
+        model.displays.add(self)
     }
 
     func stop() {
         NotificationCenter.default.removeObserver(self)
-        if model.display === self { model.display = nil }
+        model.displays.remove(self)
     }
 
     // MARK: The scroll position, once a frame

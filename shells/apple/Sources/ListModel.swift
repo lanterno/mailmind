@@ -49,13 +49,49 @@ protocol ListDisplay: AnyObject {
     func rowsChanged(_ positions: IndexSet, totalChanged: Bool)
 }
 
+/// The tables that draw one list, each held weakly. The window's list is the process's (`MailApp.shared`'s), and
+/// every mail window open draws it in a table of its own, so each table hears every batch: one slot for the last
+/// table to open left the others deaf once it closed, and their rows stood still.
+@MainActor
+final class ListDisplays {
+    private struct Held {
+        weak var display: (any ListDisplay)?
+    }
+
+    private var held: [Held] = []
+
+    /// The tables drawing the list now.
+    var all: [any ListDisplay] {
+        held.compactMap(\.display)
+    }
+
+    /// A table starts drawing the list.
+    func add(_ display: any ListDisplay) {
+        held.removeAll { $0.display == nil || $0.display === display }
+        held.append(Held(display: display))
+    }
+
+    /// A table stops, as its window closes; the others still hear.
+    func remove(_ display: any ListDisplay) {
+        held.removeAll { $0.display == nil || $0.display === display }
+    }
+
+    /// Tell every table which positions a batch changed.
+    func rowsChanged(_ positions: IndexSet, totalChanged: Bool) {
+        for display in all {
+            display.rowsChanged(positions, totalChanged: totalChanged)
+        }
+    }
+}
+
 /// What a message table draws: how many rows there are, the row at a position when it has it, and which rows are on
 /// screen. Step 0's list (`ListModel`, over the core's `ListView`) and the window's (`MailListModel`, over the route the
 /// page lists mail with) both are one.
 @MainActor
 protocol MessageRows: AnyObject {
     var total: Int { get }
-    var display: (any ListDisplay)? { get set }
+    /// The tables drawing the list, each told of a batch.
+    var displays: ListDisplays { get }
     func row(at position: Int) -> MessageRow?
     func setVisible(_ rows: Range<Int>)
     /// Where the message chosen is now, when its row is held: the table keeps it chosen as rows move.
@@ -71,13 +107,13 @@ extension MessageRows {
 @MainActor
 @Observable
 final class ListModel: MessageRows {
-    // The table hears of a batch through `display`, so a batch redraws nothing through SwiftUI.
+    // The table hears of a batch through `displays`, so a batch redraws nothing through SwiftUI.
     @ObservationIgnored private(set) var total = 0
     @ObservationIgnored private(set) var held = HeldRows()
     /// Set once, when the first rows reach the screen; measure mode times it.
     private(set) var firstRowsAt: Date?
 
-    @ObservationIgnored weak var display: (any ListDisplay)?
+    @ObservationIgnored let displays = ListDisplays()
     @ObservationIgnored private var view: (any ListViewProtocol)?
     @ObservationIgnored private var asked: Range<Int>?
 
@@ -98,7 +134,7 @@ final class ListModel: MessageRows {
         }
         let changed = held.changes(since: before)
         if totalChanged || !changed.isEmpty {
-            display?.rowsChanged(changed, totalChanged: totalChanged)
+            displays.rowsChanged(changed, totalChanged: totalChanged)
         }
     }
 
