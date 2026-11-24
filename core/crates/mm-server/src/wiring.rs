@@ -44,6 +44,7 @@ impl mm_mailbox::ports::AccountBook for KnownAccounts {
             webmail: faces.webmail,
             signatures: faces.signatures,
             signature_default: faces.signature_default,
+            colours: faces.colours,
         })
     }
 }

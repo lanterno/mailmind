@@ -160,6 +160,8 @@ pub struct Faces {
     pub webmail: Vec<(String, Option<String>)>,
     pub signatures: Vec<(String, String)>,
     pub signature_default: String,
+    /// Each account's place among the palette's colours, kept as accounts come and go.
+    pub colours: Vec<(String, i64)>,
 }
 
 /// What the digest reads of the database, together (`lists.digest`, `stats`).

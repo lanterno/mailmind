@@ -47,6 +47,8 @@ pub struct Faces {
     /// Each account's signature, the default where it has none of its own.
     pub signatures: Vec<(String, String)>,
     pub signature_default: String,
+    /// Each account's place among the palette's colours (`account::colour_places`), every account's, as its alias.
+    pub colours: Vec<(String, i64)>,
 }
 
 /// `{e["email"]: value}`: a later entry with the same address takes the place of the first.
@@ -209,6 +211,7 @@ impl Directory {
             let signature = if own.is_empty() { faces.signature_default.clone() } else { own };
             keyed(&mut faces.signatures, email, signature);
         }
+        faces.colours = account::colour_places(Directory::entries(&raw)?);
         Ok(faces)
     }
 
@@ -448,7 +451,11 @@ impl Directory {
         entry.insert("credential".into(), self.kept(&credential::account_item(email), credential, None)?);
         let row = account::masked_row(&Value::Object(entry.clone())).map_err(|_| MALFORMED)?;
         match raw.entry("accounts").or_insert_with(|| json!([])) {
-            Value::Array(entries) => entries.push(Value::Object(entry)),
+            Value::Array(entries) => {
+                entries.push(Value::Object(entry));
+                // The first colour no account wears, and each other's kept.
+                account::keep_colours(entries);
+            }
             _ => return Err(MALFORMED.into()),
         }
         self.file.write(&raw)?;
@@ -503,6 +510,8 @@ impl Directory {
         let saved_as = entries.get(at).and_then(Value::as_object).ok_or(MALFORMED).and_then(email_of)?;
         self.let_go(&saved_as)?;
         self.evict(entries.get(at).and_then(|entry| entry.get("credential")));
+        // As they are with it, so no other account's colour moves.
+        account::keep_colours(entries);
         entries.remove(at);
         self.file.write(&raw)?;
         Ok(Some(saved_as))

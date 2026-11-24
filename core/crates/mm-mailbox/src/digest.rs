@@ -93,10 +93,12 @@ impl Digest {
             faces.aliases.iter().map(|(e, a)| (e.clone(), a.clone().map_or(Value::Null, Value::String))).collect();
         let signatures: Map<String, Value> =
             faces.signatures.iter().map(|(e, s)| (e.clone(), Value::String(s.clone()))).collect();
+        let colours: Map<String, Value> = faces.colours.iter().map(|(e, place)| (e.clone(), json!(place))).collect();
         let accounts = self.accounts.emails()?;
         Ok(json!({
             "items": items, "stats": stats, "accounts": accounts, "send_accounts": accounts,
-            "aliases": aliases, "signatures": signatures, "signature_default": faces.signature_default,
+            "aliases": aliases, "colours": colours, "signatures": signatures,
+            "signature_default": faces.signature_default,
             "status": self.syncing.status(), "sync": self.syncing.sync(), "ai": self.ai.report()?,
             "profile": self.profile, "generated": iso(now),
         }))

@@ -239,6 +239,44 @@ impl Account {
 
 /// A signature as the composer inserts it: multiline plain text with no control, bidirectional or zero-width
 /// character but the line breaks and tabs, at most 2,000 characters (`clean_signature`).
+/// Which of the palette's colours each account wears, by address (`colour_places`): a place both clients take modulo
+/// their palette. An entry's own `colour`, a whole number no entry before it took, stands; every other takes the first
+/// place free, in the file's order, so a file that keeps none colours the accounts by their order. `keep_colours` writes
+/// them down, so that removing an account leaves every other's as it was.
+pub fn colour_places(entries: &[Value]) -> Vec<(String, i64)> {
+    let email = |e: &Value| e.get("email").and_then(Value::as_str).filter(|s| !s.is_empty()).map(str::to_owned);
+    let mut places: Vec<(String, i64)> = Vec::new();
+    for e in entries {
+        let own = e.get("colour").filter(|c| c.is_i64() || c.is_u64()).and_then(Value::as_i64).filter(|c| *c >= 0);
+        if let (Some(email), Some(own)) = (email(e), own)
+            && !places.iter().any(|(held, place)| *held == email || *place == own)
+        {
+            places.push((email, own));
+        }
+    }
+    for e in entries {
+        let Some(email) = email(e) else { continue };
+        if places.iter().any(|(held, _)| *held == email) {
+            continue;
+        }
+        let free = (0..).find(|n| !places.iter().any(|(_, place)| place == n)).unwrap_or(0);
+        places.push((email, free));
+    }
+    places
+}
+
+/// Write each account's place into its entry, as it is now (`keep_colours`): added or removed, an account moves no
+/// other's colour.
+pub fn keep_colours(entries: &mut [Value]) {
+    let places = colour_places(entries);
+    for e in entries.iter_mut() {
+        let Some(held) = e.get("email").and_then(Value::as_str).map(str::to_owned) else { continue };
+        if let (Some((_, place)), Value::Object(entry)) = (places.iter().find(|(email, _)| *email == held), e) {
+            entry.insert("colour".into(), json!(place));
+        }
+    }
+}
+
 pub fn clean_signature(value: &Value) -> String {
     let written = match value {
         Value::Null => return String::new(),
