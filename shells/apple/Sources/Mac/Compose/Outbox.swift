@@ -14,12 +14,16 @@ final class OutboxTray {
     private(set) var stuck = 0
     @ObservationIgnored private let routes: any Routes
     @ObservationIgnored private let say: (String) -> Void
+    /// A send the tray cancelled, sent now or retried: what else shows what waits for later (a draft's row in
+    /// Drafts, the reader's line over it) reads it again.
+    @ObservationIgnored private let sendsChanged: () -> Void
     /// How many reads were begun: only the newest one's answers are shown, whichever comes back last.
     @ObservationIgnored private var reads = 0
 
-    init(routes: any Routes, say: @escaping (String) -> Void) {
+    init(routes: any Routes, say: @escaping (String) -> Void, sendsChanged: @escaping () -> Void = {}) {
         self.routes = routes
         self.say = say
+        self.sendsChanged = sendsChanged
     }
 
     /// What is going: queued or sending, changes waiting, and drafts waiting.
@@ -145,6 +149,7 @@ final class OutboxTray {
         do {
             _ = try await routes.post(API.Post.OutboxCancel.self, API.NamesASend(id: id))
             say(Self.cancelled(item))
+            sendsChanged()   // the draft no longer says it is scheduled, now rather than at the outbox's next change
         } catch {
             say((error as? Problem)?.isRefusal == true ? "Too late to cancel" : "Cancel failed")
         }
@@ -164,6 +169,7 @@ final class OutboxTray {
     private func later() async {
         try? await Task.sleep(for: .milliseconds(300))
         await load()
+        sendsChanged()
     }
 }
 

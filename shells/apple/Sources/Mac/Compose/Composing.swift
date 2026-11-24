@@ -157,7 +157,8 @@ final class Composing: ComposeHost {
 
     /// The outbox's tray over `routes`, read now.
     private func readOutbox(_ routes: any Routes) {
-        let tray = OutboxTray(routes: routes) { [weak self] in self?.say($0) }
+        let tray = OutboxTray(routes: routes, say: { [weak self] in self?.say($0) },
+                              sendsChanged: { [weak self] in Task { await self?.readScheduled() } })
         outbox = tray
         Task { await tray.load() }
     }
