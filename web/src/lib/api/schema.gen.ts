@@ -3164,6 +3164,10 @@ export interface components {
             aliases: {
                 [key: string]: string | null;
             };
+            /** Colours */
+            colours: {
+                [key: string]: number;
+            };
             /** Generated */
             generated: string;
             /** Items */
