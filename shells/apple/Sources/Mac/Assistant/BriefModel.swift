@@ -200,10 +200,16 @@ final class BriefModel {
         return task
     }
 
-    /// Read again what the digest and the side say, as the page does when mail changes. The brief itself stays.
+    /// Read again what the digest and the side say, as the page does when mail changes. The brief itself stays, save
+    /// one with nothing to say while the AI was reading mail that waited for its summary: once it has read it, the
+    /// brief is read again, as the page's is, or "Nothing to brief yet." would stay until the brief was opened again.
     func refresh() async {
         guard let routes = link.routes else { return }
+        let wasSummarizing = summarizing
         await readDigest(routes)
+        if wasSummarizing, !summarizing, let shown = brief, shown.narrative.isEmpty, !writing {
+            await readBrief(routes, writes: deliberate)
+        }
         await readSide(routes)
         tidyRun = try? await routes.get(API.Get.Tidy.self, [:])
         await readStacks(routes)
