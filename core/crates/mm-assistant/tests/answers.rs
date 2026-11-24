@@ -940,6 +940,87 @@ fn a_reviews_numbers_count_all_that_needs_the_person_and_all_they_wait_on_beyond
     assert_eq!(prompt.text.matches(" \u{2014} Asks ").count(), 8);
 }
 
+/// A week in which one message needs the person, one thread waits on them and one is pinned to answer, until `done`:
+/// the message archived (its copy gone) and the rest met.
+#[derive(Debug, Default)]
+struct Moving {
+    done: std::sync::atomic::AtomicBool,
+}
+
+impl Overview for Moving {
+    fn brief_rows(&self, _accounts: &[String], _n: i64) -> Result<Vec<Glance>, Fault> {
+        Ok(Vec::new())
+    }
+    fn delta_rows(&self, _accounts: &[String], _since_ts: i64, _n: i64) -> Result<Vec<Glance>, Fault> {
+        Ok(Vec::new())
+    }
+    fn copies_now(&self, copies: &[(i64, Option<String>)]) -> Result<Vec<CopyNow>, Fault> {
+        let gone = self.done.load(Ordering::SeqCst);
+        Ok(copies.iter().map(|(key, _)| (!gone).then(|| (Some("INBOX".to_owned()), Some(*key)))).collect())
+    }
+    fn week(
+        &self,
+        _accounts: &[String],
+        _since_ts: f64,
+        _since_iso: &str,
+        _top: i64,
+        _sent: &[(String, String)],
+    ) -> Result<WeekRows, Fault> {
+        if self.done.load(Ordering::SeqCst) {
+            return Ok(WeekRows { received: 1, ..WeekRows::default() });
+        }
+        let lunch = Needing {
+            message_key: Some(30),
+            account: ADA.into(),
+            thread_id: Some("t-lunch".into()),
+            from_name: Some("Lin".into()),
+            subject: Some("Lunch".into()),
+            importance: Some(4),
+            ..Needing::default()
+        };
+        let plans = Awaiting { account: ADA.into(), thread_id: "t-plans".into(), ..Awaiting::default() };
+        Ok(WeekRows {
+            received: 1,
+            needs: vec![lunch],
+            needs_you: 1,
+            waiting: vec![plans],
+            waiting_on: 1,
+            reply_later: 1,
+            ..WeekRows::default()
+        })
+    }
+}
+
+#[test]
+fn a_review_kept_today_counts_what_needs_the_person_as_it_stands_once_one_is_done() {
+    let w = world(true);
+    let week = Arc::new(Moving::default());
+    let reviews = Reviews::new(
+        w.calls.clone(),
+        Arc::new(Kept2::default()),
+        week.clone(),
+        Arc::new(NoCalendar),
+        clock_at(NOW),
+        Arc::new(Utc),
+    );
+    let accounts = [ADA.to_owned()];
+    let open = |review: &Value| {
+        let stats = &review["stats"];
+        (stats["needs_you"].clone(), stats["waiting_on"].clone(), stats["reply_later"].clone())
+    };
+    w.model.replies.lock().expect("replies").push(Ok("{\"narrative\": \"test\", \"next\": []}".into()));
+    let written = reviews.build(&accounts, false, true, "review", false).expect("a review");
+    assert_eq!(open(&written), (json!(1), json!(1), json!(1)));
+    week.done.store(true, Ordering::SeqCst);
+    let read = reviews.build(&accounts, false, false, "review", false).expect("a review");
+    assert_eq!(open(&read), (json!(0), json!(0), json!(0)));
+    assert_eq!(
+        (read["needs"].clone(), read["cached"].clone(), read["narrative"].clone()),
+        (json!([]), json!(true), written["narrative"].clone())
+    );
+    assert_eq!(sent(&w).len(), 1);
+}
+
 /// The open tabs, as what each was told.
 #[derive(Debug, Default)]
 struct Tabs(Mutex<Vec<(&'static str, Value)>>);
