@@ -315,7 +315,8 @@ enum DayGroup {
 /// Today's brief as a row at the top of the Inbox (the mockup's `briefRowHTML()`, the page's `BriefRow`): the date,
 /// how many need you, wait and can wait, and who needs you. What can wait is the AI's rating, so with AI turned off
 /// (`canWait` nil) the line doesn't count it. While the AI reads mail that waits for its summary (`reading`), none
-/// needing you isn't known yet, so the line says it is reading rather than that nothing needs you, as the page's does.
+/// needing you isn't known yet, so the line says it is reading rather than that nothing needs you, as the page's does,
+/// once, under a tally that counts only what it knows.
 struct BriefLine: Equatable {
     let date: String
     let tally: String
@@ -326,8 +327,8 @@ struct BriefLine: Equatable {
          locale: Locale = .current) {
         date = now.formatted(Date.FormatStyle(locale: locale).weekday(.abbreviated).day().month(.abbreviated))
         if reading, needs.isEmpty {
-            tally = canWait.map { String(localized: "\(AIWords.reading) · \(waiting) waiting · \($0) can wait") }
-                ?? String(localized: "\(AIWords.reading) · \(waiting) waiting")
+            tally = canWait.map { String(localized: "\(waiting) waiting · \($0) can wait") }
+                ?? String(localized: "\(waiting) waiting")
             gist = AIWords.reading
         } else {
             tally = canWait.map { String(localized: "\(needs.count) need you · \(waiting) waiting · \($0) can wait") }
