@@ -214,6 +214,8 @@ WALK_FIELDS = ("key", "folder", "copies", "id", "draft_id", "account", "email", 
 WALK_JUNK = ([1], 10 ** 30, float("inf"))
 
 
+# The walk posts every route a few hundred times: half a minute alone, past the suite's five minutes when every core is busy.
+@pytest.mark.timeout(900)
 def test_no_route_answers_junk_with_the_500_that_means_a_bug_here(app, world, ai):
     """Every POST route, each field a route has choked on, each kind of junk that once got past the catch around a route, within
     a body otherwise good enough to get as far as reading it."""
