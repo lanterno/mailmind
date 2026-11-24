@@ -607,6 +607,29 @@ final class OpenedMessageVerbsTests: XCTestCase {
         await waiting(for: "a message opened from outside closes") { world.app.selection.copy == nil }
     }
 
+    /// A commitment's Done files its message to Archive from the Commitments sheet: the message open moves on as
+    /// File moves it on, chosen in its row, and one open from outside the list closes. The reader once held it,
+    /// saying it wasn't here any more, with its buttons.
+    func testDoneOnACommitmentMovesTheMessageOpenOnAsFileDoes() async throws {
+        let world = await world()
+        await inbox(world.app)
+        world.mailbox.chose([try XCTUnwrap(world.app.list?.copy(at: 0))])
+        func item(_ copy: MailCopy) -> API.DigestItem {
+            var item = DeskFixture.item(copy.key, from: "ada@example.test", name: "Ada Lovelace",
+                                        subject: "Launch date", action: "Send the date", commitment: true)
+            item.uid = copy.uid
+            return item
+        }
+        await world.desk.brief.file(item(MailCopy(Self.rows[0])), .archive)
+        XCTAssertEqual(world.server.asked(API.Post.Archive.path).count, 1)
+        await waiting(for: "the list moves on") { world.app.selection.copy == MailCopy(Self.rows[1]) }
+        XCTAssertEqual(world.mailbox.marked, [MailCopy(Self.rows[1])], "chosen in its row")
+
+        world.mailbox.open(Self.away)
+        await world.desk.brief.file(item(Self.away), .archive)
+        await waiting(for: "a message opened from outside closes") { world.app.selection.copy == nil }
+    }
+
     /// Snooze and Mute offer Undo on their toast, and so on Edit ▸ Undo as "Undo Snooze" and "Undo Mute": ⌘Z, sent
     /// to the window as the menu sends it, asks the server to undo once, as z and the toast's Undo do; and once z has
     /// taken it back, Edit ▸ Undo has nothing of it left to take back again.
