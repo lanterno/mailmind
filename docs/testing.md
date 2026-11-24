@@ -117,6 +117,9 @@ with the CSRF token its page carries, and over a line protocol on its standard i
   round of the body backfill), `"warm"` (a round of warming folders beyond the Inbox), `"retry"` (a try of each account
   whose server didn't answer, while its trouble may pass), `app.work("reconcile", account)`
   (the ghost pruner's round), or `app.work("sync", account, folder)`, which `world.deliver` runs after delivering.
+  `app.work("kicked")` runs a pass of each job the server kicked since the last, as its worker would have run it then (a
+  kick of one no worker runs is kept by name, `Jobs::kicked` and `background.kicked`), so a test shows that something
+  asked for a round now: a first sync asking for its summaries. One that takes arguments, a folder's sync, is let go.
   `tests/support/serve_python.py` says what each does.
 - `settle` waits for the work requests started (`app.settle()`), and `check` fails the test on what the server's own checks refused:
   a schema an answer broke, the tripwire.

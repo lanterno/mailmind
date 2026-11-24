@@ -35,7 +35,16 @@ They reach back 30 days (`Assessments.RECENT_DAYS`): the assess round and a back
 30 days, and older mail is summarized only when a person asks for a summary (the reader's, `POST /api/ai/summarize`):
 opening it asks for none. The status's `summaries_waiting`, while AI is on, counts the Inbox's messages from those 30
 days with no summary yet (`summaries_waiting`, and the core's `SUMMARIES_WAITING`). Settings' Spending card says both,
-on the page and in the Mac app.
+on the page and in the Mac app. Beside it, `summarizing` says whether the background reads them, now or at its next round:
+some wait, and neither today's limit nor the breaker holds them back (the governor's `stopped`; someone asking the AI
+something only has them wait a moment). Until those summaries land nothing knows what needs you, so while it is true the
+page says "Reading your new mail…" where it would say that nothing needs you: the brief's row, its narrative and its Needs
+you, and the Inbox's emptied Needs you tab. The brief, with nothing summarized to write from, never calls the Inbox quiet
+while any of the 30 days' mail waits: its narrative is empty, and nothing is kept or asked of the AI.
+
+A sync that brings new mail kicks the assess job, and so does an Inbox's first scan that kept mail, though none of it is
+new: an account just added has its mail summarized within moments, not at the job's next round, minutes on. A kick runs
+the round sooner, within the same settings and limits; with AI off it sends nothing.
 
 What AI mode sends is said before it is turned on, under its switch, in the Mac app's first run and in Help
 (`lib/ai.ts`'s `aiSends`, `AIWords.sends`), and the page, the Mac app, the README and this guide say it in the same words.
