@@ -301,6 +301,13 @@ an owner in the table below.
 environment read outside `platform.environment`, no log message that isn't a literal. A `semgrep` rule set in the repo
 holds them for Python and Rust, and runs in `just lint`.
 
+*As built:* plain tests rather than a new tool, `tests/unit/test_project_rules.py`, which `just test` runs: every
+EXPUNGE names its messages (Python and `mm-imap`), no value is wrapped in quotes by hand but in the IMAP quoting
+functions, only `platform.environment` reads the environment (and in Rust, `mm-server`'s `environment` and a program's
+`main` reading its database key), and every log message is a literal. Each reads the code by its syntax tree (Python)
+or its text with the tests cut off (Rust), and names each place that breaks it. The `sqlite3` import and SQL in a use
+case were already in `test_architecture.py`.
+
 ## 7. CI
 
 CI runs four workflows. `served.yml` runs `tests/api` and the browser suite on both servers, and the end-to-end scenarios on the page against the Rust server; `clients.yml` runs
