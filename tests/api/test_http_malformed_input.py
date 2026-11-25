@@ -1,27 +1,15 @@
-"""A request that doesn't read as one gets the 400 a malformed request gets, not the 500 that means a bug here."""
+"""A request that doesn't read as one gets the 400 a malformed request gets, not the 500 that means a bug here, on the served
+server, so both are held to it. The last test walks every POST route the route table (support/route_tables.py) has, so a route
+added tomorrow is walked with no edit here. tests/unit/kernel/test_parsed.py pins how a number reads."""
 import pytest
 
 import problems
 import route_tables
 from fixtures import world as w
 from mailmind.bootstrap.mailbox import store
-from mailmind.kernel.errors import Refused
-from mailmind.kernel.parsed import as_int, required_int
 
 BAD_REQUEST = {"type": "/problems/refused", "title": "Refused", "status": 400, "detail": "bad request"}
 TOO_LARGE = "99999999999999999999999"
-
-
-@pytest.mark.parametrize("held, read", [(7, 7), ("7", 7), (True, 1), (1.5, 1), (2 ** 53, 2 ** 53), (-(2 ** 53), -(2 ** 53)),
-                                        (2 ** 53 + 1, None), (10 ** 30, None), (float("inf"), None), (float("nan"), None),
-                                        ("x", None), ("", None), (None, None), ([1], None), ({}, None)])
-def test_a_number_reads_or_it_is_none(held, read):
-    assert as_int(held) == read
-    if read is None:
-        with pytest.raises(Refused):
-            required_int(held)
-    else:
-        assert required_int(held) == read
 
 
 @pytest.mark.parametrize("path, name", [("/api/audit", "limit"), ("/api/debug/ai", "days"),
@@ -212,6 +200,7 @@ WALK_FIELDS = ("key", "folder", "copies", "id", "draft_id", "account", "email", 
                "subject", "text", "undo_group", "idempotency_key", "original_key", "port", "draft", "rows", "to", "attachments",
                "resume")
 WALK_JUNK = ([1], 10 ** 30, float("inf"))
+
 
 
 # The walk posts every route a few hundred times: half a minute alone, past the suite's five minutes when every core is busy.
