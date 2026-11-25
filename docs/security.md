@@ -18,6 +18,8 @@ carries, `errors` the `Refusal`, and `tokens` a confirm token, which a use case 
   compared with `secrets.compare_digest`, then an Origin, which must be this server's.
 
 Every method but GET and HEAD goes through the POST checks, and a refusal comes before a body is read.
+`tests/api/test_http_perimeter_matrix.py` holds both servers to this over every route in the route table, and
+`tests/api/test_http_malformed_input.py` holds every POST route on both to the 400 a request that won't read gets, never a 500.
 
 Every answer, a refusal included, carries `perimeter.answer_headers`: nosniff,
 `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, COOP and CORP `same-origin`, a
