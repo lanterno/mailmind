@@ -207,6 +207,9 @@ implementation.
   folder, where it has always been. Left for later on 2026-11-03.
 - **Default remote-image policy** · [#25](https://github.com/lanterno/mailmind/issues/25) — block-by-default with per-message "Load images" (current, and the
   privacy-preserving choice) vs. allowing images for known/personal senders.
+- **Which secret scanner, in CI and before a commit** · [#71](https://github.com/lanterno/mailmind/issues/71) — gitleaks,
+  trufflehog, or GitHub's own secret scanning and push protection (free for a public repository, nothing added to the
+  repo); each needs the fakes' made-up keys allowed first.
 - **The client's licence, a legal entity, and who runs the push relay** · [#27](https://github.com/lanterno/mailmind/issues/27) — the architecture document's risks section
   recommends an answer for each. The push relay waits on the iPhone app; the other two on the first store listing.
 
