@@ -9,12 +9,12 @@ import json
 import os
 import re
 import signal
-import socket
 import stat
 import subprocess
 import sys
 
 import guard
+import ports
 from waiting import wait_until
 
 ROOT = guard.ROOT
@@ -33,8 +33,8 @@ def child_env(home):
 
 
 def free_port():
-    with socket.create_server(("127.0.0.1", 0)) as s:
-        return s.getsockname()[1]
+    # Not port 0's: the child binds it later, and by then the system may have handed it to a fake server (ports.py).
+    return ports.quiet_port()
 
 
 def get(port, path, timeout=2):

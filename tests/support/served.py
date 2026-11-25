@@ -15,6 +15,7 @@ import subprocess
 import sys
 import time
 
+import ports
 from app_client import AppClient
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -60,6 +61,8 @@ class Served(AppClient):
         self.clock = ServerClock(self, local_clock, now)
 
     def start(self, port=0):
+        # A port of the suite's own, never one the system hands out, so a restart finds it still free (ports.py).
+        port = port or ports.quiet_port()
         env = {**self.env, "MAILMIND_TEST_NOW": self.clock.now.isoformat(), "MAILMIND_TEST_PORT": str(port)}
         with open(self.log_path, "ab") as log:
             self.proc = subprocess.Popen(command(), cwd=ROOT, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
