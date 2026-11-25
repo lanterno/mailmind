@@ -40,7 +40,7 @@ enum StatusFixtures {
                     "last_ok": \(lastOkJSON), "last_error": \(lastErrorJSON), "provider": "\(provider)",
                     "off": \(offJSON), "background_model": "\(background)", "cloud_model": false,
                     "summaries_waiting": \(waitingJSON)},
-             "aliases": {\(aliasJSON)}, "generated": "2026-11-14T09:00:00Z", "items": [], "profile": "\(profile)",
+             "aliases": {\(aliasJSON)}, "colours": {}, "generated": "2026-11-14T09:00:00Z", "items": [], "profile": "\(profile)",
              "send_accounts": [\(accountsJSON)], "signature_default": "", "signatures": {},
              "stats": {"kept": 100, "needs": 3, "summarized": 42, "total": \(total), "verified": 0},
              "status": {\(statusJSON)}, "sync": {"last": \(lastJSON), "result": "idle", "running": \(running)}}
