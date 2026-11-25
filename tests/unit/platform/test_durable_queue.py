@@ -327,7 +327,8 @@ def test_the_worker_puts_back_what_a_crash_left_then_drains_when_kicked(q):
     worker = threading.Thread(target=lambda: q.run_forever(lambda: q.drain(handled.append, NOW), stop), daemon=True)
     worker.start()
     try:
-        assert wait_until(lambda: handled) and handled == [stuck]
+        # The queue polls every 50 ms and this handle takes nothing off, so a slow look may find it handled twice.
+        assert wait_until(lambda: handled) and set(handled) == {stuck}
         fresh = add(q, "fresh")
         q.kick()
         assert wait_until(lambda: fresh in handled)      # this handle takes nothing off, so the drain sees the crash's again first
