@@ -294,7 +294,7 @@ an owner in the table below.
 | What goes to the AI is what the docs say | The governor and ledger tests; prompt wording | A prompt-injection corpus: mail that asks the assistant to file, send, forward or reveal other mail. The fake provider returns the injected action, and the test asserts nothing happens without the person and nothing outside the asked messages goes out |
 | The app updates only to what the owner signed | `release-check`: the appcast and feed signatures, a tampered feed | An update from the previous release in lane B (R6) |
 | The FFI boundary holds | `mm-ffi/tests/boundary.rs`: methods and targets that don't read, bodies not UTF-8, cut short, nested 100,000 deep or 40 MB, a home or key that can't open, every call after close, and 16 threads with a close among them, each answered and none a panic or a 500 | A fuzzer over `request`'s method, target and body |
-| The supply chain | `just audit` (in CI, `checks.yml`); `cargo deny`; pinned actions and hashes; `test_no_real_addresses` (every address in a tracked file is made up) | Secret scanning (gitleaks) in CI and as a pre-commit hook |
+| The supply chain | `just audit` (in CI, `checks.yml`); `cargo deny`; pinned actions and hashes; `test_no_real_addresses` (every address in a tracked file is made up) | Secret scanning in CI and before a commit, once a scanner is chosen ([#71](https://github.com/lanterno/mailmind/issues/71)) |
 
 **Project rules as lints.** [CLAUDE.md](../CLAUDE.md)'s rules that a change can break without noticing become checks: no
 `sqlite3` import outside the driver, no SQL in a use case, no bulk `EXPUNGE`, no folder quoted by hand, no new
