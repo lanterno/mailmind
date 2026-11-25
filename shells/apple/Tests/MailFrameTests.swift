@@ -276,56 +276,20 @@ final class MailFrameTests: XCTestCase {
 
     // MARK: Events, as AppKit hands them to the frame
 
-    private func mouse(_ type: NSEvent.EventType, at point: CGPoint, in frame: Shown, clicks: Int = 1) -> NSEvent {
-        let inWindow = frame.view.convert(point, to: nil)
-        return NSEvent.mouseEvent(with: type, location: inWindow, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-                                  windowNumber: frame.window.windowNumber, context: nil, eventNumber: 0,
-                                  clickCount: clicks, pressure: type == .mouseMoved ? 0 : 1)!
-    }
-
-    /// A click at `point`, as AppKit hands it to the view under the pointer, which is the frame: down there, and up
-    /// `moved` points on. (The test's window is never key, so the window would take a first click to make it key,
-    /// where a person's reader is.)
-    private func click(at point: CGPoint, in frame: Shown, moved: CGFloat = 0, clicks: Int = 1) {
-        let under = frame.view.superview.flatMap { $0.hitTest(frame.view.convert(point, to: $0)) }
-        XCTAssertTrue(under === frame.view, "the frame takes a click on its body")
-        frame.view.mouseDown(with: mouse(.leftMouseDown, at: point, in: frame, clicks: clicks))
-        frame.view.mouseUp(with: mouse(.leftMouseUp, at: CGPoint(x: point.x + moved, y: point.y), in: frame,
-                                       clicks: clicks))
-    }
-
-    /// A middle click at `point`: the other button's events with the middle button's number.
-    private func middleClick(at point: CGPoint, in frame: Shown) throws {
-        for type in [NSEvent.EventType.otherMouseDown, .otherMouseUp] {
-            let cg = try XCTUnwrap(mouse(type, at: point, in: frame).cgEvent)
-            cg.setIntegerValueField(.mouseEventButtonNumber, value: 2)
-            let event = try XCTUnwrap(NSEvent(cgEvent: cg))
-            if type == .otherMouseDown { frame.view.otherMouseDown(with: event) } else { frame.view.otherMouseUp(with: event) }
-        }
-    }
-
-    /// `event` handed to the owner of each of the frame's tracking areas that asked for it, as AppKit does.
-    private func track(_ event: NSEvent, _ asked: NSTrackingArea.Options, _ selector: Selector, in frame: Shown) {
-        let owners = frame.view.trackingAreas.filter { $0.options.contains(asked) }.compactMap { $0.owner as? NSObject }
-        XCTAssertFalse(owners.isEmpty, "the frame's areas track the pointer")
-        for owner in owners where owner.responds(to: selector) { owner.perform(selector, with: event) }
+    /// A click at `point`, as the kit routes it to the view under the pointer, which is the frame: down there, and up
+    /// `moved` points on. (With no drag between: a link dragged would start a drag session, which waits for the
+    /// window server's mouse.)
+    private func click(at point: CGPoint, in frame: Shown, moved: CGFloat = 0) throws {
+        XCTAssertTrue(RealMouse.view(at: frame.view.convert(point, to: nil), in: frame.window) === frame.view,
+                      "the frame takes a click on its body")
+        let down = frame.view.convert(point, to: nil)
+        try RealMouse.send([try RealMouse.event(.leftMouseDown, at: down, in: frame.window),
+                            try RealMouse.event(.leftMouseUp, at: CGPoint(x: down.x + moved, y: down.y),
+                                                in: frame.window)], in: frame.window)
     }
 
     private func function(_ key: Int) -> String {
         String(Character(UnicodeScalar(UInt32(key))!))
-    }
-
-    /// The pointer moving to `point` over the frame.
-    private func move(to point: CGPoint, in frame: Shown) {
-        track(mouse(.mouseMoved, at: point, in: frame), .mouseMoved, #selector(NSResponder.mouseMoved(with:)), in: frame)
-    }
-
-    /// The pointer leaving the frame.
-    private func leave(_ frame: Shown) throws {
-        let event = try XCTUnwrap(NSEvent.enterExitEvent(
-            with: .mouseExited, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-            windowNumber: frame.window.windowNumber, context: nil, eventNumber: 0, trackingNumber: 0, userData: nil))
-        track(event, .mouseEnteredAndExited, #selector(NSResponder.mouseExited(with:)), in: frame)
     }
 
     // MARK: Its height
@@ -360,7 +324,7 @@ final class MailFrameTests: XCTestCase {
         let frame = try await frame("<p>Thursday, then.</p><details id=\"quote\"><summary id=\"fold\">Show quoted text"
                                     + "</summary><div style=\"height:900px\">On Mon, Bo wrote: shall we?</div></details>")
         let folded = try await settled(frame)
-        click(at: try await middle(of: "fold", in: frame), in: frame)
+        try click(at: try await middle(of: "fold", in: frame), in: frame)
         let unfolded = try await settled(frame, above: folded)
         XCTAssertGreaterThanOrEqual(unfolded, folded + 800, "the quote's height counted")
     }
@@ -385,7 +349,7 @@ final class MailFrameTests: XCTestCase {
         let frame = try await frame("<p>Please confirm at <a id=\"bank\" href=\"https://evil.example.test/login\">"
                                     + "<b>bank.example.test</b></a> today.</p>")
         await loaded(frame)
-        click(at: try await middle(of: "bank", in: frame), in: frame)
+        try click(at: try await middle(of: "bank", in: frame), in: frame)
         await until { !frame.links.isEmpty }
         let link = FrameLink(href: "https://evil.example.test/login", text: "bank.example.test")
         XCTAssertEqual(frame.links, [link])
@@ -408,10 +372,10 @@ final class MailFrameTests: XCTestCase {
         let menu = FrameLink(href: "https://guild.example.test/menu", text: "The menu")
         let rsvp = FrameLink(href: "mailto:bo@example.test?subject=Thursday", text: "Tell Bo")
 
-        click(at: try await middle(of: "menu", in: frame), in: frame)
+        try click(at: try await middle(of: "menu", in: frame), in: frame)
         await until { frame.links == [menu] }
 
-        try middleClick(at: try await middle(of: "rsvp", in: frame), in: frame)
+        try RealMouse.click(at: try await middle(of: "rsvp", in: frame), in: frame.view, button: .middle)
         await until { frame.links == [menu, rsvp] }
 
         _ = try await asked(frame, "document.getElementById(\"menu\").focus(); return null;")
@@ -422,8 +386,8 @@ final class MailFrameTests: XCTestCase {
             isARepeat: false, keyCode: 36)))
         await until { frame.links == [menu, rsvp, menu] }
 
-        click(at: try await middle(of: "menu", in: frame), in: frame, moved: 60)
-        click(at: try await middle(of: "words", in: frame), in: frame)
+        try click(at: try await middle(of: "menu", in: frame), in: frame, moved: 60)
+        try click(at: try await middle(of: "words", in: frame), in: frame)
         try await Task.sleep(for: .milliseconds(300))
         XCTAssertEqual(frame.links, [menu, rsvp, menu], "a drag, and a press on no link, open nothing")
         XCTAssertEqual(frame.view.url, try XCTUnwrap(ReaderModel.frameURL(Self.copy)), "the frame went nowhere")
@@ -439,14 +403,14 @@ final class MailFrameTests: XCTestCase {
         await loaded(frame)
         let menu = URL(string: "https://guild.example.test/menu")
         let onLink = try await middle(of: "bold", in: frame)
-        move(to: onLink, in: frame)
+        try RealMouse.move(to: onLink, in: frame.view)
         await until { frame.hovers == [menu] }
-        move(to: CGPoint(x: onLink.x + 1, y: onLink.y), in: frame)
-        move(to: CGPoint(x: 400, y: 300), in: frame)
+        try RealMouse.move(to: CGPoint(x: onLink.x + 1, y: onLink.y), in: frame.view)
+        try RealMouse.move(to: CGPoint(x: 400, y: 300), in: frame.view)
         await until { frame.hovers == [menu, nil] }
-        move(to: onLink, in: frame)
+        try RealMouse.move(to: onLink, in: frame.view)
         await until { frame.hovers == [menu, nil, menu] }
-        try leave(frame)
+        try RealMouse.leave(frame.view)
         await until { frame.hovers == [menu, nil, menu, nil] }
         try await Task.sleep(for: .milliseconds(200))
         XCTAssertEqual(frame.hovers, [menu, nil, menu, nil], "each change once")
@@ -464,8 +428,8 @@ final class MailFrameTests: XCTestCase {
                                     + "<p><a id=\"run\" href=\"javascript:document.documentElement.dataset.link = 'ran'\">Run</a></p>"
                                     + "<p><a id=\"menu\" href=\"https://guild.example.test/menu\">The menu</a></p>")
         await loaded(frame)
-        click(at: try await middle(of: "run", in: frame), in: frame)
-        click(at: try await middle(of: "menu", in: frame), in: frame)
+        try click(at: try await middle(of: "run", in: frame), in: frame)
+        try click(at: try await middle(of: "menu", in: frame), in: frame)
         await until { frame.links.contains { $0.href == "https://guild.example.test/menu" } }
         for link in frame.links where link.href != "https://guild.example.test/menu" {
             XCTAssertEqual(LinkOpening.of(href: link.href, text: link.text, senderDomain: nil), .refuse, link.href)
@@ -547,7 +511,7 @@ final class MailFrameTests: XCTestCase {
         let frame = try await frame(Self.statement)
         let reader = read(frame)
         try await settled(frame)
-        click(at: try await middle(of: "section1", in: frame), in: frame)
+        try click(at: try await middle(of: "section1", in: frame), in: frame)
         XCTAssertTrue(frame.window.makeFirstResponder(frame.view), "a click gives the body the keyboard")
         var top: CGFloat { reader.contentView.bounds.minY }
         let shown = reader.contentView.bounds.height
@@ -581,7 +545,7 @@ final class MailFrameTests: XCTestCase {
         let frame = try await frame("<p><textarea id=\"note\" rows=\"3\" cols=\"20\">Gate</textarea></p>" + Self.statement)
         let reader = read(frame)
         try await settled(frame)
-        click(at: try await middle(of: "note", in: frame), in: frame)
+        try click(at: try await middle(of: "note", in: frame), in: frame)
         XCTAssertTrue(frame.window.makeFirstResponder(frame.view))
         try await eventually("the field has the focus") {
             try await asked(frame, "return document.activeElement.id;") as? String == "note"
@@ -596,7 +560,7 @@ final class MailFrameTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(400))
         XCTAssertEqual(reader.contentView.bounds.minY, 0, "the reader stayed while the field had the keys")
 
-        click(at: try await middle(of: "section1", in: frame), in: frame)
+        try click(at: try await middle(of: "section1", in: frame), in: frame)
         try await eventually("the field let the focus go") {
             try await asked(frame, "return document.activeElement.id;") as? String != "note"
         }
@@ -610,7 +574,7 @@ final class MailFrameTests: XCTestCase {
         let frame = try await frame(Self.statement)
         let reader = read(frame)
         try await settled(frame)
-        click(at: try await middle(of: "section1", in: frame), in: frame)
+        try click(at: try await middle(of: "section1", in: frame), in: frame)
         XCTAssertTrue(frame.window.makeFirstResponder(frame.view))
         try RealKeys.press("\t", 48, in: frame.window)
         let toggle = "details.mm-quote > summary"
@@ -640,7 +604,7 @@ final class MailFrameTests: XCTestCase {
         XCTAssertEqual(own, "0px", "its own words aren't drawn")
         let pill = try await place(of: "details.mm-quote > summary", in: frame)
         XCTAssertGreaterThan(pill.width, 100, "the pill holds the words drawn")
-        click(at: CGPoint(x: pill.midX, y: pill.midY), in: frame)
+        try click(at: CGPoint(x: pill.midX, y: pill.midY), in: frame)
         try await eventually("the quote opens") { try await asked(frame, "return \(toggle).parentElement.open;") as? Bool == true }
         words = try await said(frame)
         XCTAssertEqual(words, "\"··· Hide quoted text\"", "open")

@@ -6,15 +6,9 @@ import XCTest
 /// never made the Mac's.
 @MainActor
 enum KeyLayouts {
-    static func named(_ id: String) -> TISInputSource? {
-        let filter = [kTISPropertyInputSourceID as String: id] as CFDictionary
-        let found = TISCreateInputSourceList(filter, true)?.takeRetainedValue() as? [TISInputSource]
-        return found?.first
-    }
-
     /// Read single keys as typed on Arabic, with US as the ASCII-capable layout beside it, until the returned close.
     static func arabic() throws -> () -> Void {
-        guard let arabic = named("com.apple.keylayout.Arabic"), let us = named("com.apple.keylayout.US") else {
+        guard let arabic = try? KeyboardLayout.arabic.source(), let us = try? KeyboardLayout.us.source() else {
             throw XCTSkip("this Mac has no Arabic or US layout")
         }
         let was = SingleKey.layouts

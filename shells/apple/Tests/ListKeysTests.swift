@@ -345,6 +345,43 @@ final class ListKeysTests: XCTestCase {
         XCTAssertEqual(taken.keys, [], "the Edit menu took neither")
     }
 
+    /// Under Arabic, the keys d and e stand on (key codes 2 and 14) type ي and ث, as the layout's own table says,
+    /// and still reach the list's single keys as d and e, past the Edit menu: d deletes and e archives.
+    func testDAndEUnderArabicReachTheListAsDAndE() async throws {
+        let close = try KeyLayouts.arabic()
+        defer { close() }
+        let (taken, restore) = RealKeys.withEditMenu()
+        defer { restore() }
+        XCTAssertEqual(try RealKeys.event(2, layout: .arabic).characters, "ي", "the layout's own character")
+        XCTAssertEqual(try RealKeys.event(14, layout: .arabic).characters, "ث")
+        let server = Fixture.server(rows: Array(Fixture.inbox.prefix(6)))
+        let (app, controller) = try await table(server: server)
+        let window = window()
+        let host = NSHostingView(rootView: Color.clear.frame(width: 860, height: 800))
+        window.contentView = host
+        host.addSubview(controller.scrollView)
+        UntakenKeys.Catcher.hang(on: window, for: app.mailbox)
+        RealKeys.key(window)
+        defer {
+            window.orderOut(nil)
+            window.contentView = nil
+        }
+        func type(_ code: UInt16) async throws {
+            XCTAssertTrue(window.makeFirstResponder(host), "a click on SwiftUI: the keyboard is its")
+            try RealKeys.press(code, layout: .arabic, in: window)
+            for _ in 0..<10 { try await Task.sleep(for: .milliseconds(10)) }
+        }
+        try await type(38)
+        XCTAssertNotNil(app.selection.copy, "ت is j: it opens the first row")
+        try await type(14)
+        await until { !server.asked(API.Post.Archive.path).isEmpty }
+        XCTAssertEqual(server.asked(API.Post.Archive.path).count, 1, "ث is e: it archives")
+        try await type(2)
+        await until { !server.asked(API.Post.Trash.path).isEmpty }
+        XCTAssertEqual(server.asked(API.Post.Trash.path).count, 1, "ي is d: it deletes")
+        XCTAssertEqual(taken.keys, [], "the Edit menu took neither")
+    }
+
     /// Return in the search field leaves the keyboard there, as the page's does, where J would be typed: the empty
     /// pane says ↓ then, and ↓ goes on to the list, which takes the keyboard and opens its first row.
     func testTheEmptyPaneSaysTheKeyThatStartsAtTheTopFromWhereTheKeyboardIs() async throws {
