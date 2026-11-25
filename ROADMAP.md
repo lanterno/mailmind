@@ -44,6 +44,10 @@ L = a week-plus.
 - **Unselect a kept connection's folder between jobs** · low value · effort S ·
   [#57](https://github.com/lanterno/mailmind/issues/57) — A job lent the kept connection may not use the last job's
   folder, but nothing sends `UNSELECT`, so the server keeps it selected. Send it where offered (RFC 3691), never `CLOSE`.
+- **Cut the round trips the IMAP counts found** · medium value · effort S ·
+  [#69](https://github.com/lanterno/mailmind/issues/69) — `budgets.toml`'s `[counts]` show a move searching the target
+  for the UID its `COPYUID` already gave, a reply listing every folder before its `APPEND` to Sent, and a kept
+  connection selecting the Inbox it already has. Lower each limit as its count comes down.
 - **Log the kept connections out on Ctrl-C or SIGTERM** · low value · effort S ·
   [#56](https://github.com/lanterno/mailmind/issues/56) — `mailmind-server` logs them out as it stops serving, but has
   no signal handler, so a Ctrl-C or a SIGTERM ends it without the LOGOUTs. The Mac app's `Host::close` sends them.
