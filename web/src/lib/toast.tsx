@@ -47,7 +47,7 @@ export function Float({ id, className, shown, children }: { id: string; classNam
   return (
     <div className="float-live" role="status" aria-live="polite" aria-atomic="true" data-react-aria-top-layer="true">
       {now && (
-        <div id={id} key={now.turn} className={className}>
+        <div id={id} key={now.turn} className={className} data-mm="float">
           <span aria-hidden={now.speak ? true : undefined}>{now.words}</span>
           {now.speak && <span className="visually-hidden">{now.speak}</span>}
           {children}
@@ -80,7 +80,7 @@ export function Toaster() {
   const live = spoken.useValue();
   return (
     <>
-      <div className={shown && !shown.over ? "toast show" : "toast"} id="toast" aria-hidden="true">{shown?.words}</div>
+      <div className={shown && !shown.over ? "toast show" : "toast"} id="toast" aria-hidden="true" data-mm="toast">{shown?.words}</div>
       <div id="srLive" className="visually-hidden" aria-live="polite" aria-atomic="true" data-live-announcer="true">{live}</div>
     </>
   );

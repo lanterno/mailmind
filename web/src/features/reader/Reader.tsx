@@ -433,13 +433,13 @@ function ConversationView({ opened, m }: { opened: { id: string; account: string
 
 export function Reader({ m }: { m: Mailbox }) {
   const { opened } = m;
-  if (!opened && m.inInbox && !m.searching) return <section className="reader brief-pane" id="reader"><BriefPane m={m} /></section>;
+  if (!opened && m.inInbox && !m.searching) return <section className="reader brief-pane" id="reader" data-mm="reader"><BriefPane m={m} /></section>;
   if (!opened) {
     const reading = m.list.data?.pages.at(-1)?.syncing;
-    return <section className="reader empty-pane" id="reader">{m.all.length ? EMPTY.noneOpen : m.list.isPending ? "" : reading ? "Reading this folder for the first time…" : EMPTY.folder}</section>;
+    return <section className="reader empty-pane" id="reader" data-mm="reader">{m.all.length ? EMPTY.noneOpen : m.list.isPending ? "" : reading ? "Reading this folder for the first time…" : EMPTY.folder}</section>;
   }
   return (
-    <section className="reader" id="reader" aria-label="Message">
+    <section className="reader" id="reader" aria-label="Message" data-mm="reader">
       {opened.kind === "message"
         ? <MessageView key={copyId(opened)} copy={copyOf(opened)} m={m} />
         : <ConversationView key={opened.id} opened={opened} m={m} />}

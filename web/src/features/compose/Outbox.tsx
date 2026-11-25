@@ -141,7 +141,7 @@ export function OutboxButton({ readOnly }: { readOnly: boolean }) {
         ↑<span id="outboxN" className="obn">{active + failed}</span>
       </button>
       {open && (
-        <div className="outbox-fly" id="outboxFly">
+        <div className="outbox-fly" id="outboxFly" data-mm="tray">
           {held.length > 0 && <h4>Changes waiting</h4>}
           {held.map((p) => <HeldRow key={p.id} p={p} readOnly={readOnly} act={(w, i) => void act(w, i)} />)}
           {drafts.length > 0 && <h4>Drafts waiting</h4>}

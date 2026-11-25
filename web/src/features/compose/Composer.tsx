@@ -437,7 +437,7 @@ function ComposerBox({ c, senders, aliases, ai }: { c: Composer; senders: string
     if (guardShownAt !== undefined) document.querySelector<HTMLElement>("#cmpGuard")?.focus();
   }, [guardShownAt]);
   return (
-    <div className="set-box cmp-box" id="composeModal">
+    <div className="set-box cmp-box" id="composeModal" data-mm="composer">
       <div className="set-head">
         <div>
           <h3 id="cmpTitle">{TITLES[c.mode]}</h3>

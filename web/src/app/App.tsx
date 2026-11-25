@@ -313,7 +313,7 @@ export function App() {
       <main className="split">
         <FolderRail accounts={accounts} aliases={aliases} colours={m.digest?.colours ?? {}} source={source} down={badAccounts(m.digest)} />
         <Splitter />
-        <section className="list" id="list">
+        <section className="list" id="list" data-mm="list">
           <div className="listhead">
             <div className="lh1">
               <h1 className="lh-title" id="listTitle">{title}</h1>
