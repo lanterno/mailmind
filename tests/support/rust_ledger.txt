@@ -1205,3 +1205,4 @@ tests/api/test_http_malformed_input.py::test_a_connection_test_of_what_cant_be_a
 tests/api/test_http_malformed_input.py::test_a_connection_test_of_what_cant_be_a_draft[5]
 tests/api/test_http_malformed_input.py::test_a_connection_test_of_what_cant_be_a_draft[True]
 tests/api/test_http_malformed_input.py::test_no_route_answers_junk_with_the_500_that_means_a_bug_here
+tests/api/test_http_malformed_input.py::test_no_route_answers_junk_in_a_field_it_names_with_a_500

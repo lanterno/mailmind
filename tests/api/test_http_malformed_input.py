@@ -202,25 +202,50 @@ WALK_FIELDS = ("key", "folder", "copies", "id", "draft_id", "account", "email", 
 WALK_JUNK = ([1], 10 ** 30, float("inf"))
 
 
+# Text is left out: a host of "x" is one an account may be given, and the walk's own world would be out of reach after it.
+WALK_NAMED_JUNK = (*WALK_JUNK, {"a": 1}, None)
+
+
+def good_body(world):
+    """A body good enough to get as far as reading it, on any route."""
+    copy = world.copy("ada-inbox-05-receipt.eml")
+    return {**copy, "copies": [copy], "account": w.ADA, "email": w.ADA, "seen": True, "id": 1,
+            "thread_id": "t", "to": ["lin@example.test"], "subject": "Hi", "text": "Hello", "mode": "new", "dry_run": True,
+            "token": "lin@example.test", "verdict": "keep", "preset": "tomorrow", "from_addr": "lin@example.test",
+            "action": "keep", "verb": "archive", "decision": "accepted", "rows": [copy]}
+
+
+def walked():
+    """Every POST route the walk takes, with the fields its body's model names (support/route_tables.py)."""
+    return {path: fields for path, fields in sorted(route_tables.posted_fields().items()) if path not in WALK_LEAVES_OUT}
+
+
+def broke(path, r):
+    """An answer that means a bug here. The 502 that says ask again later is no bug from what came in since you looked alone:
+    it waits for the walk's calls before it. From any other route it would be junk taken for the model's failure."""
+    waits = path == "/api/briefing/since" and r.status == 502 and r.json.get("type") == "/problems/unreachable" \
+        and r.json.get("retry")
+    return r.status >= 500 and not waits
+
 
 # The walk posts every route a few hundred times: half a minute alone, past the suite's five minutes when every core is busy.
 @pytest.mark.timeout(900)
 def test_no_route_answers_junk_with_the_500_that_means_a_bug_here(app, world, ai):
     """Every POST route, each field a route has choked on, each kind of junk that once got past the catch around a route, within
     a body otherwise good enough to get as far as reading it."""
-    copy = world.copy("ada-inbox-05-receipt.eml")
-    good = {**copy, "copies": [copy], "account": w.ADA, "email": w.ADA, "seen": True, "id": 1,
-            "thread_id": "t", "to": ["lin@example.test"], "subject": "Hi", "text": "Hello", "mode": "new", "dry_run": True,
-            "token": "lin@example.test", "verdict": "keep", "preset": "tomorrow", "from_addr": "lin@example.test",
-            "action": "keep", "verb": "archive", "decision": "accepted", "rows": [copy]}
-    routes = sorted(path for method, path in route_tables.paths() if method == "POST" and path not in WALK_LEAVES_OUT)
-    def broke(path, r):
-        # The 502 that says ask again later is no bug from what came in since you looked alone: it waits for the walk's
-        # calls before it. From any other route it would be junk taken for the model's failure.
-        waits = path == "/api/briefing/since" and r.status == 502 and r.json.get("type") == "/problems/unreachable" \
-            and r.json.get("retry")
-        return r.status >= 500 and not waits
-    bad = [(path, field, junk) for path in routes for field in WALK_FIELDS for junk in WALK_JUNK
+    good = good_body(world)
+    bad = [(path, field, junk) for path in walked() for field in WALK_FIELDS for junk in WALK_JUNK
            if broke(path, app.post(path, {**good, field: junk}))]
+    app.settle(120)
+    assert not bad
+
+
+@pytest.mark.timeout(900)
+def test_no_route_answers_junk_in_a_field_it_names_with_a_500(app, world, ai):
+    """Every POST route, each field its body names that the walk above doesn't, each kind of junk a field may be sent: a route
+    added tomorrow, or a field added to one, is walked with no edit here."""
+    good = good_body(world)
+    bad = [(path, field, junk) for path, fields in walked().items() for field in fields if field not in WALK_FIELDS
+           for junk in WALK_NAMED_JUNK if broke(path, app.post(path, {**good, field: junk}))]
     app.settle(120)
     assert not bad

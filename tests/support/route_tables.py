@@ -19,6 +19,17 @@ def paths(value=1):
     return {(method, concrete(route.path, value)) for route in every_route() for method in route.methods}
 
 
+def posted_fields():
+    """Every POST route, as {a path it answers: the fields its body's model names}: what the page may send each, which the API's
+    generated schema says too. A route that reads no body names none."""
+    fields = {}
+    for route in every_route():
+        if "POST" in route.methods:
+            model = route.body_field.field_info.annotation if route.body_field else None
+            fields[concrete(route.path)] = sorted(getattr(model, "model_fields", {}))
+    return fields
+
+
 def stand_in(monkeypatch, reached):
     """Every route reaches `reached(route, scope, send)`, an async function, and goes no further: not to its model, which a body is
     otherwise held to."""
