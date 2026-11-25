@@ -19,6 +19,12 @@ CORPUS = os.path.join(ROOT, "corpus")
 
 ADA, BEA, CY = "ada@example.test", "bea@example.test", "cy@example.test"
 
+# Each account's password, a canary (support/canaries.py): no log, answer or request to an AI provider may hold one.
+PASSWORDS = {ADA: "canary-password-ada-7Kq2Vw", BEA: "canary-password-bea-3Hn8Zr", CY: "canary-password-cy-5Tx4Pm"}
+# The message whose body carries a canary phrase, and the phrase. It is in Bea's Folders/Clients, which nothing sends to
+# an AI provider unasked, so it goes in a request only when a test asks about that message (`asks_ai_about`).
+BODY_CANARY = ("bea-clients-01-harbor.eml", "heron-quartz-4471")
+
 # (email, kind, alias, extra folders)
 ACCOUNTS = (
     (ADA, "imap", "Ada", ()),
@@ -100,7 +106,7 @@ def variant(name, **headers):
 def populate(server):
     """Create the accounts on `server` and deliver MAIL. Returns {file: (account, folder, uid)}."""
     for email, kind, _, extra in ACCOUNTS:
-        server.add_account(email, kind=kind, folders=extra)
+        server.add_account(email, password=PASSWORDS[email], kind=kind, folders=extra)
     placed = {}
     for name, acct, folder, flags, thread in MAIL:
         uid = server.deliver(acct, folder, raw(name), flags=flags, thread_of=raw(thread) if thread else None)

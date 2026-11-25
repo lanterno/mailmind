@@ -64,6 +64,7 @@ timeout = "300"
 markers = [
     "browser: drives the page in Chromium; skipped unless pytest runs with --browser",
     "dovecot: runs against Dovecot in Docker; skipped unless pytest runs with --dovecot",
+    "asks_ai_about(*files): the test asks the AI about these corpus files, so a canary phrase in their bodies may go to a provider (support/canaries.py)",
 ]
 
 [tool.pyright]

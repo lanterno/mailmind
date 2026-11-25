@@ -14,12 +14,14 @@ key, so AI is off and nothing reaches the fake.
 and creates the schema there. Tests that touch the store, config, rules, views or audit trails
 must use it.
 """
+import contextlib
 import os
 import time
 from datetime import datetime, timezone
 
 import pytest
 
+import canaries
 import guard
 from mailmind.platform import perimeter
 from mailmind.platform import environment
@@ -138,7 +140,13 @@ def anthropic_api():
 
 @pytest.fixture(autouse=True)
 def _anthropic_reset(anthropic_api):
+    """The fake Claude API as the test begins: nothing asked, nothing queued. It is the first of the AI providers whose
+    requests a world's canaries are looked for in (support/canaries.py); a fixture that makes another lists it there."""
     anthropic_api.reset()
+    canaries.PROVIDERS.clear()
+    canaries.provider("the fake Claude API", anthropic_api, anthropic_api.KEY)
+    yield
+    canaries.PROVIDERS.clear()
 
 
 @pytest.fixture(autouse=True)
@@ -182,6 +190,8 @@ def local_ai(monkeypatch, _no_local_ai):
         s.bind(("127.0.0.1", 0))
         nothing = f"http://127.0.0.1:{s.getsockname()[1]}/v1"
     with FakeOpenAI(key=None) as ollama, FakeOpenAI(key=None) as lm_studio:
+        canaries.provider("the fake Ollama", ollama, FakeOpenAI.KEY)
+        canaries.provider("the fake LM Studio", lm_studio, FakeOpenAI.KEY)
         known = [("Ollama", ollama.url), ("llama.cpp", nothing), ("LM Studio", lm_studio.url)]
         monkeypatch.setattr(local_servers, "known", lambda: known)
         monkeypatch.setenv("MAILMIND_TEST_LOCAL_AI", ";".join(f"{name}={url}" for name, url in known))
@@ -194,6 +204,7 @@ def openai_api():
     provider is reached at, and it takes its KEY (`.key = None` takes any, as a model on this Mac may)."""
     from fakes.openai_api import FakeOpenAI
     with FakeOpenAI() as fake:
+        canaries.provider("the fake OpenAI-compatible API", fake, fake.KEY)
         yield fake
 
 
@@ -293,11 +304,39 @@ def world_template(tmp_path_factory):
     return world.build_template(str(tmp_path_factory.mktemp("world-template")), NOW, guard.KEYCHAIN)
 
 
+def asked_about(request):
+    """The corpus files a test asks the AI about (`@pytest.mark.asks_ai_about(file, ...)`): a canary in their bodies may
+    go to a provider."""
+    return {name for mark in request.node.iter_markers("asks_ai_about") for name in mark.args}
+
+
+@contextlib.contextmanager
+def _logged_here(watch):
+    """What the app in this process logs, as its file would hold it, for the canaries' check: the app the `app` fixture
+    runs logs to no file."""
+    import io
+    import logging
+    from mailmind.platform import logging as app_logging
+    out = io.StringIO()
+    handler = logging.StreamHandler(out)
+    handler.addFilter(app_logging.Redact())
+    handler.setFormatter(app_logging.JsonFormatter())
+    logger = logging.getLogger(app_logging.ROOT)
+    logger.addHandler(handler)
+    watch.text("what the app in the test's process logged", out.getvalue)
+    try:
+        yield
+    finally:
+        logger.removeHandler(handler)
+
+
 @pytest.fixture
-def world(world_template, data_dir):
+def world(request, world_template, data_dir):
     """A fresh copy of the world: a running fake IMAP server holding the corpus, a fake SMTP
     server the accounts send through, a config pointing at both, and the database the app built
-    from the corpus, in this test's data_dir."""
+    from the corpus, in this test's data_dir. When the test ends, no canary of the world's (support/canaries.py: the
+    accounts' passwords, the providers' keys, a phrase in a body) may be in a log, an answer or a request to an AI
+    provider where it mustn't."""
     import shutil
     from fakes.imap_server import FakeIMAPServer
     from fakes.smtp_server import FakeSMTPServer
@@ -308,11 +347,13 @@ def world(world_template, data_dir):
         if p.exists():
             p.unlink()
     shutil.copyfile(template, data_dir / "mailmind.db")
-    with FakeIMAPServer(keychain=guard.KEYCHAIN) as srv, FakeSMTPServer() as smtp:
-        assert w.populate(srv) == placed
-        w.connect_smtp(srv, smtp)
-        w.write_config(srv, str(data_dir), smtp)
-        yield w.World(srv, placed, data_dir, smtp)
+    with canaries.watching(data_dir, asked_about(request)) as watch, _logged_here(watch):
+        with FakeIMAPServer(keychain=guard.KEYCHAIN) as srv, FakeSMTPServer() as smtp:
+            assert w.populate(srv) == placed
+            w.connect_smtp(srv, smtp)
+            w.write_config(srv, str(data_dir), smtp)
+            yield w.World(srv, placed, data_dir, smtp)
+    watch.check()
 
 
 @pytest.fixture

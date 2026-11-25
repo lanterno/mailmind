@@ -112,15 +112,19 @@ def mm_guarded():
 @pytest.fixture
 def mm_world(request, tmp_path, world_template, mm_dist, mm_guarded):
     """A world over the fakes, with the app's server on it, for this scenario alone."""
+    import canaries
     from .world import World
     world = World(tmp_path / "home", world_template, guarded=mm_guarded)
-    world.start(mm_dist)
-    yield world
+    asked = {name for mark in request.node.iter_markers("asks_ai_about") for name in mark.args}
+    with canaries.watching(world.home, asked) as watch:
+        world.start(mm_dist)
+        yield world
     if request.node.stash.get(_KEPT, None) is None:
         try:
             world.check()
         finally:
             world.stop()
+        watch.check()                        # no canary of the world's where it mustn't be (support/canaries.py)
 
 
 @pytest.fixture

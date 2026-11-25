@@ -2,7 +2,8 @@
 Anthropic SDK, mailmind.assistant.adapters) to call through ANTHROPIC_BASE_URL.
 
 It keeps every request it receives (headers and JSON body), in order, so a test can check what the
-app sent: which prompt, which schema, which model and effort, and whether anything was sent at all.
+app sent: which prompt, which schema, which model and effort, and whether anything was sent at all. `seen` keeps them
+too, whatever a test clears of `requests`, for the canaries' check (support/canaries.py).
 
 What it answers:
 - 401 authentication_error unless the request carries KEY, as `x-api-key` (both servers' way) or as an
@@ -118,6 +119,7 @@ class FakeAnthropic:
 
     def __init__(self):
         self.requests = []
+        self.seen = []                # every request since reset, which a test's clearing of `requests` leaves
         self.models = list(MODELS)    # what GET /v1/models lists
         self._queued = []
         self.responder = None         # optional: Request -> reply, or None for the default
@@ -167,6 +169,7 @@ class FakeAnthropic:
     def _reply(self, path, req):
         with self._lock:
             self.requests.append(req)
+            self.seen.append(req)
             if path not in ("/v1/messages", "/v1/models") and not path.startswith(BATCHES):
                 return error(404, "not_found_error", "Not found")
             if req.key != KEY:
@@ -244,6 +247,7 @@ class FakeAnthropic:
     def reset(self):
         with self._lock:
             self.requests.clear()
+            self.seen.clear()
             self._queued.clear()
             self.responder = None
             self.models = list(MODELS)

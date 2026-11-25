@@ -11,6 +11,8 @@ import threading
 import time
 from dataclasses import dataclass
 
+import canaries
+
 CSRF = "test-csrf-token"
 
 
@@ -80,6 +82,7 @@ class AppClient:
             hdrs = {k.lower(): v for k, v in r.getheaders()}
         finally:
             conn.close()
+        canaries.answer(method, path, r.status, payload)
         parsed = payload
         if payload and hdrs.get("content-type", "").startswith(("application/json", "application/problem+json")):   # a HEAD has none
             parsed = json.loads(payload)

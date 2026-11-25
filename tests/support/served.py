@@ -15,6 +15,7 @@ import subprocess
 import sys
 import time
 
+import canaries
 import ports
 from app_client import AppClient
 
@@ -196,6 +197,7 @@ def serving(request, world, dist, tmp_path_factory, now, guarded):
     env = {**os.environ, "MAILMIND_HOME": str(world.dir), "MAILMIND_TEST_DIST": str(dist),
            "MAILMIND_TEST_GUARDED": guarded, "PYTHONUNBUFFERED": "1"}
     log = tmp_path_factory.mktemp("server") / "server.log"
+    canaries.log_file(log)                  # the world's canaries are never in what the server says
     with time_machine.travel(now, tick=False) as local:
         server = Served(env, now, local, log).start()
         world.sync = lambda account, folder: server.work("sync", account, folder)

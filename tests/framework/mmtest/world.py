@@ -223,6 +223,7 @@ class World:
         from fakes.smtp_server import FakeSMTPServer
         from fixtures import world as corpus
         from mailmind.platform import settings
+        import canaries
         import fake_keychain
         import guard
         import served
@@ -251,6 +252,7 @@ class World:
         env = {**os.environ, "MAILMIND_HOME": self.home, "MAILMIND_TEST_DIST": dist, "MAILMIND_TEST_GUARDED": self.guarded}
         env.setdefault("MAILMIND_TEST_LOCAL_AI", "")          # set and empty: no model server on this Mac is asked
         self.app = served.Served(env, NOW, local, os.path.join(self.home, "server.log"))
+        canaries.log_file(self.app.log_path)      # the world's canaries are never in what the server says
         self.app.start()
         stack.callback(self._stop_app)
         # Past the first run: a new world has had the guide offered, so it stays out of every scenario but its own.

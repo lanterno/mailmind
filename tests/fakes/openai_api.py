@@ -3,6 +3,7 @@ a model on this Mac and any other compatible service through (mailmind.assistant
 in /v1 as OpenAI's does.
 
 It keeps every request it receives (method, path, headers and JSON body), in order, so a test can check what the app sent.
+`seen` keeps them too, whatever a test clears of `requests`, for the canaries' check (support/canaries.py).
 It listens on 127.0.0.1, or the loopback address `host` names (::1).
 
 What it answers:
@@ -100,6 +101,7 @@ class FakeOpenAI:
     def __init__(self, key=KEY, host="127.0.0.1"):
         self.key = key                 # None: any request goes, as a model on this Mac may take them
         self.requests = []
+        self.seen = []                # every request since reset, which a test's clearing of `requests` leaves
         self.models = list(MODELS)
         self.refuse_format = False
         self._queued = []
@@ -143,6 +145,7 @@ class FakeOpenAI:
     def _reply(self, req):
         with self._lock:
             self.requests.append(req)
+            self.seen.append(req)
             if (req.method, req.path) not in (("POST", "/chat/completions"), ("GET", "/models")):
                 return error(404, "Not found", kind="not_found")
             if self.key is not None and req.key != self.key:

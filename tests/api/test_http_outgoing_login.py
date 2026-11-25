@@ -17,7 +17,7 @@ def quit_by(world, who):
 def ada_draft(world, **smtp):
     """Ada's account as typed, with the password both fake servers take for her."""
     return {"email": w.ADA, "type": "imap", "host": "127.0.0.1", "port": world.server.port,
-            "starttls": not world.server.implicit_tls, "credential": {"style": "keychain", "value": "app-password"}, **smtp}
+            "starttls": not world.server.implicit_tls, "credential": {"style": "keychain", "value": w.PASSWORDS[w.ADA]}, **smtp}
 
 
 def nothing_listens():
