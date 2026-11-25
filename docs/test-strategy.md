@@ -227,8 +227,10 @@ log, and the core's event log. CI uploads them.
 
 ## 5. Performance
 
-`budgets.toml` holds every limit, but only the core's four are enforced (by `mm-budgets`, on 100,000 messages). The Mac's,
-the page's and the desktop's were measured once, by hand.
+`budgets.toml` holds every limit. The core's four are measured on every core change (`mm-budgets`, on 100,000
+messages), the IMAP counts on every PR on both servers (`tests/api/test_budget_counts.py`), and the Mac's before each
+release (`just apple budgets`). The page's and the desktop's scripts write their numbers the same way, but nothing runs
+them on a schedule yet.
 
 **What to measure**
 
