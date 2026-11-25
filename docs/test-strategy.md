@@ -294,7 +294,7 @@ an owner in the table below.
 | What goes to the AI is what the docs say | The governor and ledger tests; prompt wording | A prompt-injection corpus: mail that asks the assistant to file, send, forward or reveal other mail. The fake provider returns the injected action, and the test asserts nothing happens without the person and nothing outside the asked messages goes out |
 | The app updates only to what the owner signed | `release-check`: the appcast and feed signatures, a tampered feed | An update from the previous release in lane B (R6) |
 | The FFI boundary holds | Nothing of its own | Tests of `mm-ffi`: bad UTF-8, huge strings, calls after close, from many threads |
-| The supply chain | `just audit`; `cargo deny`; pinned actions and hashes | Run `audit` in CI; secret scanning (gitleaks) in CI and as a pre-commit hook; a check that no real address or count enters the repo |
+| The supply chain | `just audit` (in CI, `checks.yml`); `cargo deny`; pinned actions and hashes; `test_no_real_addresses` (every address in a tracked file is made up) | Secret scanning (gitleaks) in CI and as a pre-commit hook |
 
 **Project rules as lints.** [CLAUDE.md](../CLAUDE.md)'s rules that a change can break without noticing become checks: no
 `sqlite3` import outside the driver, no SQL in a use case, no bulk `EXPUNGE`, no folder quoted by hand, no new
