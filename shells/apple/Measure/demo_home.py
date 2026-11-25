@@ -11,7 +11,8 @@ in the temp home, as Library/Preferences/<the app's identifier>.plist, which thi
 
     python shells/apple/Measure/demo_home.py APP            # the app, until you quit it (or Ctrl-C here)
     python shells/apple/Measure/demo_home.py APP --smoke    # opens, waits for mail in the inbox's rows, quits: 0 if it showed
-    python shells/apple/Measure/demo_home.py APP --measure  # launch to first rows and idle memory: one launch to sync, then 7
+    python shells/apple/Measure/demo_home.py APP --measure  # launch to first rows and idle memory: one launch to sync, then 7;
+                                                            # the medians go to build/measure/budgets.txt as well
     python shells/apple/Measure/demo_home.py APP --picture  # the window drawn light and dark: build/screenshots/window
 
 `--arch x86_64` after any of them runs that half of a universal app (a release's) through /usr/bin/arch: on Apple
@@ -29,6 +30,7 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
 SUPPORT = os.path.join(ROOT, "tests", "support")
+MEASURED = os.path.join(os.path.dirname(HERE), "build", "measure")
 sys.path[:0] = [SUPPORT, os.path.join(ROOT, "tests"), ROOT]
 
 import guard                                        # noqa: E402
@@ -164,6 +166,11 @@ def main():
             print(f"first_rows_ms runs: {' '.join(f'{s:.1f}' for s in starts)}")
             print(f"first_rows_ms median: {statistics.median(starts):.1f}")
             print(f"idle_footprint_mb median: {statistics.median(memory):.1f} (rows in the inbox: {runs[-1]['rows_total']})")
+            # For `just apple budgets`, beside what measure.sh wrote; a later line for a name wins.
+            os.makedirs(MEASURED, exist_ok=True)
+            with open(os.path.join(MEASURED, "budgets.txt"), "a", encoding="utf-8") as f:
+                f.write(f"mac_home_first_rows_ms={statistics.median(starts):.1f}\n")
+                f.write(f"mac_home_idle_memory_mb={statistics.median(memory):.1f}\n")
             return
         print("Fictional mail only: a temp data folder, fake servers on loopback and the fake Claude API.", flush=True)
         with subprocess.Popen(app, env=env) as running:

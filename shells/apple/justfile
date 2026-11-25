@@ -68,6 +68,14 @@ run: build
 measure: build
     "{{here}}/Measure/measure.sh"
 
+# Before a release: measure the shell, then on the demo home, and judge each number against budgets.toml's [apple].
+# Over a limit by no more than its tolerance, the release goes and an issue is opened; past that, it stops (exit 1)
+budgets: build
+    "{{here}}/Measure/measure.sh"
+    cd "{{here}}/../.." && uv run python "{{here}}/Measure/demo_home.py" \
+        "{{here}}/build/DerivedData/Build/Products/Release/MailMind.app/Contents/MacOS/MailMind" --measure
+    cd "{{here}}/../.." && uv run python tests/support/budgets.py judge apple "{{here}}/build/measure/budgets.txt"
+
 # The Mac app, then the iPhone app in a simulator (`smoke mac`, `smoke ios`): each jumps nine tenths down its list
 # and waits for mail in the rows there
 smoke which="all": build

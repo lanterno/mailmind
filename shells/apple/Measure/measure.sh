@@ -2,7 +2,8 @@
 # The Apple shell's measurements on this Mac: cold start to first rows, memory idle and after scrolling and jumping
 # through 100,000 fictional messages, the main thread's time per pass while scrolling, the cost of crossing into the
 # core, the core's size, and a system web view's memory showing one fictional email. `just apple measure` runs it
-# after a release build. Results go to stdout and build/measure/results.txt. A measure run isn't a person's, so the app
+# after a release build. Results go to stdout and build/measure/results.txt, and the numbers budgets.toml's [apple]
+# holds go to build/measure/budgets.txt as name=value lines, which `just apple budgets` judges. A measure run isn't a person's, so the app
 # keeps its preferences apart from theirs by itself, in memory only, as it names no home (Mac/Shared/RunPreferences).
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
@@ -11,6 +12,10 @@ app="$here/build/DerivedData/Build/Products/Release/MailMind.app/Contents/MacOS/
 xcf="$here/build/MailMindCore.xcframework"
 mkdir -p "$out"
 exec > >(tee "$out/results.txt") 2>&1
+budgets="$out/budgets.txt"
+: >"$budgets"
+# A footprint as top prints it (27M, 1024K, 1.2G) in MB.
+mb() { awk '{n=$1+0; u=substr($1,length($1)); if (u=="K") n/=1024; else if (u=="G") n*=1024; else if (u=="B") n/=1048576; printf "%.1f\n", n}'; }
 
 echo "# $(sw_vers -productName) $(sw_vers -productVersion), $(sysctl -n machdep.cpu.brand_string), $(($(sysctl -n hw.memsize) / 1073741824)) GB"
 echo "# load averages at start: $(sysctl -n vm.loadavg)"
@@ -26,7 +31,9 @@ for _ in 1 2 3 4 5 6 7; do
     starts+=("$(MAILMIND_MEASURE=start "$app" 2>/dev/null | sed -n 's/^first_rows_ms=//p')")
 done
 echo "first_rows_ms runs: ${starts[*]}"
-printf '%s\n' "${starts[@]}" | sort -n | awk '{a[NR]=$1} END {print "first_rows_ms median: " a[int((NR+1)/2)]}'
+median=$(printf '%s\n' "${starts[@]}" | sort -n | awk '{a[NR]=$1} END {print a[int((NR+1)/2)]}')
+echo "first_rows_ms median: $median"
+echo "mac_first_rows_ms=$median" >>"$budgets"
 
 echo "## memory and main-thread time: idle, a ten-second fast scroll, the whole list, then jumps"
 log="$out/app.log"
@@ -49,6 +56,10 @@ fi
 wait || true
 grep -v '^phase=' "$log"
 cat "$tops"
+echo "mac_idle_memory_mb=$(sed -n 's/^top_idle_mem //p' "$tops" | mb)" >>"$budgets"
+echo "mac_scrolled_memory_mb=$(sed -n 's/^top_done_mem //p' "$tops" | mb)" >>"$budgets"
+# The worst of the passes' 95th percentiles: the fast scroll, the whole list, the jumps.
+echo "mac_frame_p95_ms=$(sed -n 's/^main_thread_ms_.* p95=\([0-9.]*\).*/\1/p' "$log" | sort -n | tail -1)" >>"$budgets"
 
 echo "## crossing into the core from Swift (release, -O)"
 xcrun swiftc -O -parse-as-library -module-name Probe -I "$xcf/macos-arm64/Headers" \
