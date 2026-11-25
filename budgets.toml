@@ -1,9 +1,16 @@
 # The limits every MailMind client is held to. A number here is a promise, and a build that breaks one fails.
 #
 # The architecture proposed these; step 0 measures each on the walking skeleton. A limit changes only in a commit
-# that says why. `measured` is the last number recorded by hand and `on` says where; the check reads only `limit`.
+# that says why. `measured` is the last number recorded and `on` says where.
 #
-# `just budgets` measures the [core] entries on the 100,000-message fictional fixture. Each shell measures its own.
+# A wall time (a name ending in _ms) varies from run to run, so it may run over its limit by its `tolerance`, 0.10
+# unless the entry gives one: the release still goes, and an issue is opened for the budget. Past that the release
+# stops. A size, a memory footprint or a count has no tolerance. tests/support/budgets.py says so in code, and
+# tests/unit/test_budgets_file.py holds every entry to its fields and to a script that measures it; one with
+# `by = "hand"` has none yet, and says `how` it was measured.
+#
+# `just budgets` measures the [core] entries on the 100,000-message fictional fixture. Each shell measures its own and
+# writes name=value lines: `just apple budgets` judges the Mac's before a release (docs/releasing.md).
 
 [core.open_to_first_rows_ms]
 what = "open the database, order an inbox of 100,000 messages and load its first rows"
@@ -31,8 +38,8 @@ limit = 16.0
 measured = 0.19
 on = "Apple silicon Mac, macOS 26.4, release build, 2026-11-12"
 
-# The shells. Each measures its own (`just apple measure`, `just web measure`, `just desktop measure`); no check reads
-# these yet. Measured on an Apple M5 Mac shared with other builds, so numbers vary by 10 to 20% run to run.
+# The shells. Each measures its own (`just apple budgets`, `just web measure`, `just desktop measure`). Measured on an
+# Apple M5 Mac shared with other builds, so numbers vary by 10 to 20% run to run.
 
 [apple.mac_first_rows_ms]
 what = "launch the Mac app, release build, to the first rows applied on the main actor (warm file cache, median of 7)"
@@ -68,6 +75,8 @@ what = "what the core adds to a stripped arm64 app (iOS device and macOS)"
 limit = 12.0
 measured = 9.4
 on = "Apple M5 Mac, Xcode 26.6, release build, 2026-11-14"
+by = "hand"
+how = "link the macOS app with -Wl,-map and sum the sizes the map gives the core's library (libmailmind_core.a)"
 # Raised from 8 MB when the whole app came into the Mac app's process (mm-host): every context, the routes and their
 # perimeter, the runtime, IMAP, SMTP, TLS and the Claude client, not step 0's store and list (1.61 MB). The bytes
 # linked from the core's library, by the link map; the stripped executables are 12.0 MB (macOS) and 11.9 MB (iOS).
