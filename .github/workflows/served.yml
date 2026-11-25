@@ -1,5 +1,6 @@
 # The served suites on one commit, against both servers: the Python app's (tests/api and tests/e2e/browser), and the
-# Rust server's ledger (tests/support/rust_ledger.txt) through `just test-rust`. A test moves to
+# Rust server's ledger (tests/support/rust_ledger.txt) through `just test-rust`, then the end-to-end scenarios on the
+# page against it (`just e2e`). A test moves to
 # the Rust server only by passing against both. Each server has a job of its own, side by side, so a failure against one
 # never keeps the other from running, and each fits the time a job has. One that fails keeps the output of every server
 # it started, and the run's page has it.
@@ -101,6 +102,21 @@ jobs:
       - name: The ledger's tests against the Rust server
         if: matrix.server == 'rust'
         run: just test-rust --basetemp="$RUNNER_TEMP/pytest"
+
+      # The end-to-end scenarios (tests/scenarios), on the page against the Rust server, the only one they run on.
+      - name: The scenarios on the page
+        if: ${{ !cancelled() && matrix.server == 'rust' }}
+        run: just e2e --basetemp="$RUNNER_TEMP/e2e"
+
+      # A failing scenario writes its trace, its last `shown` and a picture to build/traces.
+      - name: What the scenarios saw
+        if: failure() && matrix.server == 'rust'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scenario-traces
+          path: build/traces
+          if-no-files-found: ignore
+          retention-days: 7
 
       # Each test's server writes what it printed to server.log in that test's temporary folder.
       - name: What the servers printed
