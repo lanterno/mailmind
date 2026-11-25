@@ -24,7 +24,7 @@ final class NewMailAlerts {
     /// from: `AppStatus`'s, once it has the core.
     var preferences: @MainActor () -> API.Preferences? = { nil }
     var name: @MainActor (String) -> String = StatusWords.short
-    var now: @MainActor () -> Date = Date.init
+    var now: @MainActor () -> Date = { AppSeams.clock.now }
     var hasAccounts: @MainActor () -> Bool = { false }
     /// The row of the one message that came, by its account, folder and UID, for its sender and subject: the
     /// status reads its folder for it once it has the core.
@@ -38,7 +38,7 @@ final class NewMailAlerts {
     private var told: Set<String> = []
     private var comingBack: NSObjectProtocol?
 
-    init(notifier: any Notifier = SystemNotifier.forThisProcess(),
+    init(notifier: any Notifier = AppSeams.notifications,
          isActive: @escaping @MainActor () -> Bool = { NSApp?.isActive ?? true },
          badge: @escaping @MainActor (String?) -> Void = { NSApp?.dockTile.badgeLabel = $0 },
          announce: @escaping @MainActor (String) -> Void = Announce.say)

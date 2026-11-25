@@ -134,9 +134,9 @@ enum Quitting {
             _ = try? await routes.post(API.Post.OutboxSendnow.self, API.NamesASend(id: id))
         }
         let watched = Set(plan.now + plan.going)
-        let until = ContinuousClock.now + wait
-        while ContinuousClock.now < until {
-            try? await Task.sleep(for: poll)
+        let until = AppSeams.clock.instant + wait
+        while AppSeams.clock.instant < until {
+            try? await AppSeams.clock.sleep(for: poll)
             guard let again = try? await routes.get(API.Get.Outbox.self, ["limit": "50"]) else { break }
             let waiting = again.items.contains { watched.contains($0.id) && ($0.state == "queued" || $0.state == "sending") }
             if !waiting { return true }
@@ -159,9 +159,9 @@ enum Quitting {
             }
             settled.saving = all ? .saved : .refused
         }
-        let until = ContinuousClock.now + wait
-        while settled.saving == nil, ContinuousClock.now < until {
-            try? await Task.sleep(for: .milliseconds(20))
+        let until = AppSeams.clock.instant + wait
+        while settled.saving == nil, AppSeams.clock.instant < until {
+            try? await AppSeams.clock.sleep(for: .milliseconds(20))
         }
         return settled.saving ?? .waiting
     }

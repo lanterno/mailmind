@@ -93,7 +93,7 @@ final class Waking {
     func tell() {
         guard soon == nil else { return }
         soon = Task { [weak self, delay] in
-            try? await Task.sleep(for: delay)
+            try? await AppSeams.clock.sleep(for: delay)
             guard !Task.isCancelled, let self else { return }
             self.soon = nil
             self.woke()

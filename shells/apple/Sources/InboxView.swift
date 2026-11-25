@@ -40,7 +40,7 @@ struct MessageList: View {
 
 /// A row's date as a mail list shows it: the time today, the weekday this week, the day this year, else the full date.
 enum RowDate {
-    static func text(_ seconds: Int64, now: Date = .now, calendar: Calendar = .current) -> String {
+    static func text(_ seconds: Int64, now: Date = AppSeams.clock.now, calendar: Calendar = .current) -> String {
         guard seconds != 0 else { return "" }
         let date = Date(timeIntervalSince1970: TimeInterval(seconds))
         if calendar.isDate(date, inSameDayAs: now) {

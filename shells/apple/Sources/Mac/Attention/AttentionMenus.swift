@@ -131,7 +131,7 @@ struct SnoozeChooser: View {
     }
 
     /// Where a time of one's own starts: tomorrow at nine.
-    static func tomorrowMorning(from now: Date = Date(), calendar: Calendar = .current) -> Date {
+    static func tomorrowMorning(from now: Date = AppSeams.clock.now, calendar: Calendar = .current) -> Date {
         let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) ?? now
         return calendar.date(bySettingHour: 9, minute: 0, second: 0, of: tomorrow) ?? tomorrow
     }
@@ -165,13 +165,14 @@ struct SnoozeTimeDialog: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 10)
             MeadowFieldRow(label: String(localized: "Time")) {
-                DatePicker("Time", selection: $until, in: Date()..., displayedComponents: [.date, .hourAndMinute])
+                DatePicker("Time", selection: $until, in: AppSeams.clock.now...,
+                           displayedComponents: [.date, .hourAndMinute])
                     .datePickerStyle(.stepperField)
                     .labelsHidden()
                     .focused($typing)
             }
             MeadowFieldRow(label: String(localized: "Day")) {
-                DatePicker("Day", selection: $until, in: Date()..., displayedComponents: [.date])
+                DatePicker("Day", selection: $until, in: AppSeams.clock.now..., displayedComponents: [.date])
                     .datePickerStyle(.graphical)
                     .labelsHidden()
                     .padding(.vertical, 6)

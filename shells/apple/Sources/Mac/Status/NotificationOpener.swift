@@ -8,10 +8,11 @@ import AppKit
 final class NotificationOpener: NSObject, UNUserNotificationCenterDelegate, Sendable {
     static let shared = NotificationOpener()
 
-    /// Hear the clicks, where this process posts for real (`SystemNotifier`): a test or a measure run posts nothing.
+    /// Hear the clicks, where this process posts for real (`AppSeams.notifications` is `SystemNotifier`): a test or a
+    /// measure run posts nothing.
     @MainActor
     static func listen() {
-        guard SystemNotifier.forThisProcess() is SystemNotifier else { return }
+        guard AppSeams.notifications is SystemNotifier else { return }
         UNUserNotificationCenter.current().delegate = shared
     }
 

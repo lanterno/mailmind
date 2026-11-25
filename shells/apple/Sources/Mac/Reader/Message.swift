@@ -87,7 +87,7 @@ enum MessageWhen {
     /// the person's calendar days, so it agrees with the day heads over the rows. The same day is "just now" within a
     /// minute and a half, then minutes or hours; the day before is "yesterday", then days within the week and weeks
     /// within a month; further back, or on a later day than today, the date as the header wrote it.
-    static func said(_ header: String, now: Date = .now, calendar: Calendar = .current) -> String {
+    static func said(_ header: String, now: Date = AppSeams.clock.now, calendar: Calendar = .current) -> String {
         guard let date = date(header) else { return header }
         let seconds = Int(now.timeIntervalSince(date).rounded(.down))
         let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date),

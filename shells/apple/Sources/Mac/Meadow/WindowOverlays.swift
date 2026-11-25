@@ -254,7 +254,7 @@ final class DialogFocus {
         up = false
         dialogHad = window.flatMap { Self.owner(of: $0.firstResponder) }
         // Its going may be heard before this, as its fade ends: the keyboard comes back all the same.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.gone() }
+        AppSeams.clock.after(.milliseconds(400)) { [weak self] in self?.gone() }
     }
 
     /// The dialog has left the window.

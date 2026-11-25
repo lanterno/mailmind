@@ -42,7 +42,7 @@ final class SinceLooked {
 
     private(set) var pending: Pending?
     @ObservationIgnored var isActive: @MainActor () -> Bool = { NSApp?.isActive ?? true }
-    @ObservationIgnored var now: @MainActor () -> Date = Date.init
+    @ObservationIgnored var now: @MainActor () -> Date = { AppSeams.clock.now }
     @ObservationIgnored private let link: CoreLink
     @ObservationIgnored private var looks: [String: Date] = [:]
     /// Mail an Undo put back in each account's Inbox, which the next sync finds there as if it came: how many, and
@@ -168,7 +168,7 @@ final class SinceLooked {
     private func writeSoon() {
         soon?.cancel()
         soon = Task { [weak self] in
-            try? await Task.sleep(for: Self.wait)
+            try? await AppSeams.clock.sleep(for: Self.wait)
             guard !Task.isCancelled else { return }
             await self?.writeHeadline()
         }

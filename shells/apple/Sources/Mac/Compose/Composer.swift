@@ -267,7 +267,7 @@ final class Composer: Identifiable {
         host.loadSnippets()
         autosaver = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(Self.autosaveSeconds))
+                try? await AppSeams.clock.sleep(for: .seconds(Self.autosaveSeconds), ticking: true)
                 guard let self, !Task.isCancelled else { return }
                 self.autosaveTick()
             }
@@ -309,7 +309,7 @@ final class Composer: Identifiable {
         host.announce(text)
         noticeTimer?.cancel()
         noticeTimer = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(seconds))
+            try? await AppSeams.clock.sleep(for: .seconds(seconds))
             guard !Task.isCancelled else { return }
             self?.notice = nil
         }
@@ -641,7 +641,7 @@ final class Composer: Identifiable {
         guard !knownQueue.isEmpty else { return }
         knownTimer?.cancel()
         knownTimer = Task { [weak self] in
-            try? await Task.sleep(for: Self.knownWait)
+            try? await AppSeams.clock.sleep(for: Self.knownWait)
             guard !Task.isCancelled else { return }
             await self?.flushKnown()
         }
@@ -879,9 +879,9 @@ final class Composer: Identifiable {
                 conflict = false
                 if edits == at { dirty = false }   // an edit since this save began stays to save
                 lastSaveHash = payload.hash
-                savedAt = Date()
+                savedAt = AppSeams.clock.now
                 unsavedWhy = nil
-                savedLine = "Saved \(Date().formatted(date: .omitted, time: .shortened))"
+                savedLine = "Saved \(AppSeams.clock.now.formatted(date: .omitted, time: .shortened))"
                 if !silent { say("Draft saved") }
                 return true
             } catch let problem as Problem where problem.status == 409 {
@@ -943,7 +943,7 @@ final class Composer: Identifiable {
         armTimer?.cancel()
         if !shown.hard {
             armTimer = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(SendGuard.armSeconds))
+                try? await AppSeams.clock.sleep(for: .seconds(SendGuard.armSeconds))
                 guard let self, !Task.isCancelled, self.check?.shownAt == shown.shownAt else { return }
                 self.check?.armed = true
             }

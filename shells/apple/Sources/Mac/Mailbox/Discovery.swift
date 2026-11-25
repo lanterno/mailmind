@@ -205,7 +205,7 @@ final class DocumentsModel {
     private func soon() {
         typing?.cancel()
         typing = Task {
-            try? await Task.sleep(for: .milliseconds(120))
+            try? await AppSeams.clock.sleep(for: .milliseconds(120))
             guard !Task.isCancelled else { return }
             reload()
         }

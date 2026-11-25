@@ -198,7 +198,7 @@ struct EventForm: View {
         self.notices = notices
         self.drop = drop
         _title = State(initialValue: event.title)
-        let start = SuggestedTime.field(event.start, allDay: event.allDay) ?? Date()
+        let start = SuggestedTime.field(event.start, allDay: event.allDay) ?? AppSeams.clock.now
         _start = State(initialValue: start)
         _end = State(initialValue: SuggestedTime.field(event.end, allDay: event.allDay))
         _place = State(initialValue: event.place)
@@ -277,7 +277,7 @@ struct TaskForm: View {
                 TextField("Title", text: $title)
                 LabeledContent("Due") {
                     HStack {
-                        Toggle("Has a due date", isOn: Binding(get: { due != nil }, set: { due = $0 ? (due ?? Date()) : nil }))
+                        Toggle("Has a due date", isOn: Binding(get: { due != nil }, set: { due = $0 ? (due ?? AppSeams.clock.now) : nil }))
                             .labelsHidden()
                         if let day = due {
                             DatePicker("Due", selection: Binding(get: { day }, set: { due = $0 }), displayedComponents: .date)
@@ -331,16 +331,16 @@ private struct FormLabel: View {
 /// A calendar file a person asked for, opened in their calendar app, which asks them where to add it. It is written
 /// to a folder of its own in the temporary directory, never beside the data.
 enum CalendarFile {
-    static func open(_ text: String, named name: String) throws {
+    @MainActor static func open(_ text: String, named name: String) throws {
         try open(Data(text.utf8), named: name)
     }
 
-    static func open(_ data: Data, named name: String) throws {
+    @MainActor static func open(_ data: Data, named name: String) throws {
         let folder = FileManager.default.temporaryDirectory.appending(path: "MailMind Calendar Files", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let file = folder.appending(path: safeName(name))
         try data.write(to: file, options: .atomic)
-        NSWorkspace.shared.open(file)
+        AppSeams.links.open(file)
     }
 
     /// A file name with nothing in it that leaves the folder, ending in .ics.

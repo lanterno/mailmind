@@ -695,7 +695,7 @@ private struct OllamaSteps: View {
                 }
                 .font(.meadow(.ui, 13))
             }
-            Button { NSWorkspace.shared.open(AIChoices.getOllama) } label: {
+            Button { AppSeams.links.open(AIChoices.getOllama) } label: {
                 Text("Get Ollama")
                 MeadowIconView(.external, size: 14)
             }
@@ -747,7 +747,7 @@ struct AIKeyView: View {
                 HStack(spacing: 8) {
                     SettingHelp(String(localized: "\(provider.name)’s keys are made at \(place)."))
                     Spacer(minLength: 8)
-                    Button { NSWorkspace.shared.open(page) } label: {
+                    Button { AppSeams.links.open(page) } label: {
                         Text("Open")
                         MeadowIconView(.external, size: 14)
                     }
@@ -762,7 +762,7 @@ struct AIKeyView: View {
                     SettingHelp(billing)
                     Spacer(minLength: 8)
                     if let page = provider.creditPage {
-                        Button { NSWorkspace.shared.open(page) } label: {
+                        Button { AppSeams.links.open(page) } label: {
                             Text("Add Credit")
                             MeadowIconView(.external, size: 14)
                         }

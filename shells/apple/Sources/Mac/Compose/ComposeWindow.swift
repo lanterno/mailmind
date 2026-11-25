@@ -876,7 +876,7 @@ struct ChipField: View {
         let typed = value.trimmingCharacters(in: .whitespaces)
         guard !typed.isEmpty, let routes else { return close() }
         lookup = Task {
-            try? await Task.sleep(for: .milliseconds(140))
+            try? await AppSeams.clock.sleep(for: .milliseconds(140))
             guard !Task.isCancelled,
                   let read = try? await routes.get(API.Get.Contacts.self, ["q": typed]),
                   !Task.isCancelled else { return }
@@ -1038,7 +1038,7 @@ struct GuardStrip: View {
 /// open: Meadow's popover (`.pop`), each with its key.
 struct LaterChoices: View {
     let composer: Composer
-    @State private var custom = Date().addingTimeInterval(3600)
+    @State private var custom = AppSeams.clock.now.addingTimeInterval(3600)
     /// The preset the keyboard is on: the first as the popover opens, as the page's `useFocusFirst` puts it there,
     /// never the date and time of one's own; the arrows move it and Return picks it.
     @FocusState private var focused: Int?
@@ -1121,7 +1121,7 @@ struct LaterChoices: View {
     /// The date and time of one's own, once it is still to come.
     private func scheduleOwn() {
         let when = Int(custom.timeIntervalSince1970)
-        if Double(when) > Date().timeIntervalSince1970 {
+        if Double(when) > AppSeams.clock.now.timeIntervalSince1970 {
             pick(when)
         } else {
             composer.say("Pick a future time")

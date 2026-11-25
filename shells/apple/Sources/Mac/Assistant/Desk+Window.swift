@@ -99,7 +99,7 @@ final class Desk {
         // A conversation's row snoozes the whole conversation, as the page's does.
         attention.conversation = { [weak self] copies in self?.app?.mailbox.conversation(of: copies) }
         curate.changed = readAgain
-        curate.openPage = { NSWorkspace.shared.open($0) }
+        curate.openPage = { AppSeams.links.open($0) }
         // Edit ▸ Undo on Curate's sheet takes back what the mailbox's still holds, as its toast's Undo does: once
         // between them, so neither undoes something older once the other has.
         curate.undoFromSheet = { [weak self] name in

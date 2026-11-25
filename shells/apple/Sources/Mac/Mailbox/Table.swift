@@ -24,7 +24,7 @@ struct MailboxRowsTable: NSViewRepresentable {
     /// The list stands in days, with a head over each day's first row.
     let sections: Bool
     /// The day it is (`AppStatus.today`): as it moves on, the heads are worked out again.
-    var day = Calendar.current.startOfDay(for: Date())
+    var day = Calendar.current.startOfDay(for: AppSeams.clock.now)
     @Environment(MeadowShell.self) private var shell: MeadowShell?
 
     func makeCoordinator() -> MailboxTableController {
@@ -85,10 +85,10 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
     /// The brief's summary's width on one line.
     private var briefWidth: Float?
     /// The day the heads were worked out on, and the day the window last said it is (`setDay`).
-    private var now = Date()
+    private var now = AppSeams.clock.now
     private var day: Date?
     /// The clock the heads are worked out by; a test sets its own.
-    var clock: () -> Date = Date.init
+    var clock: () -> Date = { AppSeams.clock.now }
     /// Whether the list stood at its top as it last settled, its height then, whether its height has changed since,
     /// and whether it settles at the end of this turn (`keepAtTop`).
     private var stoodAtTop = true
@@ -928,12 +928,12 @@ final class MailboxTableView: NSTableView {
             return
         }
         let lower = Character(key.lowercased())
-        if let at = chordAt, Date().timeIntervalSince(at) < 1.8 {
+        if let at = chordAt, AppSeams.clock.now.timeIntervalSince(at) < 1.8 {
             chordAt = nil
             return mailbox.go(chord: lower)
         }
         // Any other key does nothing: no row is chosen by its letter, and the place stays.
-        _ = RowKeys.run(lower, on: mailbox, chord: { chordAt = Date() })
+        _ = RowKeys.run(lower, on: mailbox, chord: { chordAt = AppSeams.clock.now })
         // x marks here and now: the table shows the marks without waiting for the window to draw again.
         if lower == "x" { controller?.follow(mailbox.marked, scroll: false) }
     }
@@ -1139,11 +1139,11 @@ struct UntakenKeys: NSViewRepresentable {
                 return table.keyDown(with: event)
             }
             let lower = Character(key.lowercased())
-            if let at = chordAt, Date().timeIntervalSince(at) < 1.8 {
+            if let at = chordAt, AppSeams.clock.now.timeIntervalSince(at) < 1.8 {
                 chordAt = nil
                 return mailbox.go(chord: lower)
             }
-            if !RowKeys.run(lower, on: mailbox, chord: { [weak self] in self?.chordAt = Date() }) {
+            if !RowKeys.run(lower, on: mailbox, chord: { [weak self] in self?.chordAt = AppSeams.clock.now }) {
                 super.keyDown(with: event)
             }
         }
@@ -1230,8 +1230,8 @@ enum RowMenu {
                 mailbox.app?.place = .search(Search(q: "from:\(address)"))
             })
             items.append(Item(String(localized: "Copy Sender’s Address"), "doc.on.doc") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(address, forType: .string)
+                AppSeams.pasteboard.clearContents()
+                AppSeams.pasteboard.setString(address, forType: .string)
             })
         }
         return items

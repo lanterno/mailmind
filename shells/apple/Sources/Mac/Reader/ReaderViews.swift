@@ -169,7 +169,7 @@ struct Fetching: View {
         }
         .frame(maxWidth: .infinity, minHeight: 120)
         .task {
-            try? await Task.sleep(for: .seconds(4))
+            try? await AppSeams.clock.sleep(for: .seconds(4))
             slow = true
         }
         .accessibilityLabel("Loading")

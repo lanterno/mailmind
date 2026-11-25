@@ -42,11 +42,12 @@ final class InviteReplies {
         do {
             let queued = try await routes.post(API.Post.InviteRsvp.self, API.RsvpBody(
                 decision: decision, folder: invite.folder, key: invite.key, uid: invite.uid))
-            said[invite] = .queued(queued, goes: Date().addingTimeInterval(TimeInterval(queued.undoSeconds)))
+            said[invite] = .queued(queued,
+                                   goes: AppSeams.clock.now.addingTimeInterval(TimeInterval(queued.undoSeconds)))
             notices.say(String(localized: "RSVP: \(Self.words(decision))"))
             going[invite]?.cancel()
             going[invite] = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(queued.undoSeconds))
+                try? await AppSeams.clock.sleep(for: .seconds(queued.undoSeconds))
                 guard !Task.isCancelled, case .queued(let still, _)? = self?.said[invite], still == queued else { return }
                 self?.said[invite] = .sent(queued)
             }

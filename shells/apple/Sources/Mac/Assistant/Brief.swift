@@ -395,7 +395,11 @@ struct BriefClock<Schedule: TimelineSchedule, Content: View>: View {
         if let fixed {
             content(fixed)
         } else {
-            TimelineView(schedule) { context in content(context.date) }
+            // The schedule says when to draw again, and the time drawn is its entry's on the system's clock; under a
+            // test's clock in the seam, that clock's time.
+            TimelineView(schedule) { context in
+                content(AppSeams.clock is SystemClock ? context.date : AppSeams.clock.now)
+            }
         }
     }
 }

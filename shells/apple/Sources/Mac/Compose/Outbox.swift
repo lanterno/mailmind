@@ -167,7 +167,7 @@ final class OutboxTray {
     }
 
     private func later() async {
-        try? await Task.sleep(for: .milliseconds(300))
+        try? await AppSeams.clock.sleep(for: .milliseconds(300))
         await load()
         sendsChanged()
     }

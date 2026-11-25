@@ -288,7 +288,7 @@ struct MeadowSearchBox: View {
         offers = []
         guard focused, !typed.trimmingCharacters(in: .whitespaces).isEmpty,
               !typed.hasPrefix("?"), !typed.hasPrefix("!"), typed != app.place?.search?.q else { return }
-        try? await Task.sleep(for: .milliseconds(140))
+        try? await AppSeams.clock.sleep(for: .milliseconds(140))
         guard !Task.isCancelled else { return }
         let found = await mailbox.suggestions(for: typed)
         guard !Task.isCancelled else { return }

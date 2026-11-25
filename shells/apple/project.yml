@@ -85,6 +85,8 @@ targets:
       - TestKit
       - Sources/ListModel.swift
       - Generated/MailMindCore.swift
+      # The seams the app reaches the system through, which the tests put their own into
+      - Sources/Seams
       # The client over the core in this process, and the window's list over it
       - Sources/Client
       - Sources/Window/MailList.swift

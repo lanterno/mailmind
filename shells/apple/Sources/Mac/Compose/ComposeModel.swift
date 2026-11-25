@@ -587,7 +587,7 @@ enum Pictures {
 
 /// When a scheduled send goes, in friendly local words.
 enum SendTimes {
-    static func words(_ epoch: Int, now: Date = Date(), calendar: Calendar = .current) -> String {
+    static func words(_ epoch: Int, now: Date = AppSeams.clock.now, calendar: Calendar = .current) -> String {
         let date = Date(timeIntervalSince1970: TimeInterval(epoch))
         let time = date.formatted(date: .omitted, time: .shortened)
         if calendar.isDate(date, inSameDayAs: now) { return "today \(time)" }
@@ -600,7 +600,9 @@ enum SendTimes {
     /// The Later menu's times: in an hour, this evening, tomorrow at 8 and Monday at 8. This evening is offered only
     /// while 18:00 today is still ahead: once it has passed, the evening it would name is tomorrow's, which isn't this
     /// evening, and tomorrow at 8 comes first anyway.
-    static func presets(now: Date = Date(), calendar: Calendar = .current) -> [(label: String, epoch: Int)] {
+    static func presets(now: Date = AppSeams.clock.now,
+                        calendar: Calendar = .current) -> [(label: String, epoch: Int)]
+    {
         let seconds = { (date: Date) in Int(date.timeIntervalSince1970) }
         let evening = calendar.date(bySettingHour: 18, minute: 0, second: 0, of: now).flatMap { $0 > now ? $0 : nil }
         let tomorrow = calendar.date(bySettingHour: 8, minute: 0, second: 0,

@@ -354,7 +354,7 @@ struct NotificationsPane: View {
             SettingLine(String(localized: "Notifications are off for MailMind in System Settings.")) {
                 Button("Open System Settings") {
                     if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
-                        NSWorkspace.shared.open(url)
+                        AppSeams.links.open(url)
                     }
                 }
                 .meadowButton(small: true)
@@ -373,7 +373,7 @@ struct NotificationsPane: View {
 
     /// "HH:MM" and a time of today, by this Mac's clock.
     enum Clock {
-        static func date(_ text: String, calendar: Calendar = .current, today: Date = Date()) -> Date {
+        static func date(_ text: String, calendar: Calendar = .current, today: Date = AppSeams.clock.now) -> Date {
             let minutes = QuietHours.minutes(text) ?? 0
             return calendar.date(bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: today) ?? today
         }

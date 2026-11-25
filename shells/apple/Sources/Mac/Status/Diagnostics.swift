@@ -66,8 +66,8 @@ enum Diagnostics {
         var failure: String?
         if case .failed(let why) = app.stage { failure = why }
         let text = await gather(core: app.core, folder: app.folder, failure: failure)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        AppSeams.pasteboard.clearContents()
+        AppSeams.pasteboard.setString(text, forType: .string)
         AppStatus.shared.say(String(localized: "Diagnostics copied, with no addresses or passwords in them"))
     }
 
@@ -83,7 +83,7 @@ enum Diagnostics {
         let answer = alert.runModal()
         guard answer != .alertThirdButtonReturn else { return }
         await copy()
-        if answer == .alertFirstButtonReturn { NSWorkspace.shared.open(issues) }
+        if answer == .alertFirstButtonReturn { AppSeams.links.open(issues) }
     }
 
     static let reportWords = String(localized: """
@@ -96,7 +96,7 @@ enum Diagnostics {
 
     /// The text, from `core` when it opened (else `failure`, what kept it from opening) and the log in `folder`.
     static func gather(core: Core?, folder: URL?, failure: String?, about: About = .current,
-                       now: Date = Date()) async -> String
+                       now: Date = AppSeams.clock.now) async -> String
     {
         var read = Read()
         if let core {

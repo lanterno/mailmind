@@ -283,7 +283,7 @@ struct AccountForm: View {
     private func askPreset() async {
         guard let email = draft.presetQuery, let core = status.core else { return }
         do {
-            try await Task.sleep(for: Self.askAfter)
+            try await AppSeams.clock.sleep(for: Self.askAfter)
             let found = try await core.get(API.Get.AccountsPreset.self, ["email": email])
             if !Task.isCancelled { draft.take(found) }
         } catch {
@@ -531,7 +531,7 @@ struct LinkButton: View {
 
     var body: some View {
         Button {
-            if let url = URL(string: link.url) { NSWorkspace.shared.open(url) }
+            if let url = URL(string: link.url) { AppSeams.links.open(url) }
         } label: {
             Text(link.words)
             MeadowIconView(.external, size: 14)
@@ -556,7 +556,7 @@ struct AppPasswordSteps: View {
                 }
                 .font(.meadow(.ui, 13))
             }
-            Button { NSWorkspace.shared.open(AccountDraft.appPasswords) } label: {
+            Button { AppSeams.links.open(AccountDraft.appPasswords) } label: {
                 Text("Open Google’s App Passwords")
                 MeadowIconView(.external, size: 14)
             }

@@ -39,7 +39,7 @@ final class DeskNotices {
         AccessibilityNotification.Announcement(text).post()
         clearing?.cancel()
         clearing = Task { [weak self] in
-            try? await Task.sleep(for: undo != nil ? Self.offers : Self.shows)
+            try? await AppSeams.clock.sleep(for: undo != nil ? Self.offers : Self.shows)
             guard !Task.isCancelled, self?.shown?.id == notice.id else { return }
             self?.shown = nil
         }

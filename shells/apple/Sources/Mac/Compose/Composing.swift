@@ -206,7 +206,7 @@ final class Composing: ComposeHost {
         announce(text)
         noticeTimer?.cancel()
         noticeTimer = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(seconds))
+            try? await AppSeams.clock.sleep(for: .seconds(seconds))
             guard !Task.isCancelled else { return }
             self?.notice = nil
         }
@@ -270,8 +270,15 @@ final class Composing: ComposeHost {
 
     func known(_ address: String) -> Person? { knownCache[address] }
     func remember(_ address: String, _ person: Person) { knownCache[address] = person }
-    func now() -> Int { Int(Date().timeIntervalSince1970) }
-    func clock() -> Double { ProcessInfo.processInfo.systemUptime }
+    func now() -> Int { Int(AppSeams.clock.now.timeIntervalSince1970) }
+    /// Seconds on the app's clock that only moves forward (`AppSeams.clock.instant`), from when this process first
+    /// asked: how long the send guard has shown.
+    func clock() -> Double {
+        let since = AppSeams.clock.instant - Self.started
+        return Double(since.components.seconds) + Double(since.components.attoseconds) / 1e18
+    }
+
+    private static let started = AppSeams.clock.instant
 
     func announce(_ text: String) {
         NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested,
@@ -282,7 +289,7 @@ final class Composing: ComposeHost {
 
     /// The outbox changed: a draft closed before its copy reached its server may have reached it, so the lists are
     /// read again while one may still be on its way. Drafts as it opens catches up with a copy MailMind put there.
-    func heardTheOutbox(now: Date = Date()) {
+    func heardTheOutbox(now: Date = AppSeams.clock.now) {
         reaching = reaching.filter { now.timeIntervalSince($0.value) < Self.reachingFor }
         if !reaching.isEmpty { draftsChanged() }
     }
@@ -323,7 +330,7 @@ final class Composing: ComposeHost {
             case true?:
                 say("Saved to Drafts")
                 draftsChanged()
-                if composer.waitsForServer, let id = composer.draftId { reaching[id] = Date() }
+                if composer.waitsForServer, let id = composer.draftId { reaching[id] = AppSeams.clock.now }
             case false?:
                 failedSend = snapshot
                 // An earlier save that holds all of it but what isn't an address leaves nothing to lose: the toast
@@ -423,7 +430,7 @@ final class Composing: ComposeHost {
         }
         guard next != nil, seconds > 0 else { return }
         floatTimer = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(seconds))
+            try? await AppSeams.clock.sleep(for: .seconds(seconds))
             guard !Task.isCancelled else { return }
             self?.float = nil
         }
@@ -438,7 +445,7 @@ final class Composing: ComposeHost {
         undoTimer = Task { [weak self] in
             var left = total
             while left > 0 {
-                try? await Task.sleep(for: .seconds(1))
+                try? await AppSeams.clock.sleep(for: .seconds(1), ticking: true)
                 guard let self, !Task.isCancelled else { return }
                 left -= 1
                 if left <= 0 {
@@ -697,7 +704,7 @@ final class Composing: ComposeHost {
         Task { await peek(copy) }
         if wanted {
             dwell = Task { [weak self] in
-                try? await Task.sleep(for: Self.dwellToDraft)   // not on a fast skim
+                try? await AppSeams.clock.sleep(for: Self.dwellToDraft)   // not on a fast skim
                 guard let self, !Task.isCancelled, self.onScreen(copy.key), self.chips[copy.key] != .drafting else { return }
                 await self.check(copy, tries: 0)
             }
@@ -757,7 +764,7 @@ final class Composing: ComposeHost {
         case .draftAheadStatus(let status) where status.status == "generating":
             if tries < Self.liveTries && onScreen(key) {
                 chips[key] = .drafting
-                try? await Task.sleep(for: Self.liveWait)   // the stream says when; this is only a net for a lost event
+                try? await AppSeams.clock.sleep(for: Self.liveWait)   // the stream says when; this is only a net for a lost event
                 await check(copy, tries: tries + 1)
             } else {
                 chips.removeValue(forKey: key)

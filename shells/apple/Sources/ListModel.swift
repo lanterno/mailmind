@@ -162,7 +162,7 @@ final class ListModel: MessageRows {
 final class OncePerFrame {
     private let work: @MainActor () -> Void
     private var queued = false
-    private var ranAt: UInt64 = 0
+    private var ranAt: ContinuousClock.Instant?
 
     init(_ work: @escaping @MainActor () -> Void) {
         self.work = work
@@ -171,17 +171,14 @@ final class OncePerFrame {
     func request(framesPerSecond: Int) {
         guard !queued else { return }
         queued = true
-        let frame = 1_000_000_000 / UInt64(max(framesPerSecond, 1))
-        let now = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
-        let wait = ranAt + frame > now ? ranAt + frame - now : 0
-        DispatchQueue.main.asyncAfter(deadline: .now() + .nanoseconds(Int(wait))) { [weak self] in
-            MainActor.assumeIsolated { self?.run() }
-        }
+        let frame = Duration.nanoseconds(1_000_000_000 / max(framesPerSecond, 1))
+        let wait = ranAt.map { max(.zero, $0 + frame - AppSeams.clock.instant) } ?? .zero
+        AppSeams.clock.after(wait) { [weak self] in self?.run() }
     }
 
     private func run() {
         queued = false
-        ranAt = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
+        ranAt = AppSeams.clock.instant
         work()
     }
 }

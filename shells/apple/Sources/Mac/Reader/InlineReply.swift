@@ -99,7 +99,7 @@ extension Composing {
     /// once; only one gone for good gives up the slot, which closes a reply left open there and saves it.
     func withdrawInline(_ copy: MailCopy) {
         let turn = slotTurn
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+        AppSeams.clock.after(.milliseconds(250)) { [weak self] in
             guard let self, self.slotTurn == turn, self.inlineSlot == copy else { return }
             self.inlineSlot = nil
         }

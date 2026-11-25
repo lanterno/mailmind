@@ -329,7 +329,6 @@ private struct CommitmentRow: View {
     let brief: BriefModel
     let attention: AttentionModel
     let open: (MailCopy) -> Void
-    @Environment(\.openURL) private var openURL
     @Environment(\.meadow) private var meadow
 
     var body: some View {
@@ -362,7 +361,7 @@ private struct CommitmentRow: View {
             .help("Later — snooze to tomorrow")
             .accessibilityLabel("Later — snooze to tomorrow")
             if let link = URL(string: item.link), item.link.hasPrefix("https://") {
-                Button { openURL(link) } label: { MeadowIconView(.external, size: 15) }
+                Button { AppSeams.links.open(link) } label: { MeadowIconView(.external, size: 15) }
                     .meadowButton(.quiet, small: true, icon: true)
                     .help("Open original")
                     .accessibilityLabel("Open Original")
@@ -382,7 +381,7 @@ struct ReviewSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             DeskSheetHead(title: String(localized: "Your week"), icon: .cal) {
                 if let review = model.review {
-                    Text(verbatim: "· \(BriefWords.reviewRange(generated: review.generated, now: Date()))")
+                    Text(verbatim: "· \(BriefWords.reviewRange(generated: review.generated, now: AppSeams.clock.now))")
                         .font(.meadow(.ui, 13.5))
                         .foregroundStyle(meadow.ink3)
                 }

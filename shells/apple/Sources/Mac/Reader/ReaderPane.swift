@@ -193,7 +193,7 @@ struct ReaderPane: View {
         composing.viewing(replyTo ?? copy, wanted: thread == nil && (row?.replyWorthy ?? false),
                           skip: openMessage?.isDraft == true)
         guard thread == nil, row?.seen != true else { return }
-        try? await Task.sleep(for: .milliseconds(1200))
+        try? await AppSeams.clock.sleep(for: .milliseconds(1200))
         guard !Task.isCancelled else { return }
         // A message no list on screen holds (opened from the brief, an answer, the gate) is asked after, once the
         // reader has opened it and so knows its conversation.

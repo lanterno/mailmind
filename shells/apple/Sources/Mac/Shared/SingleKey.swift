@@ -10,11 +10,12 @@ import SwiftUI
 /// and Send later's digits, and g's chords. Only the matching changes: a field still gets what was typed.
 @MainActor
 enum SingleKey {
-    /// The layouts it reads: the one keys are typed on now, and the ASCII-capable one macOS keeps beside it (the one in
-    /// use, where it is ASCII-capable). A test names its own and never changes the Mac's.
-    static var layouts: () -> (typing: TISInputSource?, ascii: TISInputSource?) = {
-        (TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
-         TISCopyCurrentASCIICapableKeyboardLayoutInputSource()?.takeRetainedValue())
+    /// The layouts it reads, through the seam (`AppSeams.layouts`): the one keys are typed on now, and the
+    /// ASCII-capable one macOS keeps beside it (the one in use, where it is ASCII-capable). A test names its own and
+    /// never changes the Mac's.
+    static var layouts: () -> (typing: TISInputSource?, ascii: TISInputSource?) {
+        get { AppSeams.layouts }
+        set { AppSeams.layouts = newValue }
     }
 
     /// The character `event`'s key names, ⇧ making it the shifted one (# and ?): what it typed, where that is ASCII or

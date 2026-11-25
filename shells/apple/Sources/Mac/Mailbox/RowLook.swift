@@ -323,7 +323,7 @@ struct BriefLine: Equatable {
     let gist: String
     let needs: Bool
 
-    init(needs: [API.DigestItem], waiting: Int, canWait: Int?, reading: Bool = false, now: Date = Date(),
+    init(needs: [API.DigestItem], waiting: Int, canWait: Int?, reading: Bool = false, now: Date = AppSeams.clock.now,
          locale: Locale = .current) {
         date = now.formatted(Date.FormatStyle(locale: locale).weekday(.abbreviated).day().month(.abbreviated))
         if reading, needs.isEmpty {

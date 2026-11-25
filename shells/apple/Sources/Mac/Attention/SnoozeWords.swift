@@ -8,7 +8,7 @@ enum SnoozeWords {
     /// The most of a subject the words carry, so the toast stays one line.
     static let subjectLength = 40
 
-    static func said(until epoch: Int, count: Int, subject: String?, now: Date = Date(),
+    static func said(until epoch: Int, count: Int, subject: String?, now: Date = AppSeams.clock.now,
                      calendar: Calendar = .current) -> String {
         let when = SendTimes.words(epoch, now: now, calendar: calendar)
         if count > 1 { return String(localized: "Snoozed \(count) until \(when)") }

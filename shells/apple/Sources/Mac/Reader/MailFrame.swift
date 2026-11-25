@@ -481,7 +481,7 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate {
     private var height: CGFloat?
     /// Measuring again and again while the content may still change, until `settled`.
     private var settling: Task<Void, Never>?
-    private var settled = ContinuousClock.now
+    private var settled = AppSeams.clock.instant
     /// Where the pointer is to be asked about next, and whether a question about it is going.
     private var pointer: CGPoint?
     private var pointing: Task<Void, Never>?
@@ -504,7 +504,7 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate {
     /// Show the frame if nothing has measured it soon: an empty document says nothing.
     func showSoon() {
         Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(1.5))
+            try? await AppSeams.clock.sleep(for: .seconds(1.5))
             self?.view?.isHidden = false
         }
     }
@@ -627,14 +627,14 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate {
     /// quote unfolded or an image arriving changes shows within it. Each call starts over, so a splitter dragged
     /// measures once it rests.
     func settle(for span: Duration) {
-        let until = ContinuousClock.now + span
+        let until = AppSeams.clock.instant + span
         if until > settled { settled = until }
         settling?.cancel()
         settling = Task { @MainActor [weak self] in
             var pause = Duration.milliseconds(16)
-            while (try? await Task.sleep(for: pause)) != nil, let walls = self {
+            while (try? await AppSeams.clock.sleep(for: pause)) != nil, let walls = self {
                 await walls.measure()
-                guard ContinuousClock.now < walls.settled else { return }
+                guard AppSeams.clock.instant < walls.settled else { return }
                 pause = min(pause * 2, .seconds(1))
             }
         }
@@ -654,11 +654,11 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate {
     /// Wait, a moment at most, until the reader has given the frame the height it was last told.
     private func laidOut() async {
         guard let height else { return }
-        let started = ContinuousClock.now
+        let started = AppSeams.clock.instant
         while let view, view.frame.height + 0.5 < min(height, MailFrame.tallest),
-              ContinuousClock.now - started < .milliseconds(500)
+              AppSeams.clock.instant - started < .milliseconds(500)
         {
-            try? await Task.sleep(for: .milliseconds(16))
+            try? await AppSeams.clock.sleep(for: .milliseconds(16))
         }
     }
 
@@ -689,7 +689,7 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate {
     private func showFocus() {
         Task { @MainActor [weak self] in
             for pause in [Duration.milliseconds(40), .milliseconds(250)] {
-                try? await Task.sleep(for: pause)
+                try? await AppSeams.clock.sleep(for: pause)
                 guard let view = self?.view else { return }
                 if let rect = FrameMessage.rect(await FrameAsk.said(FrameAsk.focus, of: view)) { view.reveal(rect) }
             }
@@ -714,7 +714,7 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate {
                 if case .hover(let url)? = await walls.ask(FrameAsk.hover, Self.place(point)), round == walls.leftCount {
                     walls.hover(url)
                 }
-                try? await Task.sleep(for: .milliseconds(40))
+                try? await AppSeams.clock.sleep(for: .milliseconds(40))
             }
             self?.pointing = nil
         }

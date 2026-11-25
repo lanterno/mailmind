@@ -31,7 +31,7 @@ enum LinkOpener {
         case .compose(let to, let subject):
             Composing.shared.newMessage(to: to, subject: subject)
         case .browse(let url, nil):
-            NSWorkspace.shared.open(url)
+            AppSeams.links.open(url)
         case .browse(let url, let warning?):
             let alert = NSAlert()
             alert.alertStyle = .warning
@@ -40,7 +40,7 @@ enum LinkOpener {
             alert.addButton(withTitle: "Cancel")   // the first is the default: Return keeps you here
             alert.addButton(withTitle: "Open Anyway")
             let decide = { (answer: NSApplication.ModalResponse) in
-                if answer == .alertSecondButtonReturn { NSWorkspace.shared.open(url) }
+                if answer == .alertSecondButtonReturn { AppSeams.links.open(url) }
             }
             if let window {
                 alert.beginSheetModal(for: window, completionHandler: decide)

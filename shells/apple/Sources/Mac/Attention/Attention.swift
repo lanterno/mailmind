@@ -10,7 +10,9 @@ enum Snoozing: Hashable, Sendable {
     /// The page's words for each preset at `now`, in the menu's order, with the digit that picks it there: all in the
     /// page's sentence case (`SnoozeMenu.tsx`), so no preset reads as a title beside another that doesn't. Later today
     /// says what it does once it snoozes to the next morning.
-    static func words(_ preset: API.SnoozePreset, at now: Date = Date(), calendar: Calendar = .current) -> String {
+    static func words(_ preset: API.SnoozePreset, at now: Date = AppSeams.clock.now,
+                      calendar: Calendar = .current) -> String
+    {
         switch preset {
         case .laterToday: laterTodayIsTomorrow(at: now, calendar: calendar) ? String(localized: "Tomorrow morning")
             : String(localized: "Later today")

@@ -191,7 +191,7 @@ final class BodyTextView: NSTextView {
     }
 
     override func paste(_ sender: Any?) {
-        let board = NSPasteboard.general
+        let board = AppSeams.pasteboard
         if let pasted = board.string(forType: .string) {
             let clean = LinkClean.clean(pasted)
             guard clean != pasted else { return super.paste(sender) }

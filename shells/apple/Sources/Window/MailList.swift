@@ -88,7 +88,7 @@ final class MailListModel: MessageRows {
     /// Bumped by a refresh, so a page asked for before it is dropped when it comes.
     @ObservationIgnored private var generation = 0
     /// When what is held was last asked for: the list opened, or read again.
-    @ObservationIgnored private var readAt = Date()
+    @ObservationIgnored private var readAt = AppSeams.clock.now
     /// What reads the list again while the rows on screen say how long ago in minutes or hours (`refreshIfAging`).
     @ObservationIgnored private var aging: Task<Void, Never>?
     @ObservationIgnored private let load: Loader
@@ -103,15 +103,15 @@ final class MailListModel: MessageRows {
 
     /// Ask for the first page, and keep the rows' words on how long ago their mail came true as time passes.
     func start() {
-        readAt = Date()
+        readAt = AppSeams.clock.now
         ask(0)
         guard aging == nil else { return }
         aging = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: Self.agingTick)
+                try? await AppSeams.clock.sleep(for: Self.agingTick, ticking: true)
                 // The list let go of (another place opened) ends this at its next tick.
                 guard let self else { return }
-                self.refreshIfAging(now: Date())
+                self.refreshIfAging(now: AppSeams.clock.now)
             }
         }
     }
@@ -192,7 +192,7 @@ final class MailListModel: MessageRows {
 
     /// Read again what is held, as the page refetches a list in place when the event stream says mail changed.
     func refresh() {
-        readAt = Date()
+        readAt = AppSeams.clock.now
         generation += 1
         asked.removeAll()
         let held = pages.isEmpty ? [0] : Array(pages.keys).sorted()

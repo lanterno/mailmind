@@ -9,9 +9,20 @@ protocol LoginItem {
     var status: SMAppService.Status { get }
     func register() throws
     func unregister() throws
+    /// Opens System Settings at its Login Items, where macOS asks for one to be allowed.
+    func openSettings()
 }
 
-extension SMAppService: LoginItem {}
+extension LoginItem {
+    /// A stand-in opens nothing.
+    func openSettings() {}
+}
+
+extension SMAppService: LoginItem {
+    func openSettings() {
+        SMAppService.openSystemSettingsLoginItems()
+    }
+}
 
 /// Settings › General's Open at Login: whether macOS opens MailMind as you log in, so mail scheduled for later goes
 /// at its time and new mail comes in. macOS may ask for it to be allowed in its own Login Items first.
@@ -33,9 +44,15 @@ final class OpenAtLogin {
         status = item?.status ?? .notRegistered
     }
 
-    /// macOS's login item in a person's run; in any other none, and `SMAppService` is never asked.
-    convenience init(_ environment: [String: String] = ProcessInfo.processInfo.environment) {
-        self.init(item: CoreHome.isAPersonsRun(environment) ? SMAppService.mainApp : nil)
+    /// The app's login item (`AppSeams.loginItem`): macOS's in a person's run; in any other none, and
+    /// `SMAppService` is never asked.
+    convenience init() {
+        self.init(item: AppSeams.loginItem)
+    }
+
+    /// The login item a run with `environment` has (`SystemLoginItem.forThisProcess`).
+    convenience init(_ environment: [String: String]) {
+        self.init(item: SystemLoginItem.forThisProcess(environment))
     }
 
     /// Whether this run has the switch.
@@ -62,6 +79,11 @@ final class OpenAtLogin {
     func refresh() {
         guard let item else { return }
         status = item.status
+    }
+
+    /// System Settings at its Login Items.
+    func openSettings() {
+        item?.openSettings()
     }
 
     static let help = String(localized: """
@@ -92,7 +114,7 @@ struct OpenAtLoginCard: View {
             if !model.available { SettingHelp(OpenAtLogin.notAvailable) }
             if model.needsApproval {
                 SettingLine(String(localized: "macOS asks you to allow MailMind in Login Items.")) {
-                    Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
+                    Button("Open Login Items") { model.openSettings() }
                         .meadowButton(small: true)
                 }
             }

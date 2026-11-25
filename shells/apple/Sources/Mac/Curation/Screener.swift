@@ -147,7 +147,7 @@ final class ScreenerModel {
             let who = Self.calling(item, sender)
             notices.say(verdict == .keep ? String(localized: "Let in \(who)")
                 : String(localized: "Screened out \(who)") + (changed.trashed ? " · trashed" : ""))
-            if let item { recent.insert(Decided(sender: item, verdict: verdict, at: Date()), at: 0) }
+            if let item { recent.insert(Decided(sender: item, verdict: verdict, at: AppSeams.clock.now), at: 0) }
             self.changed()
             await load()
         } catch {

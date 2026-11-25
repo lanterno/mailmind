@@ -193,7 +193,7 @@ struct AskCite: View {
 
     /// The day a source was sent, as the mockup's citations say it: the time today (or Today, for a day alone), else
     /// the day and the month, and the year when it isn't this one; the server's words where they aren't a date.
-    static func day(_ date: String, now: Date = .now, calendar: Calendar = .current) -> String {
+    static func day(_ date: String, now: Date = AppSeams.clock.now, calendar: Calendar = .current) -> String {
         let full = ISO8601DateFormatter()
         let plain = DateFormatter()
         plain.locale = Locale(identifier: "en_US_POSIX")

@@ -351,7 +351,7 @@ final class Mailbox {
     private func digestAgain() {
         guard digestSoon == nil else { return }
         digestSoon = Task {
-            try? await Task.sleep(for: .milliseconds(400))
+            try? await AppSeams.clock.sleep(for: .milliseconds(400))
             digestSoon = nil
             let was = accounts
             await readDigest()
@@ -817,7 +817,7 @@ final class Mailbox {
         let number = toastNumber
         toast = Toast(text: text, detail: detail, undo: undo, refused: refused)
         Task {
-            try? await Task.sleep(for: .milliseconds(undo == nil ? Toast.saysMs : Toast.offersMs))
+            try? await AppSeams.clock.sleep(for: .milliseconds(undo == nil ? Toast.saysMs : Toast.offersMs))
             if toastNumber == number { toast = nil }
         }
     }

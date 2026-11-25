@@ -32,10 +32,10 @@ final class AppStatus {
     /// The meetings coming up (`/api/upcoming`), read each minute.
     private(set) var upcoming: [API.UpcomingEvent] = []
     /// The minute it is, for the words that count down, and the hour Automatic's light goes by.
-    private(set) var now = Date()
+    private(set) var now = AppSeams.clock.now
     /// The day it is, which the list's day heads and the brief's line go by: it moves on at midnight, as the clock or
     /// the zone is changed, and on waking (`dayMayHaveChanged`), so a list open overnight heads its mail Yesterday.
-    private(set) var today = Calendar.current.startOfDay(for: Date())
+    private(set) var today = Calendar.current.startOfDay(for: AppSeams.clock.now)
     @ObservationIgnored private var dayWatch: [any NSObjectProtocol] = []
     /// Whether macOS is in Dark Mode, which makes Automatic Night: the app's status follows it from launch
     /// (`followSystemAppearance`); a test sets it.
@@ -88,14 +88,14 @@ final class AppStatus {
         self.newMail = newMail
         newMail.preferences = { [weak self] in self?.preferences }
         newMail.name = { [weak self] in self?.name($0) ?? StatusWords.short($0) }
-        newMail.now = { [weak self] in self?.now ?? Date() }
+        newMail.now = { [weak self] in self?.now ?? AppSeams.clock.now }
         newMail.hasAccounts = { [weak self] in self?.accounts.isEmpty == false }
         newMail.lookUp = { [weak self] account, folder, uid in await self?.row(account: account, folder: folder, uid: uid) }
         watchTheDay()
     }
 
     /// The day as it is now, where it has moved on (or back, as the clock or the zone is set).
-    func dayMayHaveChanged(now: Date = Date(), calendar: Calendar = .current) {
+    func dayMayHaveChanged(now: Date = AppSeams.clock.now, calendar: Calendar = .current) {
         let day = calendar.startOfDay(for: now)
         if day != today { today = day }
     }
@@ -123,7 +123,7 @@ final class AppStatus {
     /// What a test or a rendering shows with no core: the answers the routes would give.
     func hold(digest: API.Digest? = nil, accounts: [API.AccountRow] = [], health: [API.AccountStanding] = [],
               preferences: API.Preferences? = nil, upcoming: [API.UpcomingEvent] = [], failingJobs: [String] = [],
-              now: Date = Date())
+              now: Date = AppSeams.clock.now)
     {
         self.digest = digest
         self.accounts = accounts
@@ -209,7 +209,7 @@ final class AppStatus {
     private func digestAgain() {
         guard digestSoon == nil else { return }
         digestSoon = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(400))
+            try? await AppSeams.clock.sleep(for: .milliseconds(400))
             guard !Task.isCancelled else { return }
             self?.digestSoon = nil
             await self?.readDigest()
@@ -280,7 +280,7 @@ final class AppStatus {
         _ = try? await core.post(API.Post.Refresh.self, API.NoBody())
         var ended = false
         for _ in 0..<40 {
-            try? await Task.sleep(for: .seconds(3))
+            try? await AppSeams.clock.sleep(for: .seconds(3))
             await readHealth()
             await readDigest()
             ended = Self.syncEnded(before: before, after: health, accounts: addresses,
@@ -376,7 +376,7 @@ final class AppStatus {
         do {
             _ = try await core.post(API.Post.SyncRetryAccount.self, API.SyncRetryBody(account: account))
             say(String(localized: "Re-syncing \(StatusWords.short(account))"))
-            try? await Task.sleep(for: .seconds(2.5))
+            try? await AppSeams.clock.sleep(for: .seconds(2.5))
         } catch {
             say(String(localized: "Couldn’t retry"), refused: true)
         }
@@ -389,7 +389,7 @@ final class AppStatus {
         do {
             _ = try await core.post(API.Post.AccountsTrustCert.self, API.NamesAnAccount(email: account))
             say(String(localized: "Trusted · re-syncing \(StatusWords.short(account))"))
-            try? await Task.sleep(for: .seconds(2.5))
+            try? await AppSeams.clock.sleep(for: .seconds(2.5))
         } catch {
             say(String(localized: "Couldn’t trust it"), refused: true)
         }
@@ -404,7 +404,7 @@ final class AppStatus {
         Announce.say(text)
         noticeGoes?.cancel()
         noticeGoes = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(4))
+            try? await AppSeams.clock.sleep(for: .seconds(4))
             guard !Task.isCancelled, self?.notice == notice else { return }
             self?.notice = nil
         }
@@ -483,12 +483,12 @@ final class AppStatus {
     /// (`Soon.wake`), not up to a minute late, as it did when the minute was read once a minute from launch.
     private func tick() {
         ticking = Task { [weak self] in
-            var read = Date()
+            var read = AppSeams.clock.now
             while !Task.isCancelled {
-                let wait = Soon.wake(self?.upcoming ?? [], now: Date())
-                try? await Task.sleep(for: .seconds(wait))
+                let wait = Soon.wake(self?.upcoming ?? [], now: AppSeams.clock.now)
+                try? await AppSeams.clock.sleep(for: .seconds(wait), ticking: true)
                 guard let self, !Task.isCancelled else { return }
-                self.now = Date()
+                self.now = AppSeams.clock.now
                 self.dayMayHaveChanged(now: self.now)
                 if self.now.timeIntervalSince(read) >= 55 {
                     read = self.now

@@ -311,7 +311,7 @@ enum BriefWords {
     }
 
     /// Today here, as a task's due day is written.
-    static func localDay(_ now: Date = Date(), zone: TimeZone = .current) -> String {
+    static func localDay(_ now: Date = AppSeams.clock.now, zone: TimeZone = .current) -> String {
         SuggestedTime.sent(now, allDay: true, in: zone)
     }
 }

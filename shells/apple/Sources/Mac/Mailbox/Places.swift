@@ -155,7 +155,7 @@ func labelQuery(_ name: String) -> String {
 }
 
 /// A view's query: one that changes with the day says so (`viewQuery`).
-func viewQuery(_ view: API.ListedView, now: Date = Date()) -> String {
+func viewQuery(_ view: API.ListedView, now: Date = AppSeams.clock.now) -> String {
     guard view.dynamic == "last7" || view.q == "__LAST7__" else { return view.q }
     let week = now.addingTimeInterval(-7 * 86_400)
     return "after:" + String(ISO8601DateFormatter().string(from: week).prefix(10))

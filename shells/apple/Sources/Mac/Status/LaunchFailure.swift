@@ -53,7 +53,7 @@ struct LaunchFailure: View {
                 Button("Copy Details") { Task { await Diagnostics.copy() } }
                     .meadowButton(Self.triesAgain(why) ? .standard : .primary)
                 Button("Show in Finder") {
-                    if let folder { NSWorkspace.shared.activateFileViewerSelecting([folder]) }
+                    if let folder { AppSeams.links.reveal([folder]) }
                 }
                 .meadowButton()
                 .disabled(folder == nil)
@@ -152,7 +152,7 @@ enum StartFresh {
 
     /// Move the database out of `folder` into its `backups`, named for `now`: where it went, or nil when there was none.
     @discardableResult
-    static func move(in folder: URL, now: Date = Date(), manager: FileManager = .default) throws -> URL? {
+    static func move(in folder: URL, now: Date = AppSeams.clock.now, manager: FileManager = .default) throws -> URL? {
         let database = folder.appending(path: files[0])
         guard manager.fileExists(atPath: database.path(percentEncoded: false)) else { return nil }
         let into = folder.appending(path: backups, directoryHint: .isDirectory)
