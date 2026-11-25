@@ -36,6 +36,9 @@ each with one line:
                         held back, so the reader offers to load them; `off` sanitizes them again. The frame's sandbox
                         and its document's policy are the boundary, so a test takes the sanitizer away to show they
                         hold alone
+    events              `events <id>`: the id of the last event published on the live stream, which a page that has
+                        applied it has heard everything up to. Only the Rust server's launcher (mm-served) answers it:
+                        the end-to-end framework, which waits on it, runs the page on that server alone
     (end of input)      it stops and exits
 
 Test hooks live here and never in the app: the frozen clock, the tripwire, the schema checks, the sanitizer taken

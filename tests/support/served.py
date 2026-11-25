@@ -101,14 +101,26 @@ class Served(AppClient):
 
     def ask(self, command_line, timeout=60):
         """One command of the protocol; the server's one-line answer must be ok."""
+        answer = self.answer(command_line, timeout)
+        if answer != "ok":
+            raise AssertionError(f"{command_line.split()[0]}: {answer}")
+
+    def answer(self, command_line, timeout=60):
+        """One command of the protocol, and the server's one-line answer, whatever it is."""
         try:
             self.proc.stdin.write(command_line + "\n")
             self.proc.stdin.flush()
         except BrokenPipeError:
             raise AssertionError(f"the server had ended (status {self.proc.wait()}); {self.output()}") from None
-        answer = self._line(timeout)
-        if answer != "ok":
-            raise AssertionError(f"{command_line.split()[0]}: {answer}")
+        return self._line(timeout)
+
+    def high_water(self):
+        """The id of the last event the app published (`<run>-<n>`): a page that has applied it has heard everything.
+        The Rust server's launcher answers it; the Python one doesn't, and the end-to-end framework runs on the Rust one."""
+        said = self.answer("events")
+        if not said.startswith("events "):
+            raise AssertionError(f"events: {said}")
+        return said.split(" ", 1)[1]
 
     def request(self, method, path, body=None, headers=None):
         # The token this server's page carries, where AppClient would send the in-process app's.
