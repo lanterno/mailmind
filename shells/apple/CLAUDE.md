@@ -130,7 +130,7 @@ and `mailto:` registration), its Swift module still `MailMind`.
   The XCFramework is rebuilt by every `just apple build`, so bindings and library always come from the same core.
   A route or schema change runs `just apple gen-api` the same way.
 - **Never run the Mac app on a person's data by accident.** With no `MAILMIND_HOME` it opens MailMind's own folder in
-  Application Support and the login Keychain: that is `just apple run`. A demo, a measure run or a test names a
+  Application Support and the login Keychain: that is `just apple run`. MailMind Dev, the Debug build, never does: with no `MAILMIND_HOME` it opens nothing (`DevNamesNoHome`). A demo, a measure run or a test names a
   temporary home with `MAILMIND_HOME`, a key with `MAILMIND_DB_KEY` and the keychain's stand-in with
   `MAILMIND_TEST_KEYCHAIN` (as `just apple demo` does), and one that names no home opens nothing. Step 0's mailbox
   lives in a folder of its own, never inside the app's.
