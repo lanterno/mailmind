@@ -26,9 +26,7 @@ enum KeyLayouts {
     static func event(_ typed: String, _ code: UInt16, held: NSEvent.ModifierFlags = [], in window: NSWindow? = nil)
         throws -> NSEvent
     {
-        try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: held, timestamp: 0,
-                                       windowNumber: window?.windowNumber ?? 0, context: nil, characters: typed,
-                                       charactersIgnoringModifiers: typed, isARepeat: false, keyCode: code))
+        try RealKeys.event(typed, code, held: held, in: window)
     }
 }
 

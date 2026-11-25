@@ -19,15 +19,6 @@ final class MenuKeysTests: XCTestCase {
         app = nil
     }
 
-    /// A key as the window server hands it to AppKit: the key's code with what is held, its characters worked out by
-    /// the Mac's keyboard layout. An `NSEvent` made with `keyEvent(with:…)` has no layout behind it, and AppKit's
-    /// menus match it as no keyboard would: ⌘F fires ⇧⌘F's Forward and ⇧⌘F nothing, as a test tool's keys once did.
-    private static func press(_ code: CGKeyCode, _ held: CGEventFlags) throws -> NSEvent {
-        let made = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: true))
-        made.flags = held
-        return try XCTUnwrap(NSEvent(cgEvent: made))
-    }
-
     /// Over every account, Mailbox › Drafts (⌘3) goes to the first account's Drafts, as the page's g d does, and
     /// says whose it is and why; from one account's Inbox, Sent (⌘2) goes to that account's, with nothing to say.
     func testAFoldersKeyOverEveryAccountSaysWhoseFolderItOpened() async throws {
@@ -38,7 +29,7 @@ final class MenuKeysTests: XCTestCase {
         await mailbox.refresh()
         app.openList()
         XCTAssertEqual(app.place, .allInboxes)
-        let drafts = try Self.press(20, .maskCommand)
+        let drafts = try RealKeys.event(20, .maskCommand)
         XCTAssertEqual(fired(drafts) { self.bar(mailbox: mailbox, window: nil, writing: nil) }, ["Drafts"], "enabled, and fired")
         XCTAssertEqual(app.place, .folder(account: Fixture.ada, folder: "Drafts"))
         let said = try XCTUnwrap(mailbox.toast?.text)
@@ -47,7 +38,7 @@ final class MenuKeysTests: XCTestCase {
 
         let before = mailbox.toast?.id
         app.place = .folder(account: Fixture.work, folder: "INBOX")
-        let sent = try Self.press(19, .maskCommand)
+        let sent = try RealKeys.event(19, .maskCommand)
         XCTAssertEqual(fired(sent) { self.bar(mailbox: mailbox, window: nil, writing: nil) }, ["Sent"])
         XCTAssertEqual(app.place, .folder(account: Fixture.work, folder: "[Gmail]/Sent Mail"), "the account in front's own")
         XCTAssertEqual(mailbox.toast?.id, before, "with nothing more to say")
@@ -125,17 +116,17 @@ final class MenuKeysTests: XCTestCase {
         let closed = { self.bar(mailbox: mailbox, window: nil, writing: writing, door: doors) }
         let zero: CGKeyCode = 29, one: CGKeyCode = 18, b: CGKeyCode = 11, k: CGKeyCode = 40, f: CGKeyCode = 3
         let r: CGKeyCode = 15, u: CGKeyCode = 32, a: CGKeyCode = 0
-        let commandZero = try Self.press(zero, .maskCommand)
+        let commandZero = try RealKeys.event(zero, .maskCommand)
         try XCTSkipUnless(commandZero.charactersIgnoringModifiers == "0", "this Mac's keyboard has no 0 where a US one has")
 
         XCTAssertEqual(titles("Window", in: closed()), ["MailMind"], "Window offers the mail window again")
         XCTAssertEqual(fired(commandZero, in: closed), ["All Inboxes"])
         XCTAssertEqual(app.place, .allInboxes)
         XCTAssertEqual(door.reopened, 1, "the mail window opens again, on All Inboxes")
-        XCTAssertEqual(fired(try Self.press(one, .maskCommand), in: closed), ["Inbox"])
+        XCTAssertEqual(fired(try RealKeys.event(one, .maskCommand), in: closed), ["Inbox"])
         XCTAssertEqual(app.place?.isInbox, true)
         XCTAssertEqual(door.reopened, 2)
-        XCTAssertEqual(fired(try Self.press(b, [.maskAlternate, .maskCommand]), in: closed), ["Today’s Brief"])
+        XCTAssertEqual(fired(try RealKeys.event(b, [.maskAlternate, .maskCommand]), in: closed), ["Today’s Brief"])
         XCTAssertEqual(app.place, .desk(.brief))
         XCTAssertEqual(door.reopened, 3)
 
@@ -143,7 +134,7 @@ final class MenuKeysTests: XCTestCase {
         let waits: [(CGKeyCode, CGEventFlags)] = [(r, .maskCommand), (a, [.maskControl, .maskCommand]),
                                                   (u, [.maskShift, .maskCommand]), (f, [.maskAlternate, .maskCommand])]
         for (code, held) in waits {
-            XCTAssertEqual(fired(try Self.press(code, held), in: closed), [], "\(code) with \(held) waits")
+            XCTAssertEqual(fired(try RealKeys.event(code, held), in: closed), [], "\(code) with \(held) waits")
         }
         for title in ["Reply", "Forward", "Archive", "Delete", "Next Unread", "Find in Message…"] {
             XCTAssertFalse(try enabled(title, in: closed()), "\(title) waits for the mail window")
@@ -151,10 +142,10 @@ final class MenuKeysTests: XCTestCase {
         XCTAssertEqual(door.reopened, 3, "none of them opened the window")
 
         // Search and the palette open it again, as a place does, and go there.
-        XCTAssertEqual(fired(try Self.press(f, .maskCommand), in: closed), ["Search"])
+        XCTAssertEqual(fired(try RealKeys.event(f, .maskCommand), in: closed), ["Search"])
         XCTAssertTrue(mailbox.searchFocus, "the search box takes the keys as the window shows")
         XCTAssertEqual(door.reopened, 4)
-        XCTAssertEqual(fired(try Self.press(k, .maskCommand), in: closed), ["Command Palette…"])
+        XCTAssertEqual(fired(try RealKeys.event(k, .maskCommand), in: closed), ["Command Palette…"])
         XCTAssertTrue(mailbox.paletteOpen)
         XCTAssertEqual(door.reopened, 5)
         mailbox.searchFocus = false
@@ -216,9 +207,9 @@ final class MenuKeysTests: XCTestCase {
                                                                queue: nil) { note in
                 if let item = note.userInfo?["MenuItem"] as? NSMenuItem { fired.titles.append(item.title) }
             }
-            _ = bar.performKeyEquivalent(with: try Self.press(k, .maskCommand))
-            _ = bar.performKeyEquivalent(with: try Self.press(f, .maskCommand))
-            _ = bar.performKeyEquivalent(with: try Self.press(b, [.maskAlternate, .maskCommand]))
+            _ = bar.performKeyEquivalent(with: try RealKeys.event(k, .maskCommand))
+            _ = bar.performKeyEquivalent(with: try RealKeys.event(f, .maskCommand))
+            _ = bar.performKeyEquivalent(with: try RealKeys.event(b, [.maskAlternate, .maskCommand]))
             NotificationCenter.default.removeObserver(token)
             let said = handed == nil ? "drawn as MailMind opens" : "drawn with the window closed"
             XCTAssertEqual(fired.titles, ["Command Palette…", "Search", "Today’s Brief"], said)
@@ -268,21 +259,21 @@ final class MenuKeysTests: XCTestCase {
 
         // F and U, where a US keyboard has them.
         let f: CGKeyCode = 3, u: CGKeyCode = 32
-        let commandF = try Self.press(f, .maskCommand)
+        let commandF = try RealKeys.event(f, .maskCommand)
         try XCTSkipUnless(commandF.charactersIgnoringModifiers == "f", "this Mac's keyboard has no F where a US one has")
-        XCTAssertEqual(try Self.press(f, [.maskShift, .maskCommand]).charactersIgnoringModifiers, "F")
-        XCTAssertEqual(try Self.press(u, .maskCommand).charactersIgnoringModifiers, "u")
-        XCTAssertEqual(try Self.press(u, [.maskShift, .maskCommand]).charactersIgnoringModifiers, "U")
+        XCTAssertEqual(try RealKeys.event(f, [.maskShift, .maskCommand]).charactersIgnoringModifiers, "F")
+        XCTAssertEqual(try RealKeys.event(u, .maskCommand).charactersIgnoringModifiers, "u")
+        XCTAssertEqual(try RealKeys.event(u, [.maskShift, .maskCommand]).charactersIgnoringModifiers, "U")
 
         // The mail window: ⌘F searches, ⇧⌘F forwards, ⇧⌘U marks, ⌘U is nothing's, ⌥⌘F finds in the message.
         XCTAssertEqual(fired(commandF, in: main), ["Search"])
         await until { mailbox.searchFocus }
-        XCTAssertEqual(fired(try Self.press(f, [.maskShift, .maskCommand]), in: main), ["Forward"])
-        XCTAssertEqual(fired(try Self.press(u, .maskCommand), in: main), [])
-        let marked = fired(try Self.press(u, [.maskShift, .maskCommand]), in: main)
+        XCTAssertEqual(fired(try RealKeys.event(f, [.maskShift, .maskCommand]), in: main), ["Forward"])
+        XCTAssertEqual(fired(try RealKeys.event(u, .maskCommand), in: main), [])
+        let marked = fired(try RealKeys.event(u, [.maskShift, .maskCommand]), in: main)
         XCTAssertEqual(marked.count, 1)
         XCTAssertTrue(marked.first?.hasPrefix("Mark as") == true, "⇧⌘U marks: \(marked)")
-        XCTAssertEqual(fired(try Self.press(f, [.maskAlternate, .maskCommand]), in: main), ["Find in Message…"])
+        XCTAssertEqual(fired(try RealKeys.event(f, [.maskAlternate, .maskCommand]), in: main), ["Find in Message…"])
         await until { self.found == 1 }
 
         // A message's own window: ⌘F finds in its message, as there is no search there; the rest as in the mail window.
@@ -290,9 +281,9 @@ final class MenuKeysTests: XCTestCase {
         XCTAssertEqual(fired(commandF, in: own), ["Find in Message…"])
         await until { self.found == 2 }
         XCTAssertFalse(mailbox.searchFocus, "the mail window's search is left alone")
-        XCTAssertEqual(fired(try Self.press(f, [.maskShift, .maskCommand]), in: own), ["Forward"])
-        XCTAssertEqual(fired(try Self.press(u, .maskCommand), in: own), [])
-        XCTAssertEqual(fired(try Self.press(u, [.maskShift, .maskCommand]), in: own), ["Mark as Unread"])
+        XCTAssertEqual(fired(try RealKeys.event(f, [.maskShift, .maskCommand]), in: own), ["Forward"])
+        XCTAssertEqual(fired(try RealKeys.event(u, .maskCommand), in: own), [])
+        XCTAssertEqual(fired(try RealKeys.event(u, [.maskShift, .maskCommand]), in: own), ["Mark as Unread"])
     }
 
     /// What the menus show beside each item: Forward and Mark as Unread hold ⇧, Search doesn't, and Find in Message is
@@ -397,40 +388,40 @@ final class MenuKeysTests: XCTestCase {
 
         let a: CGKeyCode = 0, f: CGKeyCode = 3, r: CGKeyCode = 15, u: CGKeyCode = 32, l: CGKeyCode = 37
         let m: CGKeyCode = 46, delete: CGKeyCode = 51
-        let commandR = try Self.press(r, .maskCommand)
+        let commandR = try RealKeys.event(r, .maskCommand)
         try XCTSkipUnless(commandR.charactersIgnoringModifiers == "r", "this Mac's keyboard has no R where a US one has")
 
         // Reply, Reply All and Forward, on the window's message.
         XCTAssertEqual(fired(commandR, in: menus), ["Reply"])
-        XCTAssertEqual(fired(try Self.press(r, [.maskShift, .maskCommand]), in: menus), ["Reply All"])
-        XCTAssertEqual(fired(try Self.press(f, [.maskShift, .maskCommand]), in: menus), ["Forward"])
+        XCTAssertEqual(fired(try RealKeys.event(r, [.maskShift, .maskCommand]), in: menus), ["Reply All"])
+        XCTAssertEqual(fired(try RealKeys.event(f, [.maskShift, .maskCommand]), in: menus), ["Forward"])
 
         // Mark, Star and Reply Later ask the server about it, and leave it in the window.
-        XCTAssertEqual(fired(try Self.press(u, [.maskShift, .maskCommand]), in: menus).count, 1)
+        XCTAssertEqual(fired(try RealKeys.event(u, [.maskShift, .maskCommand]), in: menus).count, 1)
         await until { !server.asked(API.Post.Seen.path).isEmpty }
         XCTAssertEqual(Self.keys(server, API.Post.Seen.path), [copy.key])
-        XCTAssertEqual(fired(try Self.press(l, [.maskShift, .maskCommand]), in: menus).count, 1)
+        XCTAssertEqual(fired(try RealKeys.event(l, [.maskShift, .maskCommand]), in: menus).count, 1)
         await until { !server.asked(API.Post.Flag.path).isEmpty }
         XCTAssertEqual(Self.keys(server, API.Post.Flag.path), [copy.key])
-        XCTAssertEqual(fired(try Self.press(l, [.maskControl, .maskCommand]), in: menus), ["Reply Later"])
+        XCTAssertEqual(fired(try RealKeys.event(l, [.maskControl, .maskCommand]), in: menus), ["Reply Later"])
         await until { !server.asked(API.Post.Replylater.path).isEmpty }
         XCTAssertEqual(Self.keys(server, API.Post.Replylater.path), [copy.key])
 
         // Move To… asks where, over the window.
-        XCTAssertEqual(fired(try Self.press(m, [.maskShift, .maskCommand]), in: menus), ["Move To…"])
+        XCTAssertEqual(fired(try RealKeys.event(m, [.maskShift, .maskCommand]), in: menus), ["Move To…"])
         XCTAssertEqual(verbs.moving?.from, copy.folder)
         verbs.moving = nil
 
         // Archive, Delete, Mute and Snooze each send it away, and the window closes.
-        XCTAssertEqual(fired(try Self.press(a, [.maskControl, .maskCommand]), in: menus), ["Archive"])
+        XCTAssertEqual(fired(try RealKeys.event(a, [.maskControl, .maskCommand]), in: menus), ["Archive"])
         await until { verbs.left }
         XCTAssertEqual(Self.keys(server, API.Post.Archive.path), [copy.key])
         await again()
-        XCTAssertEqual(fired(try Self.press(delete, .maskCommand), in: menus), ["Delete"])
+        XCTAssertEqual(fired(try RealKeys.event(delete, .maskCommand), in: menus), ["Delete"])
         await until { verbs.left }
         XCTAssertEqual(Self.keys(server, API.Post.Trash.path), [copy.key])
         await again()
-        XCTAssertEqual(fired(try Self.press(m, [.maskControl, .maskCommand]), in: menus), ["Mute Thread"])
+        XCTAssertEqual(fired(try RealKeys.event(m, [.maskControl, .maskCommand]), in: menus), ["Mute Thread"])
         await until { verbs.left }
         XCTAssertEqual(Self.keys(server, API.Post.Mute.path), [copy.key])
         await again()
@@ -462,7 +453,7 @@ final class MenuKeysTests: XCTestCase {
         let (window, _) = tagged(nil, tracker)
         defer { window.close() }
         let w: CGKeyCode = 13
-        let commandW = try Self.press(w, .maskCommand)
+        let commandW = try RealKeys.event(w, .maskCommand)
         try XCTSkipUnless(commandW.charactersIgnoringModifiers == "w", "this Mac's keyboard has no W where a US one has")
         let menus = { self.bar(mailbox: nil, window: nil, writing: nil, keyWindow: tracker) }
 
@@ -514,7 +505,7 @@ final class MenuKeysTests: XCTestCase {
             XCTAssertEqual(desk.sheet?.id, sheet, title)
             XCTAssertTrue(Desk.asked.isEmpty, "once")
         }
-        let ask = try Self.press(0, [.maskAlternate, .maskCommand])
+        let ask = try RealKeys.event(0, [.maskAlternate, .maskCommand])
         XCTAssertEqual(fired(ask, in: closed), ["Ask Your Mail…"], "and through its key")
         XCTAssertEqual(door.reopened, panels.count + 1)
         let desk = Desk()

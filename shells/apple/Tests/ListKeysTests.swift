@@ -57,10 +57,7 @@ final class ListKeysTests: XCTestCase {
 
     /// A key typed in the list, as AppKit hands it over: its characters, its key code, what was held.
     private func press(_ typed: String, _ table: NSView, code: UInt16 = 0, held: NSEvent.ModifierFlags = []) {
-        let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: held, timestamp: 0,
-                                     windowNumber: table.window?.windowNumber ?? 0, context: nil, characters: typed,
-                                     charactersIgnoringModifiers: typed, isARepeat: false, keyCode: code)
-        table.keyDown(with: try! XCTUnwrap(event))
+        table.keyDown(with: try! RealKeys.event(typed, code, held: held, in: table.window))
     }
 
     // MARK: Keys the list doesn't use

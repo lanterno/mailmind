@@ -515,13 +515,8 @@ final class ComposerTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(150))
         XCTAssertFalse(shown.firstResponder is NSDatePicker, "not the date and time: \(String(describing: shown.firstResponder))")
         XCTAssertFalse(shown.firstResponder is NSTextView, "nor a field's editor")
-        func press(_ code: UInt16, _ key: String) throws {
-            shown.sendEvent(try XCTUnwrap(NSEvent.keyEvent(
-                with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: shown.windowNumber,
-                context: nil, characters: key, charactersIgnoringModifiers: key, isARepeat: false, keyCode: code)))
-        }
         let hour = Int(Date().timeIntervalSince1970) + 3600
-        try press(36, "\r")
+        try RealKeys.press("\r", 36, in: shown)
         await until { !host.sent.isEmpty }
         XCTAssertEqual(Double(try XCTUnwrap(host.sent.first?.after)), Double(hour), accuracy: 5, "in 1 hour")
     }

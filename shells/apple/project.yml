@@ -80,6 +80,9 @@ targets:
     platform: macOS
     sources:
       - Tests
+      # MailMindTestKit: keys, the mouse, the keyboard's place and the menu bar's items, as a person meets them. The
+      # in-app driver will reuse it, so it holds no XCTest.
+      - TestKit
       - Sources/ListModel.swift
       - Generated/MailMindCore.swift
       # The client over the core in this process, and the window's list over it

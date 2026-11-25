@@ -27,12 +27,6 @@ final class SendLaterKeysTests: XCTestCase {
         ((view as? V).map { [$0] } ?? []) + view.subviews.flatMap { views(kind, in: $0) }
     }
 
-    private func press(_ code: UInt16, _ key: String, in window: NSWindow, flags: NSEvent.ModifierFlags = []) throws {
-        window.sendEvent(try XCTUnwrap(NSEvent.keyEvent(
-            with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: window.windowNumber,
-            context: nil, characters: key, charactersIgnoringModifiers: key, isARepeat: false, keyCode: code)))
-    }
-
     func testTheOwnTimeFieldKeepsItsDigitsArrowsAndReturn() async throws {
         let window = NSWindow(contentRect: NSRect(x: -20_000, y: -20_000, width: 400, height: 300), styleMask: [.titled],
                               backing: .buffered, defer: false)
@@ -59,8 +53,8 @@ final class SendLaterKeysTests: XCTestCase {
         XCTAssertTrue(shown.makeFirstResponder(picker))
         try await Task.sleep(for: .milliseconds(150))
 
-        try press(19, "2", in: shown)
-        try press(18, "1", in: shown)
+        try RealKeys.press("2", 19, in: shown)
+        try RealKeys.press("1", 18, in: shown)
         try await Task.sleep(for: .milliseconds(150))
         XCTAssertTrue(host.sent.isEmpty, "a digit in the field picks no preset: \(host.sent.map(\.after))")
         XCTAssertTrue(shown.firstResponder === picker, "the field still has the keyboard")
@@ -69,14 +63,14 @@ final class SendLaterKeysTests: XCTestCase {
         picker.dateValue = Date().addingTimeInterval(3 * 86_400)
         picker.sendAction(picker.action, to: picker.target)
         let before = picker.dateValue
-        try press(126, String(UnicodeScalar(NSUpArrowFunctionKey)!), in: shown, flags: [.numericPad, .function])
+        try RealKeys.press(String(UnicodeScalar(NSUpArrowFunctionKey)!), 126, in: shown)
         try await Task.sleep(for: .milliseconds(150))
         XCTAssertTrue(host.sent.isEmpty)
         XCTAssertGreaterThan(picker.dateValue, before, "↑ steps the field's time")
 
         // Return schedules the time typed, not the preset the keyboard was last on.
         let typed = Int(picker.dateValue.timeIntervalSince1970)
-        try press(36, "\r", in: shown)
+        try RealKeys.press("\r", 36, in: shown)
         await until { !host.sent.isEmpty }
         XCTAssertEqual(host.sent.first?.after, typed, "the time typed")
     }

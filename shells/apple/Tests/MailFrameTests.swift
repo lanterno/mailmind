@@ -311,31 +311,6 @@ final class MailFrameTests: XCTestCase {
         for owner in owners where owner.responds(to: selector) { owner.perform(selector, with: event) }
     }
 
-    /// A key pressed as a person presses one. It is posted into the app's queue and taken out as the app's run takes
-    /// it, which makes it the app's current event, then goes the way AppKit sends a key-down in the key window: offered
-    /// first as a key equivalent to the window's views, as one is with ⌘ or ⌃ held or a function key's (the arrows,
-    /// Page Up and Down, Home and End), where WebKit claims every key while it has the keyboard; then, if nothing
-    /// took it, through the app (`NSApp.sendEvent`) to the window's first responder, and back through it should WebKit
-    /// give the key back. The app the tests run in is never active, so it has no key window and AppKit would skip the
-    /// first step: the test takes it for AppKit, since making the app active would take the keyboard from the Mac's
-    /// person. A function key carries the flags AppKit gives one.
-    private func press(_ typed: String, _ code: UInt16, held: NSEvent.ModifierFlags = [], in frame: Shown) throws {
-        let scalar = typed.unicodeScalars.first.map { Int($0.value) } ?? 0
-        var flags = held
-        if (0xF700...0xF8FF).contains(scalar) { flags.insert(.function) }
-        if (NSUpArrowFunctionKey...NSRightArrowFunctionKey).contains(scalar) { flags.insert(.numericPad) }
-        NSApp.postEvent(try XCTUnwrap(NSEvent.keyEvent(
-            with: .keyDown, location: .zero, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
-            windowNumber: frame.window.windowNumber, context: nil, characters: typed, charactersIgnoringModifiers: typed,
-            isARepeat: false, keyCode: code)), atStart: true)
-        let key = try XCTUnwrap(NSApp.nextEvent(matching: .keyDown, until: .distantFuture, inMode: .default,
-                                                dequeue: true))
-        XCTAssertTrue(NSApp.currentEvent === key, "the key is the app's current event, as WebKit expects")
-        let equivalent = !key.modifierFlags.isDisjoint(with: [.command, .control, .function])
-        if equivalent, frame.window.performKeyEquivalent(with: key) { return }
-        NSApp.sendEvent(key)
-    }
-
     private func function(_ key: Int) -> String {
         String(Character(UnicodeScalar(UInt32(key))!))
     }
@@ -589,7 +564,7 @@ final class MailFrameTests: XCTestCase {
             (function(NSHomeFunctionKey), 115, [], 0, "Home, the top"),
         ]
         for step in steps {
-            try press(step.typed, step.code, held: step.held, in: frame)
+            try RealKeys.press(step.typed, step.code, held: step.held, in: frame.window)
             try await eventually(step.what) { abs(top - step.top) < 0.5 }
             guard abs(top - step.top) < 0.5 else { return }
         }
@@ -611,10 +586,10 @@ final class MailFrameTests: XCTestCase {
         try await eventually("the field has the focus") {
             try await asked(frame, "return document.activeElement.id;") as? String == "note"
         }
-        try press(" ", 49, in: frame)
-        try press(function(NSDownArrowFunctionKey), 125, in: frame)
-        try press(function(NSEndFunctionKey), 119, in: frame)
-        try press(function(NSPageDownFunctionKey), 121, in: frame)
+        try RealKeys.press(" ", 49, in: frame.window)
+        try RealKeys.press(function(NSDownArrowFunctionKey), 125, in: frame.window)
+        try RealKeys.press(function(NSEndFunctionKey), 119, in: frame.window)
+        try RealKeys.press(function(NSPageDownFunctionKey), 121, in: frame.window)
         try await eventually("Space went into the field") {
             try await asked(frame, "return document.getElementById(\"note\").value;") as? String != "Gate"
         }
@@ -625,7 +600,7 @@ final class MailFrameTests: XCTestCase {
         try await eventually("the field let the focus go") {
             try await asked(frame, "return document.activeElement.id;") as? String != "note"
         }
-        try press(" ", 49, in: frame)
+        try RealKeys.press(" ", 49, in: frame.window)
         try await eventually("Space pages again") { reader.contentView.bounds.minY > 100 }
     }
 
@@ -637,7 +612,7 @@ final class MailFrameTests: XCTestCase {
         try await settled(frame)
         click(at: try await middle(of: "section1", in: frame), in: frame)
         XCTAssertTrue(frame.window.makeFirstResponder(frame.view))
-        try press("\t", 48, in: frame)
+        try RealKeys.press("\t", 48, in: frame.window)
         let toggle = "details.mm-quote > summary"
         try await eventually("the toggle focused and in sight") {
             let focused = try await asked(frame, "return document.activeElement === document.querySelector(\"\(toggle)\");")
