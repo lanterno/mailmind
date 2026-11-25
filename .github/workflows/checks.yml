@@ -36,7 +36,8 @@ jobs:
     name: python (lint and tests)
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # The tests take about 35 minutes on a runner's four cores; splitting them across jobs comes with the merge tier.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
