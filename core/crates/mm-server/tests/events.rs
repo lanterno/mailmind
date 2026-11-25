@@ -69,6 +69,26 @@ fn every_listener_hears_an_event_numbered_from_one() {
 }
 
 #[test]
+fn the_high_water_mark_is_the_id_of_the_last_event_a_stream_sent() {
+    let runtime = runtime();
+    let _entered = runtime.enter();
+    let hub = Arc::new(Hub::new().unwrap());
+    let mut tab = open(&hub, None);
+    let run = run_of(&ready(&mut tab).unwrap());
+    assert_eq!(hub.high_water(), format!("{run}-0"), "nothing published yet");
+    hub.publish(Topic::Mute, json!({}));
+    hub.publish(Topic::Outbox, json!({}));
+    assert_eq!(hub.high_water(), format!("{run}-2"));
+    let sent = ready(&mut tab).unwrap();
+    let last = sent.lines().filter_map(|l| l.strip_prefix("id: ")).next_back().unwrap();
+    assert_eq!(last, hub.high_water(), "a tab that applied what it was sent is at the mark");
+    for _ in 0..RING + 3 {
+        hub.publish(Topic::Mute, json!({}));
+    }
+    assert_eq!(hub.high_water(), format!("{run}-{}", RING + 5), "the mark counts past what the ring keeps");
+}
+
+#[test]
 fn a_tab_that_reconnects_resumes_right_after_the_last_event_it_saw() {
     let runtime = runtime();
     let _entered = runtime.enter();
