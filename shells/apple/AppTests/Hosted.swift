@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import XCTest
 @testable import MailMind
 
@@ -28,14 +29,27 @@ class HostedCase: XCTestCase {
         mailbox.tab = .all
         try await until("the mail window", within: 30) { Self.mailWindow() != nil }
         window = Self.mailWindow()
-        try await frontAndKey()
         table = try XCTUnwrap(Self.table(in: window))
         try await until("the inbox's rows", within: 90) { self.table.numberOfRows > 0 }
+        Self.activate()
+        try await skipTheGuide()
+        try await frontAndKey()
         // Nothing of a test before stands over the window.
         mailbox.paletteOpen = false
         AppStatus.shared.showingKeys = false
         mailbox.chose([])
         try await settle()
+    }
+
+    /// The guide MailMind offers once, as a sheet over the mail window, the first time it opens on mail: skipped with
+    /// Esc, as a person skips it, so it never stands over a test. Once offered it isn't offered again.
+    private func skipTheGuide() async throws {
+        let status = AppStatus.shared
+        try await until("the guide offered", within: 30) { status.preferences?.guideOffered == true || status.guiding }
+        guard status.guiding else { return }
+        try await until("the guide's sheet key") { NSApp.keyWindow?.sheetParent === self.window }
+        try RealKeys.press(UInt16(kVK_Escape), layout: .us, in: try XCTUnwrap(NSApp.keyWindow))
+        try await until("the guide skipped") { !status.guiding && self.window.attachedSheet == nil }
     }
 
     /// The home this run opened is the one hosted_home.py named, a temp folder, never a person's.

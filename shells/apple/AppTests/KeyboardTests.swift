@@ -34,6 +34,18 @@ final class KeyboardTests: HostedCase {
         try await until("the keyboard somewhere in it") { keyboardIsSomewhere(self.window) == nil }
     }
 
+    /// The guide, a sheet on the mail window opened from Help › Show Me Around and skipped with Esc, hands the keyboard
+    /// back to the window, key again.
+    func testTheKeyboardComesBackAfterTheGuidesSheet() async throws {
+        try chooseMenuItem(["Help", "Show Me Around"])
+        try await until("the guide's sheet key") { NSApp.keyWindow?.sheetParent === self.window }
+        try RealKeys.press(UInt16(kVK_Escape), layout: .us, in: try XCTUnwrap(NSApp.keyWindow))
+        XCTAssertEqual(RealKeys.route, .app)
+        try await until("the guide gone") { !AppStatus.shared.guiding && self.window.attachedSheet == nil }
+        try await until("the mail window key again") { self.window.isKeyWindow }
+        try await until("the keyboard somewhere in it") { keyboardIsSomewhere(self.window) == nil }
+    }
+
     /// The keys' legend, opened by its SwiftUI button in the top bar and closed with Esc, leaves the keyboard in the
     /// window, and the list's keys working.
     func testTheKeyboardComesBackAfterTheLegend() async throws {
