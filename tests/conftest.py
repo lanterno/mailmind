@@ -285,22 +285,8 @@ def data_dir(tmp_path, _new_database):
 @pytest.fixture(scope="session")
 def world_template(tmp_path_factory):
     """The world's database, built once by the app's own ingest. Tests get a copy via `world`."""
-    from fakes.imap_server import FakeIMAPServer
     from fixtures import world
-    from mailmind.platform import settings
-    from mailmind.bootstrap.mailbox import store
-    d = tmp_path_factory.mktemp("world-template")
-    import time_machine
-    with settings.use(settings.Settings(home=str(d))), FakeIMAPServer(keychain=guard.KEYCHAIN) as srv, \
-            time_machine.travel(NOW, tick=False):
-        placed = world.populate(srv)
-        world.write_config(srv, str(d))
-        store.init()
-        world.ingest_all()
-        db = database.keyed(os.path.join(d, "mailmind.db"))
-        db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        db.close()
-    return os.path.join(d, "mailmind.db"), placed
+    return world.build_template(str(tmp_path_factory.mktemp("world-template")), NOW, guard.KEYCHAIN)
 
 
 @pytest.fixture

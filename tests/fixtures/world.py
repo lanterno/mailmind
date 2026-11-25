@@ -168,6 +168,27 @@ def ingest_all():
         ingest.sync_folder(accounts.get(acct), folder, full=True)
 
 
+def build_template(directory, now, keychain):
+    """The world's database, built in `directory` by the app's own ingest with the clock at `now`, from MAIL delivered to a
+    fake IMAP server that keeps its passwords in `keychain`. Returns its path and where each corpus file landed, which a
+    new server given the same MAIL places alike, so a copy serves any number of runs."""
+    import time_machine
+    from fakes.imap_server import FakeIMAPServer
+    from mailmind.bootstrap.mailbox import store
+    from mailmind.platform import settings
+    from mailmind.platform.db import database
+    with settings.use(settings.Settings(home=directory)), FakeIMAPServer(keychain=keychain) as srv, \
+            time_machine.travel(now, tick=False):
+        placed = populate(srv)
+        write_config(srv, directory)
+        store.init()
+        ingest_all()
+        db = database.keyed(os.path.join(directory, "mailmind.db"))
+        db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        db.close()
+    return os.path.join(directory, "mailmind.db"), placed
+
+
 class World:
     """A built world for one test: the running fake IMAP and SMTP servers, where each corpus file
     landed, and the data directory holding the database."""
