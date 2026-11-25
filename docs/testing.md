@@ -147,6 +147,9 @@ ledger. A test goes on the ledger only once it passes against both servers, and 
 in a job for each server. A job that fails keeps what each of its servers printed (`server.log`) on the run's page, and a test
 whose server ended or stopped answering says the last of it.
 
+The IMAP a common action costs (a move, marking read, a sync, a first sync's bytes, a reply filed in Sent) is held to the
+`[counts]` in `budgets.toml` by `tests/api/test_budget_counts.py`, on both servers, from what the fake IMAP server recorded.
+
 Under `-n`, each worker is a pytest session of its own: it installs the tripwire, runs its own fake Claude API and makes its own
 `world` template and new database, under a temp directory of its own. A test keeps to its temp directory and every server takes
 a port the system picks, so no two workers share a file or a port, and a test passes in any worker, in any company.
