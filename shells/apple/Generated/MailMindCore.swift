@@ -535,6 +535,22 @@ fileprivate struct FfiConverterInt64: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterDouble: FfiConverterPrimitive {
+    typealias FfiType = Double
+    typealias SwiftType = Double
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Double {
+        return try lift(readDouble(&buf))
+    }
+
+    public static func write(_ value: Double, into buf: inout [UInt8]) {
+        writeDouble(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterBool : FfiConverter {
     typealias FfiType = Int8
     typealias SwiftType = Bool
@@ -635,6 +651,13 @@ public protocol CoreHostProtocol: AnyObject, Sendable {
     func close() 
     
     /**
+     * Whether the app runs in a test world: a test's home (with a keychain stand-in) whose variables say
+     * `MAILMIND_TEST_CLOCK=paused`. Its clock stands until the test moves it, and no job runs until the test pumps
+     * it. A person's run never does.
+     */
+    func inTestWorld()  -> Bool
+    
+    /**
      * The answer to `method` on `target`, a path and its query (`/api/messages?folder=INBOX`), with `body` for a POST
      * (JSON). It blocks until the answer is whole: call it off the main thread.
      */
@@ -650,6 +673,52 @@ public protocol CoreHostProtocol: AnyObject, Sendable {
      * Hear the event stream until the subscription is cancelled or released, or the host closes.
      */
     func subscribe(listener: EventListener) throws  -> EventSubscription
+    
+    /**
+     * Move the test clock on by `seconds`: where it stands now, in ISO 8601. Nothing runs by itself for it: a job
+     * that came due runs when the test pumps it.
+     */
+    func testAdvanceClock(seconds: Double) throws  -> String
+    
+    /**
+     * The id of the last event the app published (`run-n`): a subscriber has heard all there is once it has heard
+     * this one.
+     */
+    func testHighWater() throws  -> String
+    
+    /**
+     * Kick `job`, as the app kicks one: its pass waits for `test_pump_kicked`.
+     */
+    func testKick(job: String) throws 
+    
+    /**
+     * Where the test clock stands, in ISO 8601, UTC.
+     */
+    func testNow() throws  -> String
+    
+    /**
+     * One pass of `job` with `arguments` (a folder's sync takes the account and the folder), as its lane would run
+     * it: `outbox`, `commands`, `drafts`, `snoozes`, `follow-ups`, `sync`, `reconcile`, `forget`, `backfill`, `warm`,
+     * `retry`, `assess`, `draft-ahead` or `tidy`. It runs on the caller's thread: call it off the main thread.
+     */
+    func testPump(job: String, arguments: [String]) throws 
+    
+    /**
+     * A pass of each job the app kicked since the last, as its lane would have run it then. It runs on the caller's
+     * thread: call it off the main thread.
+     */
+    func testPumpKicked() throws 
+    
+    /**
+     * Stand the test clock at `at`, a time in ISO 8601 (one without an offset is UTC), before or after where it was.
+     */
+    func testSetClock(at: String) throws 
+    
+    /**
+     * Wait until no request is being answered, nor any work one set going, for at most `timeout_seconds`: how many
+     * still are, 0 once settled. It blocks: call it off the main thread.
+     */
+    func testSettle(timeoutSeconds: Double) throws  -> UInt32
     
     /**
      * The computer woke from sleep, or its network changed: IDLE's connections are opened afresh and every account
@@ -740,6 +809,20 @@ open func close()  {try! rustCall() {
 }
     
     /**
+     * Whether the app runs in a test world: a test's home (with a keychain stand-in) whose variables say
+     * `MAILMIND_TEST_CLOCK=paused`. Its clock stands until the test moves it, and no job runs until the test pumps
+     * it. A person's run never does.
+     */
+open func inTestWorld() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_mailmind_core_fn_method_corehost_in_test_world(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
      * The answer to `method` on `target`, a path and its query (`/api/messages?folder=INBOX`), with `body` for a POST
      * (JSON). It blocks until the answer is whole: call it off the main thread.
      */
@@ -780,6 +863,110 @@ open func subscribe(listener: EventListener)throws  -> EventSubscription  {
     uniffi_mailmind_core_fn_method_corehost_subscribe(
             self.uniffiCloneHandle(),
         FfiConverterTypeEventListener_lower(listener),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Move the test clock on by `seconds`: where it stands now, in ISO 8601. Nothing runs by itself for it: a job
+     * that came due runs when the test pumps it.
+     */
+open func testAdvanceClock(seconds: Double)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeTestWorldProblem_lift) {
+        uniffiCallStatus in
+    uniffi_mailmind_core_fn_method_corehost_test_advance_clock(
+            self.uniffiCloneHandle(),
+        FfiConverterDouble.lower(seconds),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The id of the last event the app published (`run-n`): a subscriber has heard all there is once it has heard
+     * this one.
+     */
+open func testHighWater()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeTestWorldProblem_lift) {
+        uniffiCallStatus in
+    uniffi_mailmind_core_fn_method_corehost_test_high_water(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Kick `job`, as the app kicks one: its pass waits for `test_pump_kicked`.
+     */
+open func testKick(job: String)throws   {try rustCallWithError(FfiConverterTypeTestWorldProblem_lift) {
+        uniffiCallStatus in
+    uniffi_mailmind_core_fn_method_corehost_test_kick(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(job),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * Where the test clock stands, in ISO 8601, UTC.
+     */
+open func testNow()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeTestWorldProblem_lift) {
+        uniffiCallStatus in
+    uniffi_mailmind_core_fn_method_corehost_test_now(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * One pass of `job` with `arguments` (a folder's sync takes the account and the folder), as its lane would run
+     * it: `outbox`, `commands`, `drafts`, `snoozes`, `follow-ups`, `sync`, `reconcile`, `forget`, `backfill`, `warm`,
+     * `retry`, `assess`, `draft-ahead` or `tidy`. It runs on the caller's thread: call it off the main thread.
+     */
+open func testPump(job: String, arguments: [String])throws   {try rustCallWithError(FfiConverterTypeTestWorldProblem_lift) {
+        uniffiCallStatus in
+    uniffi_mailmind_core_fn_method_corehost_test_pump(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(job),
+        FfiConverterSequenceString.lower(arguments),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * A pass of each job the app kicked since the last, as its lane would have run it then. It runs on the caller's
+     * thread: call it off the main thread.
+     */
+open func testPumpKicked()throws   {try rustCallWithError(FfiConverterTypeTestWorldProblem_lift) {
+        uniffiCallStatus in
+    uniffi_mailmind_core_fn_method_corehost_test_pump_kicked(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * Stand the test clock at `at`, a time in ISO 8601 (one without an offset is UTC), before or after where it was.
+     */
+open func testSetClock(at: String)throws   {try rustCallWithError(FfiConverterTypeTestWorldProblem_lift) {
+        uniffiCallStatus in
+    uniffi_mailmind_core_fn_method_corehost_test_set_clock(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(at),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * Wait until no request is being answered, nor any work one set going, for at most `timeout_seconds`: how many
+     * still are, 0 once settled. It blocks: call it off the main thread.
+     */
+open func testSettle(timeoutSeconds: Double)throws  -> UInt32  {
+    return try  FfiConverterUInt32.lift(try rustCallWithError(FfiConverterTypeTestWorldProblem_lift) {
+        uniffiCallStatus in
+    uniffi_mailmind_core_fn_method_corehost_test_settle(
+            self.uniffiCloneHandle(),
+        FfiConverterDouble.lower(timeoutSeconds),uniffiCallStatus
     )
 })
 }
@@ -2485,6 +2672,98 @@ public func FfiConverterTypeHostProblem_lower(_ value: HostProblem) -> RustBuffe
     return FfiConverterTypeHostProblem.lower(value)
 }
 
+
+/**
+ * Why the test world didn't do what the test asked.
+ */
+public 
+enum TestWorldProblem: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+    
+    
+    /**
+     * The host doesn't run in a test world (its home has no keychain stand-in, or didn't ask with
+     * `MAILMIND_TEST_CLOCK=paused`), or it has closed.
+     */
+    case NotATestWorld
+    /**
+     * What was asked can't be done: a time that isn't one, a job that failed or isn't on this core yet. It names a
+     * class, never a value.
+     */
+    case Failed(why: String
+    )
+
+    
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
+}
+
+#if compiler(>=6)
+extension TestWorldProblem: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTestWorldProblem: FfiConverterRustBuffer {
+    typealias SwiftType = TestWorldProblem
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TestWorldProblem {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .NotATestWorld
+        case 2: return .Failed(
+            why: try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TestWorldProblem, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case .NotATestWorld:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .Failed(why):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(why, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTestWorldProblem_lift(_ buf: RustBuffer) throws -> TestWorldProblem {
+    return try FfiConverterTypeTestWorldProblem.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTestWorldProblem_lower(_ value: TestWorldProblem) -> RustBuffer {
+    return FfiConverterTypeTestWorldProblem.lower(value)
+}
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -2738,6 +3017,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_mailmind_core_checksum_method_corehost_close() != 33099) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_mailmind_core_checksum_method_corehost_in_test_world() != 5761) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_mailmind_core_checksum_method_corehost_request() != 34461) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -2745,6 +3027,30 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_mailmind_core_checksum_method_corehost_subscribe() != 56883) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_mailmind_core_checksum_method_corehost_test_advance_clock() != 11276) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_mailmind_core_checksum_method_corehost_test_high_water() != 8027) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_mailmind_core_checksum_method_corehost_test_kick() != 27197) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_mailmind_core_checksum_method_corehost_test_now() != 57452) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_mailmind_core_checksum_method_corehost_test_pump() != 12776) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_mailmind_core_checksum_method_corehost_test_pump_kicked() != 5962) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_mailmind_core_checksum_method_corehost_test_set_clock() != 61304) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_mailmind_core_checksum_method_corehost_test_settle() != 29914) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_mailmind_core_checksum_method_corehost_woke() != 18387) {
