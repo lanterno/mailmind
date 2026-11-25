@@ -211,6 +211,9 @@ extension CoreHome {
         "MAILMIND_NO_BATCHES", "MAILMIND_NO_SCHEMA", "MAILMIND_MODEL", "MAILMIND_PROTON_BRIDGE_PASS",
         "MAILMIND_PROTON_OP_ITEM", "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "MAILMIND_DB_KEY",
         "PATH", "HOME", "TMPDIR", "TZ",
+        // The core's test world: its clock paused, standing at a time of the test's. The core reads them only in a
+        // home with a keychain stand-in, which a person's never has.
+        "MAILMIND_TEST_CLOCK", "MAILMIND_TEST_NOW",
     ]
 
     /// The variables of a run that is not a person's: a measure or demo run, a test, a keychain's stand-in. Such a run
