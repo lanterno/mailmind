@@ -95,9 +95,10 @@ Python app gets fixes only.
   `just test-rust`'s four browsers, archiving that opens the next message sometimes logs a 404, and `g` then a letter
   sometimes hasn't changed the folder within 5 s; each passes alone. Find the request that 404s and what the folder
   switch waits on, and have the page or the test wait on what it means, not on the clock.
-- **Four Python browser tests that fail only on CI's served run** · low value · effort S · [#66](https://github.com/lanterno/mailmind/issues/66) —
+- **Python browser tests that fail now and then only on CI's served run** · low value · effort S · [#66](https://github.com/lanterno/mailmind/issues/66) —
   Two autosave tests in `test_compose.py` count saves against the clock, `test_docs.py`'s server stops before its test,
-  and `test_suggestions.py`'s renumber logs a 404; all pass on a Mac. Have the page or the test wait on what it means.
+  `test_suggestions.py`'s renumber logs a 404, and three more (`test_details.py`, `test_guide.py`, the Hub's axe check)
+  look before the server has settled what it shows; all pass on a Mac. Have the page or the test wait on what it means.
 - **Backfill several messages a FETCH on the Python server** · low value · effort S ·
   [#59](https://github.com/lanterno/mailmind/issues/59) — The Rust server's backfill asks for a folder's dozen in one
   FETCH; the Python app's (`Syncing.backfill_round`) fetches one message at a time. Worth it only if the flip (#11)
