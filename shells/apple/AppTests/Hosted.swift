@@ -1,0 +1,115 @@
+import AppKit
+import XCTest
+@testable import MailMind
+
+/// What every hosted test stands on: the app itself as the host, open on the fictional home `just apple test-hosted`
+/// names (AppTests/hosted_home.py), active, with its mail window key and the inbox's rows in its list. Each test then
+/// acts as a person would, through the real menu bar, the real key window and AppKit's own routing.
+///
+/// A run that named no home has an app that opened nothing (`NoHomeNamed`): every test fails here, saying so, rather
+/// than skip, so a hosted run never passes on nothing.
+@MainActor
+class HostedCase: XCTestCase {
+    /// The app's one mail window, key.
+    private(set) var window: NSWindow!
+    /// Its list: the mailbox's table.
+    private(set) var table: MailboxTableView!
+    var app: MailApp { MailApp.shared }
+    var mailbox: Mailbox { MailApp.shared.mailbox }
+
+    override func setUp() async throws {
+        try await super.setUp()
+        continueAfterFailure = false
+        try onTheTestHome()
+        try await until("the core opened", within: 60) {
+            if case .failed(let why) = MailApp.shared.stage { throw KitError("MailMind didn't open: \(why)") }
+            return MailApp.shared.stage == .open
+        }
+        // A fresh home's mail has no AI verdicts yet, so nothing needs you: the Inbox shows Everything.
+        mailbox.tab = .all
+        try await until("the mail window", within: 30) { Self.mailWindow() != nil }
+        window = Self.mailWindow()
+        try await frontAndKey()
+        table = try XCTUnwrap(Self.table(in: window))
+        try await until("the inbox's rows", within: 90) { self.table.numberOfRows > 0 }
+        // Nothing of a test before stands over the window.
+        mailbox.paletteOpen = false
+        AppStatus.shared.showingKeys = false
+        mailbox.chose([])
+        try await settle()
+    }
+
+    /// The home this run opened is the one hosted_home.py named, a temp folder, never a person's.
+    private func onTheTestHome() throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard let home = environment["MAILMIND_HOME"], !home.isEmpty else {
+            throw KitError("no MAILMIND_HOME: run the hosted tests through `just apple test-hosted`, which names a "
+                + "temp home on fictional mail")
+        }
+        XCTAssertNotNil(environment["MAILMIND_TEST_KEYCHAIN"], "the keychain's stand-in")
+        XCTAssertNotNil(environment["MAILMIND_DB_KEY"], "a key made for the run")
+        XCTAssertFalse(CoreHome.isAPersonsRun(environment))
+        if let folder = MailApp.shared.folder {
+            XCTAssertEqual(folder.standardizedFileURL.path, URL(filePath: home).standardizedFileURL.path)
+        }
+    }
+
+    /// The app in front and the mail window key, as a person's click on it leaves them.
+    func frontAndKey() async throws {
+        Self.activate()
+        window.makeKeyAndOrderFront(nil)
+        try await until("the app active and the mail window key", within: 20) {
+            if !NSApp.isActive { Self.activate() }
+            if !self.window.isKeyWindow { self.window.makeKeyAndOrderFront(nil) }
+            return NSApp.isActive && self.window.isKeyWindow
+        }
+    }
+
+    /// The app made active, over whatever is in front where it must be: the runner's session has no person in it to
+    /// mind, and macOS 14's cooperative `activate()` may leave another app in front.
+    private static func activate() {
+        NSApp.activate()
+        if !NSApp.isActive { NSApp.activate(ignoringOtherApps: true) }
+    }
+
+    /// The window the mail scene opened: the one that holds the mailbox's table.
+    static func mailWindow() -> NSWindow? {
+        NSApp.windows.first { $0.isVisible && table(in: $0) != nil }
+    }
+
+    static func table(in window: NSWindow) -> MailboxTableView? {
+        func find(_ view: NSView?) -> MailboxTableView? {
+            guard let view else { return nil }
+            if let table = view as? MailboxTableView { return table }
+            for child in view.subviews {
+                if let found = find(child) { return found }
+            }
+            return nil
+        }
+        return find(window.contentView?.superview ?? window.contentView)
+    }
+
+    /// Waits, letting the app run, until `condition` holds; fails saying what never came.
+    func until(_ what: String, within seconds: Double = 10, _ condition: @MainActor () throws -> Bool) async throws {
+        let end = Date(timeIntervalSinceNow: seconds)
+        while Date() < end {
+            if try condition() { return }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        if try condition() { return }
+        throw KitError("\(what) never came in \(Int(seconds)) s")
+    }
+
+    /// A moment for SwiftUI to draw again and hand the menus what changed.
+    func settle() async throws {
+        try await Task.sleep(for: .milliseconds(400))
+    }
+
+    /// The first row of the list chosen by a click on it, as a person chooses one.
+    func clickFirstRow() async throws {
+        let rect = table.rect(ofRow: 0)
+        try RealMouse.click(at: CGPoint(x: rect.midX, y: rect.midY), in: table)
+        try await until("the first row chosen") { !self.mailbox.chosenRows.isEmpty }
+        try await settle()
+    }
+}
