@@ -1,5 +1,6 @@
 //! `mm-budgets`: build the 100,000-message fixture, measure the core on it, and hold each number to its limit in
-//! the repository's `budgets.toml`. It exits non-zero when one is over. Run it in release: `just budgets`.
+//! the repository's `budgets.toml`. It exits non-zero when one is over by more than its tolerance (a wall time's,
+//! 0.10 unless its entry says otherwise; nothing else has one). Run it in release: `just budgets`.
 //!
 //! Memory is counted by wrapping the allocator, so it is the core's own heap plus what SQLite holds, not the
 //! process's: code pages and the platform's own libraries are measured by each shell.
@@ -144,9 +145,13 @@ fn run() -> Result<bool, String> {
     println!("{:<26} {:>8} {:>10}", "core budget", "limit", "measured");
     let mut within = true;
     for (name, value) in measured {
-        let limit = limits.get(name).and_then(|b| b.get("limit")).and_then(toml::Value::as_float);
+        let entry = limits.get(name);
+        let limit = entry.and_then(|b| b.get("limit")).and_then(toml::Value::as_float);
         let verdict = match limit {
             Some(limit) if value <= limit => format!("{limit:>8} {value:>10.2}"),
+            Some(limit) if value <= limit * (1.0 + tolerance(name, entry)) => {
+                format!("{limit:>8} {value:>10.2}  over, within its tolerance: open an issue for this budget")
+            }
             Some(limit) => {
                 within = false;
                 format!("{limit:>8} {value:>10.2}  OVER")
@@ -193,6 +198,15 @@ fn limits() -> Result<toml::Table, String> {
         Some(toml::Value::Table(core)) => Ok(core.clone()),
         _ => Err("budgets.toml has no [core] budgets".into()),
     }
+}
+
+/// The share of its limit a number may run over, as tests/support/budgets.py has it: a wall time (a name ending in
+/// `_ms`) varies from run to run, so 0.10 unless its entry gives a `tolerance`; anything else none.
+fn tolerance(name: &str, entry: Option<&toml::Value>) -> f64 {
+    if !name.ends_with("_ms") {
+        return 0.0;
+    }
+    entry.and_then(|b| b.get("tolerance")).and_then(toml::Value::as_float).unwrap_or(0.10)
 }
 
 fn ms(started: Instant) -> f64 {
