@@ -94,10 +94,13 @@ jobs:
           uv sync --frozen
           uv run playwright install --with-deps chromium
 
+      # And the sanitizer's output in Chromium's own parser (tests/security/test_sanitize_in_browsers.py), which needs no
+      # server but the browser this job installs.
       - name: The served suites against the Python app
         if: matrix.server == 'python'
         run: >-
-          uv run pytest -n 4 --browser tests/api tests/e2e/browser --basetemp="$RUNNER_TEMP/pytest"
+          uv run pytest -n 4 --browser tests/api tests/e2e/browser tests/security/test_sanitize_in_browsers.py
+          --basetemp="$RUNNER_TEMP/pytest"
 
       - name: The ledger's tests against the Rust server
         if: matrix.server == 'rust'
