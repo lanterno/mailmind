@@ -92,26 +92,50 @@ enum RealKeys {
     /// run takes it, which makes it the app's current event (WebKit expects that), then goes the way AppKit sends a
     /// key-down in the key window: offered first as a key equivalent to the window's views, as one is with ⌘ or ⌃
     /// held or a function key's, then, if nothing took it, through the app (`NSApp.sendEvent`) to the window's first
-    /// responder, and back through it should WebKit give the key back. The app the tests run in is never active, so
+    /// responder, and back through it should WebKit give the key back. The unhosted tests' app is never active, so
     /// AppKit would skip the first step: the kit takes it for AppKit, since making the app active would take the
     /// keyboard from the Mac's person. The app sends a key to its key window, so where `window` isn't key (another
-    /// test left its own key) the key goes to `window` itself.
+    /// test left its own key) the key goes to `window` itself. In the hosted tests' active app, with `window` key,
+    /// AppKit does it all (`route`).
     static func press(_ typed: String, _ code: UInt16, held: NSEvent.ModifierFlags = [], in window: NSWindow) throws {
         try press(try event(typed, code, held: held, in: window), in: window)
     }
 
-    /// `key` posted, taken out and sent in `window`, as `press` sends one.
+    /// How the last key pressed went: through the app as AppKit sends one, or by the kit's own steps.
+    enum Route: Equatable, Sendable {
+        /// `NSApp.sendEvent` alone, in an active app with the window key: AppKit offered it to the menu bar and the
+        /// window, as it does a person's key.
+        case app
+        /// The kit offered it to the window's views as a key equivalent, which took it.
+        case keyEquivalent
+        /// The kit sent it to the window, or through the app to a key window of an app that isn't active.
+        case window
+    }
+
+    /// How the last key `press` pressed went: the hosted tests hold that theirs went through the app.
+    private(set) static var route: Route?
+
+    /// `key` posted, taken out and sent in `window`, as `press` sends one. In an active app whose key window is
+    /// `window`, as the hosted tests' is, AppKit routes it whole: `NSApp.sendEvent` offers it to the menu bar and the
+    /// key window's views first, then to the first responder.
     static func press(_ key: NSEvent, in window: NSWindow) throws {
         NSApp.postEvent(key, atStart: true)
         guard let taken = NSApp.nextEvent(matching: .keyDown, until: Date(timeIntervalSinceNow: 5), inMode: .default,
                                           dequeue: true)
         else { throw KitError("the key posted never came out of the app's queue") }
         guard NSApp.currentEvent === taken else { throw KitError("the key isn't the app's current event") }
+        if NSApp.isActive, NSApp.keyWindow === window {
+            route = .app
+            NSApp.sendEvent(taken)
+            return
+        }
         if !taken.modifierFlags.isDisjoint(with: [.command, .control, .function]),
            window.performKeyEquivalent(with: taken)
         {
+            route = .keyEquivalent
             return
         }
+        route = .window
         if NSApp.keyWindow === window { NSApp.sendEvent(taken) } else { window.sendEvent(taken) }
     }
 }
