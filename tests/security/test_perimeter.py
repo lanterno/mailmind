@@ -1,10 +1,16 @@
 """mailmind.platform.perimeter: the checks run before any route. The app tests
-(test_http_get, test_http_post_guards, test_http_events) pin the answers end to end; these pin
-each check on its own."""
+(test_http_get, test_http_post_guards, test_http_events) pin the answers end to end, and
+tests/api/test_http_perimeter_matrix.py every route against each way a request can be wrong, on
+both servers; these pin each check on its own, and that the app runs them ahead of every route."""
 import email.message
 
 import pytest
+from fastapi.routing import iter_route_contexts
 
+import route_tables
+from mailmind.bootstrap import front
+from mailmind.http import app as http_app
+from mailmind.http.route import Route
 from mailmind.platform import perimeter
 
 PORT = 8721
@@ -165,3 +171,14 @@ def test_the_page_keeps_its_policy_word_for_word_which_allows_nothing_for_mail()
 def test_a_refusal_is_its_status_and_the_words_for_it_which_the_middleware_answers_as_a_problem_document():
     assert perimeter.Refusal(403, "cross-site request") == perimeter.Refusal(status=403, error="cross-site request")
     assert not hasattr(perimeter.Refusal, "answer")
+
+
+def test_the_app_holds_only_its_routers_routes_and_runs_the_perimeter(monkeypatch):
+    """A route on the FastAPI app itself wouldn't be in what the matrix walks, or go through what a Route does. What no route
+    matches is the app's own answer, which nothing but the perimeter runs ahead of."""
+    monkeypatch.setattr(front.mailbox, "offer", lambda kind: None)
+    asgi = front.build()
+    held = [context.original_route for context in iter_route_contexts(asgi.routes)]
+    assert held == route_tables.every_route() and all(isinstance(route, Route) for route in held)
+    assert [m.cls.__name__ for m in asgi.user_middleware] == ["Perimeter"]
+    assert asgi.router.default is http_app._no_route
