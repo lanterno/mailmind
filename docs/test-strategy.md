@@ -129,6 +129,12 @@ active. `Tests/RealKeys.swift` and `MailFrameTests.press` already emulate AppKit
     tree.
   - `keyboardIsSomewhere()` asserts the first responder is a visible view a person can type into or act on.
   - `menuItem(_:)` reads an item's state as the real menu bar validates it.
+
+  The kit is in `shells/apple/TestKit/` and the unhosted `MailMindTests` use it today. There, no window is ever key
+  (the test process may not become active), so the kit sends a key to the window itself, hands a click to the view
+  under the pointer, and walks a window's responder chain for a menu item's state. A plain `NSButton` and SwiftUI's
+  controls don't take such a click, and a ⇧⌘ item written lowercase matches only the window server's events: those
+  wait for the hosted target, where the window is key and AppKit routes every event itself.
 - **Production-shaped web content.** Every test that loads mail does it through the core's `mailmind-frame:` scheme with
   the headers the app serves. A test that sets up WebKit any other way fails a lint.
 - **The page** already has this ring: Playwright on the real build, with console errors and CSP violations failing a test.
