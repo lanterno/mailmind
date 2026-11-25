@@ -62,6 +62,8 @@ def test_the_check_tells_a_real_address_from_a_made_up_one():
     assert is_fine("icon@2x.png", "2x.png")
     assert is_fine("ada@gmail.com", "gmail.com")              # made up, and listed
     assert is_fine("hello@fastmail.com", "fastmail.com")      # a stock word, at any domain
-    assert not is_fine("someone.real@gmail.com", "gmail.com")
-    assert not is_fine("person@company.example.co", "company.example.co")
+    # Put together here, so this file holds no address the check above would refuse.
+    at = "@"
+    assert not is_fine(f"someone.real{at}gmail.com", "gmail.com")
+    assert not is_fine(f"person{at}company.example.co", "company.example.co")
     assert sum(1 for _ in tracked_text()) > 1000
