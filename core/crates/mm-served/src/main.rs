@@ -9,8 +9,9 @@
 //! set, even empty, it replaces the servers MailMind knows of, so no test probes one the machine is running).
 //!
 //! It writes `ready <port>` on standard output once it answers, then answers each command on standard input with one
-//! line: `clock <ISO 8601>`, `work <job> <JSON>`, `settle`, `check`, `unsanitized on|off`; at the end of its input it
-//! stops. Standard output is the protocol's alone: the server's log goes to standard error, which the suite keeps.
+//! line: `clock <ISO 8601>`, `work <job> <JSON>`, `settle`, `check`, `unsanitized on|off`, and `events`, which answers
+//! `events <id>`, the id of the last event the app published (`Hub::high_water`), so a test can wait until the page has
+//! applied it; at the end of its input it stops. Standard output is the protocol's alone: the server's log goes to standard error, which the suite keeps.
 
 use std::io::{BufRead, Write};
 use std::net::SocketAddr;
@@ -125,6 +126,7 @@ fn run() -> Result<(), String> {
                 }
             }
             "unsanitized" => sanitizer.answer(argument),
+            "events" => format!("events {}", app.events.high_water()),
             other => format!("unknown command {other:?}"),
         };
         say(&answer);

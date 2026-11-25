@@ -120,6 +120,12 @@ impl Hub {
     pub fn listening(&self) -> usize {
         self.state().open.len()
     }
+
+    /// The id of the last event published, `<run>-0` before any: a tab whose stream has applied this one has heard
+    /// everything the app has said so far. The test launcher answers it, so a test waits for the page to catch up.
+    pub fn high_water(&self) -> String {
+        self.id(self.state().n)
+    }
 }
 
 impl Events for Hub {
