@@ -41,6 +41,14 @@ pub const VARIABLES: [(&str, &str); 18] = [
     (DB_KEY, "The key the database is encrypted with, 64 hex digits, in place of the Keychain's."),
 ];
 
+/// A test's run alone, never a person's, so not in `VARIABLES` (the table the Python app declares and the README
+/// lists): `paused` gives the app in a shell's process (`mm-host`) the test clock and paused jobs of `mm-testworld`, and
+/// only for a home with a keychain stand-in. Unset, the system's clock and jobs that run by themselves.
+pub const TEST_CLOCK: &str = "MAILMIND_TEST_CLOCK";
+/// A test's run alone: where the test clock stands as the app starts, in ISO 8601 (`mm-served`, and `mm-host` under
+/// `MAILMIND_TEST_CLOCK`). Unset, the host's clock stands where the system's did as it opened.
+pub const TEST_NOW: &str = "MAILMIND_TEST_NOW";
+
 /// The repo root, where the data lives when MAILMIND_HOME names nowhere: this crate's, three folders up.
 pub fn repo_root() -> PathBuf {
     let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -188,6 +196,22 @@ impl Environment {
         }
         let profile = given("MAILMIND_PROFILE");
         !(profile.is_empty() || profile == "full")
+    }
+
+    /// Whether MAILMIND_TEST_CLOCK asks for the test clock and paused jobs: `paused` (in any case, with spaces around)
+    /// yes, unset or empty no, and any other value a refusal to start, naming the variable alone. Whoever reads it
+    /// heeds it only for a test's home.
+    pub fn test_clock_paused(&self) -> Result<bool, String> {
+        match self.raw(TEST_CLOCK).map(|v| v.trim().to_ascii_lowercase()).as_deref() {
+            None | Some("") => Ok(false),
+            Some("paused") => Ok(true),
+            Some(_) => Err(format!("{TEST_CLOCK} is paused or unset")),
+        }
+    }
+
+    /// MAILMIND_TEST_NOW as set: where a test clock stands as the app starts, in ISO 8601.
+    pub fn test_now(&self) -> Option<&str> {
+        self.raw(TEST_NOW).filter(|v| !v.is_empty())
     }
 
     /// MAILMIND_LOG_LEVEL `debug`, in any case, with spaces around: debug lines at the terminal, never in the file.

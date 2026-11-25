@@ -6,6 +6,9 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use mm_kernel::seams::{Clock, Moment};
 use mm_kernel::when::days_from_civil;
 
+/// A moment as `parse_iso` reads it back: ISO 8601 in UTC, `+00:00`, with microseconds when it has any.
+pub use mm_kernel::when::iso;
+
 #[derive(Debug)]
 pub struct TestClock {
     micros: AtomicI64,

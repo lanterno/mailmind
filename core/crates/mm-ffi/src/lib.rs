@@ -14,7 +14,10 @@ uniffi::setup_scaffolding!();
 #[cfg(feature = "host")]
 mod host;
 #[cfg(feature = "host")]
-pub use host::{CoreAnswer, CoreEvent, CoreHeader, CoreHome, CoreHost, EventListener, EventSubscription, HostProblem};
+pub use host::{
+    CoreAnswer, CoreEvent, CoreHeader, CoreHome, CoreHost, EventListener, EventSubscription, HostProblem,
+    TestWorldProblem,
+};
 
 /// Why the core did not do what it was asked.
 #[derive(Debug, PartialEq, Eq, uniffi::Error)]

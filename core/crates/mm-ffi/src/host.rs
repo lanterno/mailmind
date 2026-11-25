@@ -84,6 +84,30 @@ impl std::fmt::Display for HostProblem {
     }
 }
 
+/// Why the test world didn't do what the test asked.
+#[derive(Debug, PartialEq, Eq, uniffi::Error)]
+pub enum TestWorldProblem {
+    /// The host doesn't run in a test world (its home has no keychain stand-in, or didn't ask with
+    /// `MAILMIND_TEST_CLOCK=paused`), or it has closed.
+    NotATestWorld,
+    /// What was asked can't be done: a time that isn't one, a job that failed or isn't on this core yet. It names a
+    /// class, never a value.
+    Failed { why: String },
+}
+
+impl std::fmt::Display for TestWorldProblem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TestWorldProblem::NotATestWorld => f.write_str("not a test world"),
+            TestWorldProblem::Failed { why } => f.write_str(why),
+        }
+    }
+}
+
+fn failed(why: String) -> TestWorldProblem {
+    TestWorldProblem::Failed { why }
+}
+
 /// What a shell gives to hear the event stream. Calls come on one of the core's threads, in the order sent.
 #[uniffi::export(with_foreign)]
 pub trait EventListener: Send + Sync {
@@ -149,6 +173,80 @@ impl CoreHost {
     /// going. A request from then on is answered 503.
     pub fn close(&self) {
         self.inner.close();
+    }
+
+    /// Whether the app runs in a test world: a test's home (with a keychain stand-in) whose variables say
+    /// `MAILMIND_TEST_CLOCK=paused`. Its clock stands until the test moves it, and no job runs until the test pumps
+    /// it. A person's run never does.
+    pub fn in_test_world(&self) -> bool {
+        self.inner.test_world().is_some()
+    }
+
+    /// Where the test clock stands, in ISO 8601, UTC.
+    pub fn test_now(&self) -> Result<String, TestWorldProblem> {
+        Ok(mm_host::testworld::clock::iso(self.world()?.now()))
+    }
+
+    /// Stand the test clock at `at`, a time in ISO 8601 (one without an offset is UTC), before or after where it was.
+    pub fn test_set_clock(&self, at: String) -> Result<(), TestWorldProblem> {
+        let world = self.world()?;
+        let moment = mm_host::testworld::clock::parse_iso(&at).ok_or_else(|| failed("not a time".into()))?;
+        world.set(moment);
+        Ok(())
+    }
+
+    /// Move the test clock on by `seconds`: where it stands now, in ISO 8601. Nothing runs by itself for it: a job
+    /// that came due runs when the test pumps it.
+    pub fn test_advance_clock(&self, seconds: f64) -> Result<String, TestWorldProblem> {
+        let world = self.world()?;
+        let micros = (seconds * 1e6).round();
+        if !micros.is_finite() || micros.abs() >= 9.0e18 {
+            return Err(failed("not a span of time".into()));
+        }
+        // Whole, and within i64, as checked above.
+        let now = world.advance(micros as i64);
+        Ok(mm_host::testworld::clock::iso(now))
+    }
+
+    /// Kick `job`, as the app kicks one: its pass waits for `test_pump_kicked`.
+    pub fn test_kick(&self, job: String) -> Result<(), TestWorldProblem> {
+        self.world()?.kick(&job);
+        Ok(())
+    }
+
+    /// One pass of `job` with `arguments` (a folder's sync takes the account and the folder), as its lane would run
+    /// it: `outbox`, `commands`, `drafts`, `snoozes`, `follow-ups`, `sync`, `reconcile`, `forget`, `backfill`, `warm`,
+    /// `retry`, `assess`, `draft-ahead` or `tidy`. It runs on the caller's thread: call it off the main thread.
+    pub fn test_pump(&self, job: String, arguments: Vec<String>) -> Result<(), TestWorldProblem> {
+        let arguments: Vec<&str> = arguments.iter().map(String::as_str).collect();
+        self.world()?.pump(&job, &arguments).map_err(failed)
+    }
+
+    /// A pass of each job the app kicked since the last, as its lane would have run it then. It runs on the caller's
+    /// thread: call it off the main thread.
+    pub fn test_pump_kicked(&self) -> Result<(), TestWorldProblem> {
+        self.world()?.pump_kicked().map_err(failed)
+    }
+
+    /// Wait until no request is being answered, nor any work one set going, for at most `timeout_seconds`: how many
+    /// still are, 0 once settled. It blocks: call it off the main thread.
+    pub fn test_settle(&self, timeout_seconds: f64) -> Result<u32, TestWorldProblem> {
+        let world = self.world()?;
+        let timeout = std::time::Duration::try_from_secs_f64(timeout_seconds.max(0.0))
+            .map_err(|_| failed("not a span of time".into()))?;
+        Ok(u32::try_from(world.settle(timeout)).unwrap_or(u32::MAX))
+    }
+
+    /// The id of the last event the app published (`run-n`): a subscriber has heard all there is once it has heard
+    /// this one.
+    pub fn test_high_water(&self) -> Result<String, TestWorldProblem> {
+        Ok(self.world()?.high_water())
+    }
+}
+
+impl CoreHost {
+    fn world(&self) -> Result<&mm_host::testworld::Controls, TestWorldProblem> {
+        self.inner.test_world().ok_or(TestWorldProblem::NotATestWorld)
     }
 }
 

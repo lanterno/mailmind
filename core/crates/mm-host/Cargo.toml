@@ -14,6 +14,9 @@ axum.workspace = true
 futures-core.workspace = true
 mm-kernel.workspace = true
 mm-server.workspace = true
+# A test's home: the clock that stands until the test moves it, and the jobs paused until it pumps them, as mm-served
+# has them.
+mm-testworld.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 

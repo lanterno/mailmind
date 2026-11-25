@@ -998,6 +998,7 @@ dependencies = [
  "mm-kernel",
  "mm-mailbox",
  "mm-server",
+ "mm-testworld",
  "rcgen",
  "rustls",
  "serde_json",

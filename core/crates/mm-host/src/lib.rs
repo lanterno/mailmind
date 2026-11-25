@@ -12,9 +12,18 @@
 //!
 //! The host owns the runtime the routes run on. `request` blocks its caller until the answer is whole, so a shell calls
 //! it off its main thread.
+//!
+//! A test's home can ask for the test world the served suites run in (`mm_testworld`): with a keychain stand-in, and
+//! `MAILMIND_TEST_CLOCK=paused` among its variables, the app reads a clock that stands until the test moves it
+//! (`MAILMIND_TEST_NOW`, or where the system's stood as it opened), and starts no workers, so a job runs only when the
+//! test pumps it. `test_world` is the test's hold on them. A home with no stand-in, which a person's always is, never
+//! gets one, whatever its variables say.
 
 pub mod stand_in;
 pub mod stream;
+
+/// The test world a test's home can run in: its clock, its paused jobs and the lines that move them.
+pub use mm_testworld as testworld;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -27,10 +36,13 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{HeaderValue, Method, Request, Response, header};
 use futures_core::Stream;
-use mm_server::environment::{Environment, Settings};
+use mm_kernel::seams::{Clock, Moment};
+use mm_server::environment::{Environment, Settings, TEST_NOW};
 use mm_server::real::{Sanitizing, SystemClock};
 use mm_server::workers::Workers;
 use mm_server::{App, Seams};
+use mm_testworld::Controls;
+use mm_testworld::clock::{TestClock, parse_iso};
 use tokio::runtime::Runtime;
 use tokio::task::AbortHandle;
 
@@ -58,6 +70,33 @@ pub struct Home {
     /// With one, the app also reaches no host off this machine and runs no program. Without, it runs on the real
     /// seams, the login Keychain among them.
     pub stand_in: Option<PathBuf>,
+}
+
+impl Home {
+    /// The environment the app reads: `variables`, with `MAILMIND_HOME` left out (it is `folder`).
+    fn environment(&self) -> Environment {
+        let pairs = self.variables.iter().filter(|(name, _)| name != mm_server::environment::HOME);
+        Environment::from_pairs(pairs.map(|(name, value)| (name.as_str(), value.as_str())))
+    }
+
+    /// Where the test clock stands as the app opens, when this home runs in a test world: only a home with a keychain
+    /// stand-in (a test's or a demo's) whose variables say `MAILMIND_TEST_CLOCK=paused`; it stands at
+    /// `MAILMIND_TEST_NOW`, or where the system's clock stood. None for any other home: one with no stand-in, which a
+    /// person's always is, isn't asked what its variables say. A test's home that names another value, or a time that
+    /// isn't one, doesn't open.
+    pub fn test_clock(&self) -> Result<Option<Moment>, String> {
+        if self.stand_in.is_none() {
+            return Ok(None);
+        }
+        let environment = self.environment();
+        if !environment.test_clock_paused()? {
+            return Ok(None);
+        }
+        match environment.test_now() {
+            Some(text) => parse_iso(text).map(Some).ok_or_else(|| format!("{TEST_NOW} isn't a time")),
+            None => Ok(Some(SystemClock.now())),
+        }
+    }
 }
 
 /// Names only: a value may be a secret (a demo's database key).
@@ -122,21 +161,26 @@ pub struct Host {
     workers: Mutex<Option<Workers>>,
     streams: Arc<Streams>,
     next: AtomicU64,
+    /// A test world's clock and paused jobs, for a home that asked for them (`Home::test_clock`).
+    test: Option<Controls>,
 }
 
 impl std::fmt::Debug for Host {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Host").field("closing", &self.closing.load(Ordering::SeqCst)).finish_non_exhaustive()
+        f.debug_struct("Host")
+            .field("closing", &self.closing.load(Ordering::SeqCst))
+            .field("test_world", &self.test.is_some())
+            .finish_non_exhaustive()
     }
 }
 
 impl Host {
     /// Open `home`: the database made or upgraded, the app assembled over it and its background workers started (all
     /// but the minute's round and the reading of a first scan's older mail left out when the profile only reads, as
-    /// `Workers::start` leaves them). It fails saying why in words a person can act on, naming no secret.
+    /// `Workers::start` leaves them). A home in a test world (`Home::test_clock`) gets the test clock and starts no
+    /// workers. It fails saying why in words a person can act on, naming no secret.
     pub fn open(home: Home) -> Result<Host, String> {
-        let pairs = home.variables.iter().filter(|(name, _)| name != mm_server::environment::HOME);
-        let environment = Environment::from_pairs(pairs.map(|(name, value)| (name.as_str(), value.as_str())));
+        let environment = home.environment();
         if !home.folder.is_dir() {
             mm_server::logging::to_terminal(environment.log_debug());
             return Err("MailMind's data folder isn't there".into());
@@ -145,10 +189,14 @@ impl Host {
         // standard error goes nowhere.
         mm_server::logging::keep_in(&home.folder, environment.log_debug());
         let settings = Settings { home: home.folder.clone() };
-        let seams = match &home.stand_in {
+        let paused = home.test_clock()?.map(|at| Arc::new(TestClock::at(at)));
+        let mut seams = match &home.stand_in {
             Some(file) => stand_in_seams(file.clone()),
             None => mm_server::real::seams(),
         };
+        if let Some(clock) = &paused {
+            seams.clock = clock.clone();
+        }
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .thread_name("mailmind-core")
@@ -157,20 +205,30 @@ impl Host {
         let (app, workers) = {
             let _inside = runtime.enter();
             let app = Arc::new(App::assemble(&environment, &settings, home.folder.join(NO_PAGE), PORT, &seams)?);
-            let workers =
-                Workers::start(&app, environment.read_only(), environment.reconcile_secs(), environment.expire_secs());
+            // In a test world nothing runs in the background: a job runs when the test pumps it.
+            let workers = paused.is_none().then(|| {
+                Workers::start(&app, environment.read_only(), environment.reconcile_secs(), environment.expire_secs())
+            });
             (app, workers)
         };
         let routes = mm_server::routes::router(app.clone());
+        let test = paused.map(|clock| Controls::new(clock, app.clone()));
         Ok(Host {
             app,
             routes,
             runtime: RwLock::new(Some(runtime)),
             closing: AtomicBool::new(false),
-            workers: Mutex::new(Some(workers)),
+            workers: Mutex::new(workers),
             streams: Arc::new(Mutex::new(HashMap::new())),
             next: AtomicU64::new(0),
+            test,
         })
+    }
+
+    /// The test world's clock and paused jobs, for a home that runs in one (`Home::test_clock`); None for every other,
+    /// and once the host has closed.
+    pub fn test_world(&self) -> Option<&Controls> {
+        self.test.as_ref().filter(|_| !self.closing.load(Ordering::SeqCst))
     }
 
     /// The computer woke from sleep, or its network changed: a connection may be dead without a word, and mail may
