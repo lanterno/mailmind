@@ -22,8 +22,8 @@ password goes where `keychain` keeps it (the tests' stand-in for the login Keych
 item MailMind names it by.
 
 Tests script trouble with `fail`, `drop` and `drop_after`, change a folder's UIDVALIDITY with
-`renumber`, and read every command the app sent from `commands`, with passwords redacted; a line
-the fake couldn't read as a command is there too, as command "?".
+`renumber`, and read every command the app sent from `commands`, with passwords redacted, and how many bytes the
+answer to each took (`bytes`); a line the fake couldn't read as a command is there too, as command "?".
 
     with FakeIMAPServer(keychain=guard.KEYCHAIN) as srv:
         acct = srv.add_account("ada@example.test", "pw")
@@ -304,11 +304,14 @@ class Session:
         self.condstore = False                           # ENABLE CONDSTORE was asked
         self.events = queue.Queue()                      # untagged lines pushed while idling
         self.mute_tagged = False                         # drop_after: run, but never send the tagged reply
+        self.answering = None                            # the record of the command being answered, whose bytes these are
 
     # wire
     def send(self, data):
         if isinstance(data, str):
             data = data.encode("utf-8")
+        if self.answering is not None:
+            self.answering["bytes"] += len(data)
         self.sock.sendall(data)
 
     def line(self, text):
@@ -334,13 +337,14 @@ class Session:
     def run(self):
         self.line("* OK [CAPABILITY " + self.capabilities() + "] fake IMAP ready")
         while True:
+            self.answering = None                        # a literal's go-ahead is no command's answer
             chars = self.read_command()
             if chars is None:
                 return
             text = "".join(c if isinstance(c, str) else "{literal}" for c in chars)
             tag, _, rest = text.partition(" ")
             if not tag or not rest:
-                self.srv._record(self, tag, "?", [], text)      # a broken line is recorded too
+                self.answering = self.srv._record(self, tag, "?", [], text)      # a broken line is recorded too
                 self.line("* BAD no tag")
                 continue
             parts = rest.split(" ")
@@ -350,10 +354,10 @@ class Session:
             try:
                 args = parse_args(chars[len(tag) + 1 + len(cmd) + 1:])   # literals stay bytes
             except (ParseError, ValueError):
-                self.srv._record(self, tag, "?", [], text)
+                self.answering = self.srv._record(self, tag, "?", [], text)
                 self.line(f"{tag} BAD could not parse arguments")
                 continue
-            self.srv._record(self, tag, cmd, args, text)
+            self.answering = self.srv._record(self, tag, cmd, args, text)
             fault = self.srv._fault_for(self, cmd, args)
             if fault and fault.hold:
                 self.srv._holding.set()
@@ -1070,14 +1074,16 @@ class FakeIMAPServer:
     # internals
     def _record(self, session, tag, cmd, args, text):
         with self.lock:
-            self._record_locked(session, tag, cmd, args, text)
+            return self._record_locked(session, tag, cmd, args, text)
 
     def _record_locked(self, session, tag, cmd, args, text):
         if cmd == "LOGIN":
             text = f"{tag} LOGIN {args[0] if args else ''} <password>"
         user = session.acct.user if session.acct else (str(args[0]) if cmd == "LOGIN" and args else None)
-        self.commands.append({"user": user, "mailbox": session.box.name if session.box else None,
-                              "command": cmd, "args": args, "line": text})
+        record = {"user": user, "mailbox": session.box.name if session.box else None,
+                  "command": cmd, "args": args, "line": text, "bytes": 0}
+        self.commands.append(record)
+        return record
 
     def _fault_for(self, session, cmd, args):
         with self.lock:

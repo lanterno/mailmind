@@ -122,3 +122,51 @@ limit = 200.0
 measured = 83.9
 on = "Apple M5 Mac, macOS 26.4, screen locked, 2026-11-12"
 # 100.8 MB with the GPU process WebKit also starts.
+
+# The IMAP a common action costs, counted on both servers (the Python app and mailmind-server) by the served tests in
+# tests/api/test_budget_counts.py, against the fake IMAP server. A count leaves out a connection's opening and closing
+# (CAPABILITY, STARTTLS, LOGIN, ENABLE, NOOP, LOGOUT): whether an action opens a connection or takes a kept one is the
+# pool's business. A count is the same on every run, so it has no tolerance: one over its limit fails the PR. A limit
+# is the higher of the two servers when it was set, a promise not to get worse; a change that does better lowers it.
+
+[counts.imap_move_one]
+what = "IMAP commands to move one message from the Inbox to Archive"
+limit = 4
+measured = { python = 4, rust = 4 }
+on = "both servers, 2026-11-25"
+# SELECT, UID MOVE, then EXAMINE Archive and UID SEARCH it by Message-ID for the copy's new UID, which the MOVE's
+# COPYUID already said.
+
+[counts.imap_mark_read_one]
+what = "IMAP commands to mark one message read"
+limit = 2
+measured = { python = 2, rust = 2 }
+on = "both servers, 2026-11-25"
+# SELECT and UID STORE. The Rust server SELECTs again on a kept connection that has the Inbox selected already.
+
+[counts.imap_delta_sync_nothing_new]
+what = "IMAP commands for a sync of an Inbox with nothing new (a server with CONDSTORE)"
+limit = 2
+measured = { python = 2, rust = 2 }
+on = "both servers, 2026-11-25"
+
+[counts.imap_first_sync_small_account]
+what = "IMAP commands for the first sync of a new account's Inbox of three messages"
+limit = 6
+measured = { python = 6, rust = 4 }
+on = "both servers, 2026-11-25"
+# Python fetches each message's body in a FETCH of its own (3 + one per message); Rust fetches them all in one.
+
+[counts.imap_first_sync_bytes_per_message]
+what = "bytes the server sends back per message in that first sync (two short notes and one of about 100 KiB)"
+limit = 47749
+measured = { python = 47749, rust = 22662 }
+on = "both servers, 2026-11-25"
+# Python reads each body whole, the long one's 137 KiB too; Rust reads the first 64 KiB of each.
+
+[counts.imap_reply_filed_to_sent]
+what = "IMAP commands to send a reply: its copy filed in Sent and the original marked answered"
+limit = 4
+measured = { python = 4, rust = 4 }
+on = "both servers, 2026-11-25"
+# LIST to find Sent, APPEND, SELECT and UID STORE \Answered. Python opens a second connection for the STORE.
