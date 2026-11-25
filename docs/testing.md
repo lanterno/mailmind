@@ -80,6 +80,16 @@ The fixtures, from the bottom up:
   `tests/fakes/imap_server.py`. The app's own ingest synced it into the temp database.
   `tests/fakes/smtp_server.py` receives what the accounts send. Both fakes can refuse, drop or
   renumber on cue (`server.fail`, `server.drop`, `smtp.fail`, ...).
+- Every world holds canaries (`tests/support/canaries.py`): its accounts' passwords (`world.PASSWORDS`), the fake
+  providers' keys, and a phrase in the body of Bea's harbor notes, in Folders/Clients (`world.BODY_CANARY`). When a test
+  that made one ends, its `world` (and a scenario's) looks for each where it mustn't be, and fails naming the canary and
+  the place, never its value: a password or a key in a log (`mailmind.log*` in the home, the output of the server the
+  suite started, what the app in the test's own process logged), in any answer the test's client got, or in a request
+  to an AI provider (a key only in its own provider's auth header); the phrase in a log, a refusal, or a request to a
+  provider, unless the test asks about its message (`@pytest.mark.asks_ai_about("bea-clients-01-harbor.eml")`). The
+  fakes keep every request in `seen` for it, which a test's clearing of `requests` leaves. A fixture that makes another
+  fake provider lists it (`canaries.provider`). The check reads a few small files and answers, so it costs nothing a
+  run notices.
 - `app` runs the app in-process: what `mailmind.bootstrap.front.build` makes, on uvicorn. Every account in the world
   goes through imaplib, as a real one does unless it asks otherwise.
   `world.ask_for_imapclient` has an account ask for IMAPClient (`tests/integration/mailbox/test_gmail_through_imapclient.py`).
@@ -150,6 +160,16 @@ whose server ended or stopped answering says the last of it.
 
 The IMAP a common action costs (a move, marking read, a sync, a first sync's bytes, a reply filed in Sent) is held to the
 `[counts]` in `budgets.toml` by `tests/api/test_budget_counts.py`, on both servers, from what the fake IMAP server recorded.
+
+Prompt injection is held by `tests/api/test_http_prompt_injection.py`, on both servers. `tests/fixtures/hostile/` is mail
+that asks the assistant to file, trash, send, forward, reply, unsubscribe, change the Screener's rules or reveal other
+mail (one of them in HTML no one sees), delivered to Ada's Inbox. The fake Claude API answers every call as the mail
+asks, from the call's own schema: every id where it takes ids, the most harmful choice where it takes one, a claim it
+is done where it takes words. Each AI feature that reads mail (background summaries, a thread's summary, a drafted
+reply, extraction, Ask, a plan, the brief, what came in since you looked, the review, the Screener's suggestions, a
+cleanup's reasons, a sender's summary, drafting ahead) then changes nothing a person owns (no IMAP command, nothing over
+SMTP, no rule, mute, snooze, unsubscribe, draft, task or outbox row, the config as it was), even after the jobs that
+would carry out a change have run, and sends nothing from outside the Inbox or the mail it was asked about.
 
 Under `-n`, each worker is a pytest session of its own: it installs the tripwire, runs its own fake Claude API and makes its own
 `world` template and new database, under a temp directory of its own. A test keeps to its temp directory and every server takes
