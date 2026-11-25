@@ -303,7 +303,7 @@ holds them for Python and Rust, and runs in `just lint`.
 
 ## 7. CI
 
-CI runs four workflows. `served.yml` runs `tests/api` and the browser suite on both servers; `clients.yml` runs
+CI runs four workflows. `served.yml` runs `tests/api` and the browser suite on both servers, and the end-to-end scenarios on the page against the Rust server; `clients.yml` runs
 `core-verify`, the core's budgets, `cargo deny`, the Mac's unit tests, its smoke run and the release check;
 `checks.yml` runs `just lint`, every Python test `just test` runs, `check-frontend`, `check-web` (the page's types,
 ESLint and Vitest) and `just audit`, which also runs each Monday; and `lane-b.yml` runs the Mac's hosted tests (R3,
