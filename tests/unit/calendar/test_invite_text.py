@@ -19,7 +19,9 @@ MON = "DTSTART:20261005T100000"             # floating
 MON_END = "DTEND:20261005T103000"
 
 
-_BUDGET = ics._EXPAND_SECONDS               # what the reader allows itself for a rule, before _time_to_read raises it
+# Short of the 90 ms dateutil takes here to give up on February 30 by itself, which a longer budget lets it do: then the
+# series is its DTSTART alone, as RFC 5545 counts it.
+_BUDGET = 0.02
 
 
 @pytest.fixture(autouse=True)
