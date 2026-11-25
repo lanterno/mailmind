@@ -19,7 +19,6 @@ class HostedCase: XCTestCase {
 
     override func setUp() async throws {
         try await super.setUp()
-        continueAfterFailure = false
         try onTheTestHome()
         try await until("the core opened", within: 60) {
             if case .failed(let why) = MailApp.shared.stage { throw KitError("MailMind didn't open: \(why)") }
@@ -105,11 +104,28 @@ class HostedCase: XCTestCase {
         try await Task.sleep(for: .milliseconds(400))
     }
 
-    /// The first row of the list chosen by a click on it, as a person chooses one.
+    /// The list's first message chosen by a click on it, as a person chooses one: on its row's text, below any day's
+    /// head and off its buttons and check box. The brief's line over the list, where there is one, isn't mail.
     func clickFirstRow() async throws {
-        let rect = table.rect(ofRow: 0)
-        try RealMouse.click(at: CGPoint(x: rect.midX, y: rect.midY), in: table)
-        try await until("the first row chosen") { !self.mailbox.chosenRows.isEmpty }
+        let (cell, point) = try firstMailRow()
+        try RealMouse.click(at: point, in: cell)
+        try await until("a row chosen") { !self.mailbox.chosenRows.isEmpty }
         try await settle()
+    }
+
+    /// The first row of mail the list shows, and a point in it that a click chooses the row at.
+    func firstMailRow() throws -> (MailRowCell, CGPoint) {
+        for row in 0..<table.numberOfRows {
+            guard let cell = table.view(atColumn: 0, row: row, makeIfNecessary: false) as? MailRowCell else {
+                continue
+            }
+            let bounds = cell.bounds
+            let y = cell.isFlipped ? bounds.maxY - 8 : bounds.minY + 8
+            for x in [0.45, 0.55, 0.35, 0.65].map({ bounds.minX + bounds.width * $0 }) {
+                let point = CGPoint(x: x, y: y)
+                if !cell.inHead(point), cell.target(at: point) == nil { return (cell, point) }
+            }
+        }
+        throw KitError("no row of mail in the list to click (\(table.numberOfRows) rows)")
     }
 }

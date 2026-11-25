@@ -12,17 +12,26 @@ final class ClickTests: HostedCase {
         @objc func clicked(_ sender: Any?) { clicks += 1 }
     }
 
+    /// A plain `NSButton`, which takes a click through the window's gesture recognizers: only a key window's own
+    /// routing reaches them. It stands in a window of its own over the mail window, since SwiftUI's hosting view
+    /// takes no AppKit view put into it; that window is key in the active app, as the mail window was.
     func testAPlainButtonTakesAClickInTheKeyWindow() async throws {
-        let content = try XCTUnwrap(window.contentView)
+        let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 320, height: 160), styleMask: [.titled, .closable],
+                             backing: .buffered, defer: false)
+        panel.isReleasedWhenClosed = false
+        panel.contentView = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 160))
         let count = Count()
         let button = NSButton(title: "Press", target: count, action: #selector(Count.clicked(_:)))
-        button.frame = NSRect(x: content.bounds.midX - 60, y: content.bounds.midY - 16, width: 120, height: 32)
-        content.addSubview(button)
-        defer { button.removeFromSuperview() }
+        button.frame = NSRect(x: 100, y: 64, width: 120, height: 32)
+        panel.contentView?.addSubview(button)
+        panel.center()
+        panel.makeKeyAndOrderFront(nil)
+        defer {
+            panel.close()
+            window.makeKeyAndOrderFront(nil)
+        }
+        try await until("its window key") { NSApp.isActive && panel.isKeyWindow }
         try await settle()
-        XCTAssertTrue(RealMouse.view(at: content.convert(NSPoint(x: button.frame.midX, y: button.frame.midY), to: nil),
-                                     in: window) === button, "the button is what a click there lands on")
-        XCTAssertTrue(NSApp.isActive && window.isKeyWindow, "the window routes the click itself")
         try RealMouse.click(button)
         try await until("the button pressed") { count.clicks == 1 }
         try await settle()

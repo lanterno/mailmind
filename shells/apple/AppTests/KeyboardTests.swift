@@ -21,9 +21,15 @@ final class KeyboardTests: HostedCase {
         try await until("Settings key") { NSApp.keyWindow != nil && NSApp.keyWindow !== self.window }
         let settings = try XCTUnwrap(NSApp.keyWindow)
         try await settle()
+        let seen = "key: \(Self.describe(settings)); windows: \(NSApp.windows.filter(\.isVisible).map(Self.describe))"
+        XCTAssertTrue(try menuItem(["File", "Close"]).enabled, "File › Close, for Settings: \(seen)")
         try RealKeys.press(UInt16(kVK_ANSI_W), held: .command, layout: .us, in: settings)
         XCTAssertEqual(RealKeys.route, .app)
-        try await until("Settings closed") { !settings.isVisible }
+        do {
+            try await until("Settings closed") { !settings.isVisible }
+        } catch {
+            throw KitError("\(error): \(seen); key now \(NSApp.keyWindow.map(Self.describe) ?? "none")")
+        }
         try await until("the mail window key again") { self.window.isKeyWindow }
         try await until("the keyboard somewhere in it") { keyboardIsSomewhere(self.window) == nil }
     }
@@ -76,6 +82,12 @@ final class KeyboardTests: HostedCase {
             XCTAssertEqual(taken.keys, [], "the Edit menu took it")
             try await settle()
         }
+    }
+
+    /// A window as a failure names it: its class, identifier, title and whether it can close.
+    static func describe(_ window: NSWindow) -> String {
+        "\(type(of: window)) #\(window.identifier?.rawValue ?? "-") \"\(window.title)\""
+            + (window.styleMask.contains(.closable) ? " closable" : "") + (window.isKeyWindow ? " key" : "")
     }
 
     /// Single keys read as typed on Arabic, with US as the ASCII-capable layout beside it, until the returned close:
