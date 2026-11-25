@@ -93,6 +93,18 @@ final class CoreHomeTests: XCTestCase {
         }
     }
 
+    /// MailMind Dev, the Debug build, is never a person's MailMind: with no home named it opens nothing, and with one
+    /// it opens that.
+    func testMailMindDevOpensOnlyAHomeItIsGiven() throws {
+        XCTAssertThrowsError(try CoreHome.ofThisProcess(["HOME": "/Users/ada"], readOnly: false, dev: true)) {
+            XCTAssertEqual($0 as? DevNamesNoHome, DevNamesNoHome())
+        }
+        let home = try CoreHome.ofThisProcess(["MAILMIND_HOME": "/private/tmp/home"], readOnly: false, dev: true)
+        XCTAssertEqual(home.folder, "/private/tmp/home")
+        XCTAssertFalse(CoreHome.isAPersonsRun(["HOME": "/Users/ada"], dev: true))
+        XCTAssertTrue(CoreHome.isAPersonsRun(["HOME": "/Users/ada"], dev: false))
+    }
+
     /// Settings' read-only switch reaches the core as the profile a read-only run names, unless the environment names
     /// one of its own.
     func testTheReadOnlySwitchRunsTheCoreReadOnly() throws {
