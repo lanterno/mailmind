@@ -99,9 +99,10 @@ try {
       2,
     ),
   );
-  // The numbers budgets.toml's [desktop] holds, as name=value lines (tests/support/budgets.py judges them).
-  console.log(`mac_first_rows_ms=${median("launchToRowsMs")}`);
-  console.log(`mac_idle_memory_mb=${median("footprintMb")}`);
+  // The numbers budgets.toml's [desktop] holds, as name=value lines (tests/support/budgets.py judges them), on
+  // standard error: standard output is the JSON above alone.
+  console.error(`mac_first_rows_ms=${median("launchToRowsMs")}`);
+  console.error(`mac_idle_memory_mb=${median("footprintMb")}`);
 } finally {
   rmSync(logs, { recursive: true, force: true });
 }

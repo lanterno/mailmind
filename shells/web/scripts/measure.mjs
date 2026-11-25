@@ -85,8 +85,9 @@ try {
       2,
     ),
   );
-  // The numbers budgets.toml's [web] holds, as name=value lines (tests/support/budgets.py judges them).
-  console.log(`first_rows_ms=${sorted[Math.floor(sorted.length / 2)]}`);
+  // The numbers budgets.toml's [web] holds, as name=value lines (tests/support/budgets.py judges them), on standard
+  // error: standard output is the JSON above alone, which CI reads.
+  console.error(`first_rows_ms=${sorted[Math.floor(sorted.length / 2)]}`);
   if (problems.length) process.exitCode = 1;
 } finally {
   await context?.close();

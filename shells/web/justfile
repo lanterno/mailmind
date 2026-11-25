@@ -38,7 +38,7 @@ measure messages="100000": build
     cd "{{here}}"
     wasm=$(ls dist/assets/mm_wasm_bg-*.wasm)
     echo "mm-wasm: $(wc -c < "$wasm") bytes raw, $(gzip -9 -c "$wasm" | wc -c) gzip -9, $(brotli -q 11 -c "$wasm" | wc -c) brotli -q 11 (budget 2.5 MB compressed)"
-    echo "wasm_compressed_mb=$(brotli -q 11 -c "$wasm" | wc -c | awk '{printf "%.2f", $1 / 1048576}')"
+    echo "wasm_compressed_mb=$(brotli -q 11 -c "$wasm" | wc -c | awk '{printf "%.2f", $1 / 1048576}')" >&2
     node scripts/measure.mjs {{messages}}
 
 # The TypeScript the client reads the core's messages with, from mm-app and mm-kernel (ts-rs), into src/core/generated
