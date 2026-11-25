@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+"""mm: drive a live MailMind on a fictional world, a command at a time (docs/test-architecture.md section 3).
+
+    just mm up page      just mm attach      just mm shown      just mm down
+
+mmtest/cli.py says what each does.
+"""
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from mmtest.cli import main  # noqa: E402
+
+sys.exit(main(sys.argv[1:]))
