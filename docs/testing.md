@@ -257,6 +257,11 @@ just e2e catalogue                               # and write build/catalogue.md:
 - **Finding things** is by role and label within a region (`app.find("button", "Reply", within="reader")`). The few
   anchors are `data-mm` attributes, listed in `tests/framework/anchors.toml`; `tests/unit/test_anchors.py` holds the
   page to that list. Add one only where role and label can't work, and list it there.
+- **The oracle** runs after every step (`mmtest/oracle.py`): something visible has the keyboard, words typed into a
+  composer's body are kept (on screen, a draft, the outbox or sent), and the open message is among its folder's rows
+  or the reader says where it is. `Truth` is read from the world's database, read only. A step that breaks one fails
+  with both readings; a step that is about a lag on purpose says so first (`app.relax(name, why)`), and a scenario that
+  throws its words away says that (`trace.discarded()`).
 - **A failure** prints a one-line repro (`just e2e <test> --client page`), what was shown when it failed, and every
   step; `build/traces/<test>/` keeps `trace.txt`, `trace.jsonl`, `shown.txt`, `picture.png` and `server.log`. The run
   ends with its slowest steps. The page's own problems (an uncaught error, a console error, a request off its origin)

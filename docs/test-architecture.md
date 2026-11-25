@@ -420,6 +420,24 @@ moved".
 
 An invariant can be relaxed for one step that is about a lag on purpose, never for a whole test.
 
+**As built (step 5).** `mmtest/oracle.py` runs the three after every step of a scenario, once the step has settled
+(`Trace.step` calls it, so a screen's phrase is checked once, at its end, and a world's step too), and fails the step
+with `Broken`, which prints both readings. `Truth` is read from the world's database, read only (`database.keyed`), and
+from the fake SMTP server: the drafts' own words, each send in the outbox, what was sent, and the place the page stands
+on (its `/p/<id>` in `places`) with the message keys its folder holds. Either client's world has that database, so the
+Mac's oracle reads it too. As held:
+
+- *The keyboard is somewhere:* something visible has it; on the page, the page itself having it counts
+  (`keys_reach_the_page`, since the page hears its keys document-wide), and in the Mac app it doesn't.
+- *Typed words are kept:* a client records whether each `type` went into a composer's body (`Trace.typed_into`); each
+  such run of words is in a composer on screen, a draft, the outbox or a sent message, compared with the whitespace
+  between words as any whitespace. A scenario that throws its words away says so (`Trace.discarded`).
+- *The open message is where it says:* the reader's message (its key from `Shown` where the client gives one, else the
+  place's) is among its folder's rows, or the reader says where it is (`says_where`). Lists that aren't a folder's
+  (all inboxes, a search, the brief's) aren't judged until their views move into the core.
+
+`app.relax(name, why)` leaves one out after the next step alone; `mm truth` prints the reading.
+
 ## 9. Output
 
 - **Text first.** `shown` is a text tree. A failed invariant prints both readings and the difference. The trace is
@@ -493,7 +511,8 @@ Each step is useful on its own, and the first ones pay off before the Mac driver
 4. **The driver, lane A.** `MailMindTestKit` from `Tests/RealKeys.swift` and `MailFrameTests.press`; the driver's link,
    input, `find`, `shown`, `settle`, `core`; `mm up mac`. The first scenarios are the review's findings in the list,
    triage, the composer and the reader.
-5. **The oracle's three invariants**, run after every step.
+5. **The oracle's three invariants**, run after every step. *Built:* section 8's "as built" note says how; `tests/unit/test_oracle.py` holds
+   what each catches and lets be.
 6. **Lane B on CI**, sharded, with `@needs_session` scenarios and the catalogue on merges.
 7. **Anchors and screens, area by area**, porting the review's findings as scenarios as each area gets its screen.
 8. **Then:** the counts invariant once its rules are written; a model-based machine over screens; chaos with random
