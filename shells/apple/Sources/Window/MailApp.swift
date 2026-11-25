@@ -134,6 +134,7 @@ final class MailApp {
         case HostProblem.NotOpened(let why): why
         case let problem as Problem: problem.description
         case let named as NoHomeNamed: named.description
+        case let dev as DevNamesNoHome: dev.description
         default: unexpected
         }
     }

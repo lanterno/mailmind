@@ -244,16 +244,21 @@ extension CoreHome {
     /// Whether this is a person's run: one that names no home of its own and isn't a measure, demo or test run. Only
     /// such a run may be opened again by itself (a relaunch through Finder's way of opening apps), since another run's
     /// home and keychain are in its environment, which a relaunch wouldn't carry.
-    public static func isAPersonsRun(_ environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
-        (environment["MAILMIND_HOME"] ?? "").isEmpty && !notAPersonsRun.contains { environment[$0] != nil }
+    public static func isAPersonsRun(_ environment: [String: String] = ProcessInfo.processInfo.environment,
+                                     dev: Bool = isDev) -> Bool {
+        !dev && (environment["MAILMIND_HOME"] ?? "").isEmpty && !notAPersonsRun.contains { environment[$0] != nil }
     }
+
+    /// Whether this is MailMind Dev, the Debug build (`io.github.lanterno.mailmind.dev`): a developer's and the tests'
+    /// app, never a person's MailMind, so it opens only a home it is given.
+    public static let isDev = Bundle.main.bundleIdentifier?.hasSuffix(".dev") ?? false
 
     /// The home this process runs: `MAILMIND_HOME`'s folder when it names one (a demo's or a test's), with the file
     /// `MAILMIND_TEST_KEYCHAIN` names standing in for the login Keychain; else, in a person's run only, MailMind's own
     /// folder in Application Support, made if it isn't there, on the login Keychain. Read only when `readOnly`, as the
     /// switch in Settings says.
     public static func ofThisProcess(_ environment: [String: String] = ProcessInfo.processInfo.environment,
-                                     readOnly: Bool = readOnlyChosen) throws -> CoreHome
+                                     readOnly: Bool = readOnlyChosen, dev: Bool = isDev) throws -> CoreHome
     {
         let variables = variables(environment, readOnly: readOnly)
         if let named = environment["MAILMIND_HOME"], !named.isEmpty {
@@ -263,11 +268,21 @@ extension CoreHome {
         if let variable = notAPersonsRun.first(where: { environment[$0] != nil }) {
             throw NoHomeNamed(variable: variable)
         }
+        if dev {
+            throw DevNamesNoHome()
+        }
         let support = try FileManager.default.url(
             for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
         let folder = support.appending(path: folderName, directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         return CoreHome(folder: folder.path(percentEncoded: false), variables: variables, standIn: nil)
+    }
+}
+
+/// MailMind Dev started with no home named: it opens nothing rather than a person's folder and the login Keychain.
+public struct DevNamesNoHome: Error, Hashable, Sendable, CustomStringConvertible {
+    public var description: String {
+        "MailMind Dev opens only the folder MAILMIND_HOME names, and none is named: it never opens your MailMind's mail."
     }
 }
 
