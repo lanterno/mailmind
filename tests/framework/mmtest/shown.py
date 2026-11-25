@@ -173,6 +173,11 @@ class Composer:
     asks: list = field(default_factory=list)
 
 
+def _empty():
+    """A new list, for Shown's fields: inside Shown, `list` is its field of that name, not the type."""
+    return []
+
+
 @dataclass
 class Shown:
     """What a person sees now. `text()` is the snapshot `mm shown` prints; `diff` is what changed from another."""
@@ -181,11 +186,11 @@ class Shown:
     path: str = ""
     rail: dict | None = None
     list: dict | None = None
-    rows: list = field(default_factory=list)
+    rows: list = field(default_factory=_empty)
     reader: dict | None = None
-    composers: list = field(default_factory=list)
-    dialogs: list = field(default_factory=list)
-    floats: list = field(default_factory=list)
+    composers: list = field(default_factory=_empty)
+    dialogs: list = field(default_factory=_empty)
+    floats: list = field(default_factory=_empty)
     toast: str = ""
     tray: list | None = None
     focus: dict | None = None
