@@ -48,6 +48,10 @@ L = a week-plus.
   [#69](https://github.com/lanterno/mailmind/issues/69) — `budgets.toml`'s `[counts]` show a move searching the target
   for the UID its `COPYUID` already gave, a reply listing every folder before its `APPEND` to Sent, and a kept
   connection selecting the Inbox it already has. Lower each limit as its count comes down.
+- **A new database's key refused once on CI's Linux** · low value · effort S ·
+  [#70](https://github.com/lanterno/mailmind/issues/70) — `Store::open` on a new file failed with SQLCipher's catch-all
+  keying error once, with four other tests keying databases beside it. Find what can fail when several connections are
+  keyed at once, since the app opens several as it starts.
 - **Log the kept connections out on Ctrl-C or SIGTERM** · low value · effort S ·
   [#56](https://github.com/lanterno/mailmind/issues/56) — `mailmind-server` logs them out as it stops serving, but has
   no signal handler, so a Ctrl-C or a SIGTERM ends it without the LOGOUTs. The Mac app's `Host::close` sends them.
