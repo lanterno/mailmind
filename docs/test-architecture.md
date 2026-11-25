@@ -269,17 +269,37 @@ Every rule agents had to be told becomes something the code enforces.
 | Launch only with a temp home, a keychain stand-in and a key of its own | The driver refuses to start unless the home is under the system's temp folder, the keychain is the stand-in, and the identity is Dev's |
 | Kill only your own processes | The runner starts the app and the fakes in its own process group, writes their pids into the home, and stops only those |
 | Never change the clock or the time zone | The app reads time through `AppSeams.clock`; a zone is set with `TZ` at launch |
-| Never change the keyboard layout | `AppSeams.layout`: `SingleKey` asks the seam, not the system, which layout is current |
+| Never change the keyboard layout | `AppSeams.layouts`: `SingleKey` asks the seam, not the system, which layout is current |
 | Save and restore the clipboard | `AppSeams.pasteboard`: a named pasteboard per run |
 | Never open a link in a real browser | `AppSeams.links`: recorded, never opened; the oracle can read them |
-| Never post a notification as the person's app | `AppSeams.notifications` and `AppSeams.loginItems`: recorded |
+| Never post a notification as the person's app | `AppSeams.notifications` and `AppSeams.loginItem`: recorded |
 | Never reach a real server, AI or model server | The tripwire and the fakes, as today, in every process the runner starts |
 
 `AppSeams` mirrors the core's `Seams`. The shipped app gets the system's versions; MailMind Dev under a driver gets the
-test ones. The Mac sources hold about 45 `Date()` calls, 36 `Task.sleep`s, 5 uses of the general pasteboard and 11
-`NSWorkspace` opens today; moving them behind the seam is work of its own, done once (section 11, step 2).
+test ones. The Mac sources held about 45 `Date()` calls, 36 `Task.sleep`s, 5 uses of the general pasteboard and 11
+`NSWorkspace` opens; step 2 moved them behind the seam (section 11).
 
 `release-check` fails if the shipped app holds the driver, the test seams, or the Dev identity.
+
+**As built (step 2).** `AppSeams` (`shells/apple/Sources/Seams/AppSeams.swift`) holds `clock` (section 7),
+`pasteboard`, `links` (`open` and Finder's `reveal`), `notifications` (the `Notifier` that
+`SystemNotifier.forThisProcess` picks, whose `Silent` already recorded), `loginItem` (`OpenAtLogin`'s `LoginItem`:
+`SMAppService.mainApp` in a person's run, none in any other, and System Settings' Login Items opened through it) and
+`layouts` (the two input sources `SingleKey` reads). Each is read where it is used, never kept, and its system version does exactly what the code did
+before. The stand-ins are `TestKit/TestClock.swift` and `TestKit/RecordedLinks.swift`, which the driver can reuse, and
+`Tests/TestSeams.swift`, which puts them, a pasteboard of the test's own (`NSPasteboard.withUniqueName()`) and a
+`Silent` notifier into the seams for one test and puts back what was there.
+
+The Debug configuration builds MailMind Dev: `io.github.lanterno.mailmind.dev`, `MailMindDev.app` with the executable
+`MailMindDev`, shown as "MailMind Dev", its Swift module still `MailMind` so the hosted tests import it as before; their
+`TEST_HOST` is it. Release is `io.github.lanterno.mailmind` and `MailMind.app` as before, which `release-check` already
+checks; Sparkle stays off in Dev (`Updates.checks` is false in any Debug build). No app build compiles `TestKit/` or
+`Tests/`, so a shipped app can't hold the test seams; the check for the driver comes with it in step 4.
+
+Not behind a seam yet: AppKit's own Copy and Paste in a text field (the general pasteboard, under the composer's own
+paste); the system's notifications of a wake, a changed clock or zone, and of contrast, which the app hears; and a Dev
+run that names no home, which still opens MailMind's own data folder and the login Keychain as a Debug run did. The
+driver's refusal to start off a temp home (step 4) is what keeps a scenario off them.
 
 ## 7. Time and settling
 
@@ -330,6 +350,22 @@ probes in a row, within 20 seconds:
 
 The page's own time runs ahead of the core's by the short delays settled through, a few seconds over a scenario.
 
+**On the Mac, as built (step 2).** `AppSeams.clock` is an `AppClock`: `now`, `instant` (a reading that only moves
+forward), `sleep(for:ticking:)` and `after(_:_:)`, whose system version is `Date()`, `ContinuousClock`, `Task.sleep` and
+the main queue's `asyncAfter`. Every reading and delay in `Sources/` that shapes what the app does goes through it. Left
+on the Mac's own time: measure mode (`Measure.swift`, `HomeMeasure.swift`) and the lists' `firstRowsAt`, which time
+the real Mac, and `RunPreferences`' write a moment after a change, on a queue of its own and again as the run ends.
+The brief's `TimelineView` still redraws on the system's minute; under a test clock the time it draws is that clock's.
+
+The test clock (`TestKit/TestClock.swift`) stands still until `advance(by:)`, which runs what comes due in order (by
+when, then by when it was set), the clock reading each one's time as it runs, and lets the main actor run what each
+woke before going on. A sleep waits on its caller's actor (`#isolation`), so it wakes there and in order. A delay is
+short by what it was set for, two seconds or less: `pendingShortDelays` lists them and `runShortDelays()` runs them, up
+to 30 seconds of the clock at a time, as the page's settle does. A beat of something that repeats is marked
+`ticking: true` (Undo Send's seconds, autosave, the minute `AppStatus` keeps, the list's aging) and never counts as
+busy, as `setInterval` doesn't on the page, so Undo Send's window waits for the test. A duration is kept to the
+nanosecond, so 2.6 seconds made from a `Double` is the 2.6 a test moves by.
+
 **In the Mac's core, as built (step 3).** The test clock and the paused jobs are `core/crates/mm-testworld`, which
 `mm-served` and `mm-host` share. Its `Controls` hold a `TestClock` (set, advanced) and the app: `kick`, `pump` (one pass
 of a job, as the `work` line names it), `pump_kicked`, `settle` (the requests being answered and the work they set
@@ -343,9 +379,9 @@ test's run reads them. The shell reaches them through `CoreHost`: `in_test_world
 8601), `test_advance_clock` (seconds), `test_kick`, `test_pump`, `test_pump_kicked`, `test_settle` and
 `test_high_water`, each refusing with `TestWorldProblem.NotATestWorld` outside one. As on the page, moving the clock
 runs nothing by itself: a job that came due runs when the driver pumps it, and its settle runs `test_settle` then
-`test_pump_kicked` as `page.py` runs `settle` then `work kicked`. Still for step 4: the shell passes the two variables
-on (`CoreHome.passedOn`, in `Sources/Client/Core.swift`), and `check` (the tripwire's findings) has no in-process
-counterpart yet.
+`test_pump_kicked` as `page.py` runs `settle` then `work kicked`. The shell passes the two variables on
+(`CoreHome.passedOn`, in `Sources/Client/Core.swift`). Still for step 4: `check` (the tripwire's findings) has no
+in-process counterpart yet.
 
 ## 8. The oracle
 
@@ -447,7 +483,9 @@ Each step is useful on its own, and the first ones pay off before the Mac driver
    you, reply and reply all, Send Later, filing and Undo, the first run); the browser tests they came from stay until
    their areas move over. Not yet: `world.fault`, corpora past `tiny`, `@free_running`, keyboard layouts on the page.
 2. **The Mac's seams.** `AppSeams` with the clock and its scheduler first (every `Date()` and `Task.sleep`), then the
-   pasteboard, links, notifications, login items and the layout. The Debug build becomes MailMind Dev.
+   pasteboard, links, notifications, login items and the layout. The Debug build becomes MailMind Dev. *Built:*
+   sections 6 and 7 say how, and what is left outside the seams. `TestClockTests` and `AppSeamsTests` hold the clock and
+   what moves on it: a toast's life, the reply box let go, Undo Send's countdown, a link and a paste.
 3. **The core's test clock and jobs in process.** `mm-host` takes a test clock and pauses and pumps jobs, from a crate
    shared with `mm-served`. *Built:* `mm-testworld`, and `CoreHost`'s `test_` controls (section 7's "In the Mac's
    core"). The test world is in the shipped library too, behind the home's check; `release-check` keeping it out of

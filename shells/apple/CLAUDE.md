@@ -64,7 +64,11 @@ test of such an API is marked `@available` too. Nothing checks the core's calls 
 MailMind is tested on Apple silicon only: a release's Intel half is built and checked to be there, never run.
 
 The Mac app is `io.github.lanterno.mailmind`, version `MARKETING_VERSION` in `project.yml`;
-[docs/releasing.md](../../docs/releasing.md) says how a release is cut and what the owner does once.
+[docs/releasing.md](../../docs/releasing.md) says how a release is cut and what the owner does once. That is the
+Release build, which `just apple build`, `run`, `demo`, `measure` and a release make. The Debug build, which `just apple
+test` and the hosted tests build, is **MailMind Dev**: `io.github.lanterno.mailmind.dev`, `MailMindDev.app` with the
+executable `MailMindDev`, an app of its own to macOS (its preferences, saved state, login item, notification permission
+and `mailto:` registration), its Swift module still `MailMind`.
 
 ## What is where
 
@@ -85,6 +89,7 @@ The Mac app is `io.github.lanterno.mailmind`, version `MARKETING_VERSION` in `pr
 | `Sources/Measure.swift` | Measure mode, run only when `MAILMIND_MEASURE` is set. |
 | `Sources/Acknowledgements.swift` | **MailMind › Acknowledgements**: the licences a release put in the app, in a window of their own. |
 | `Sources/Updates.swift` | Sparkle's updater and **Check for Updates…** in the app menu (`UpdateCommands`), on the Mac only. |
+| `Sources/Seams/` | `AppSeams`, every way the app reaches the system, in one place: `clock` (`AppClock`: the time, a reading that only moves forward, `sleep(for:ticking:)` and `after`; `SystemClock` is `Date()`, `ContinuousClock`, `Task.sleep` and `asyncAfter`), `pasteboard`, `links` (`Links`: `NSWorkspace`'s open and Finder's reveal), `notifications` (`SystemNotifier.forThisProcess`'s), `loginItem` (`OpenAtLogin`'s) and `layouts` (what `SingleKey` reads). A test puts its own in (`Tests/TestSeams.swift`). |
 | `Sources/Client/Core.swift` | `Core`: the host opened over a home, a route's GET or POST as its generated types, a refusal thrown as its `Problem`, the event stream as an `AsyncStream`. A request may carry a person's leave to go over the day's AI limit (`postOverLimit`, `send(…, overLimit: true)`), the one header the host lets a shell add. `CoreHome.ofThisProcess` picks the home. |
 | `Sources/Client/APISupport.swift` | What the generated types lean on: `JSONValue`, the `GetRoute` and `PostRoute` protocols, `NotJSON`, a union's decoding. |
 | `Sources/Client/API.gen.swift` | The routes' answers and bodies as Swift types, all inside `API`, each route as `API.Get.X` or `API.Post.X`. Written by `just apple gen-api`; never edit it. |
@@ -100,8 +105,8 @@ The Mac app is `io.github.lanterno.mailmind`, version `MARKETING_VERSION` in `pr
 | `Sources/Mac/Curation/` | Curate's sheet (senders, inboxes, rules, filters, activity) and its model, and each account's Screener, the gate across the window. |
 | `Sources/Mac/Attention/` | Snooze (its presets and a time of a person's own), mute, Reply Later and follow-ups: the model, the commands for the mailbox's keys, palette and row menu, and the menu items. |
 | `Sources/Mac/Calendar/` | An invite's RSVP and its Undo, adding it to the calendar, and how an event's time is said (`Upcoming`). |
-| `TestKit/` | `MailMindTestKit`, compiled into `MailMindTests` and `MailMindAppTests` and kept free of XCTest so the in-app driver can reuse it: keys pressed as a person presses them (`RealKeys`, posted into the app's queue, a key code read under US, Arabic, Swiss French or German from that layout's own table, never changing the Mac's), the mouse (`RealMouse`: clicks, drags, the wheel, the pointer's moves), finding things by role and label within a region (`Find`), `keyboardIsSomewhere(_:)` and the menu bar's items as AppKit validates them (`menuItem(_:)`, `chooseMenuItem(_:)`). It throws `KitError`s rather than asserting. |
-| `AppTests/` | `MailMindAppTests`, the hosted tests: their host is the Mac app itself (Debug), so the real scenes, `Commands` and menu bar exist and the window is key in an active app. They hold what the unhosted tests can't: the menu bar's items as AppKit validates them, ⌘ and ⇧⌘ keys through `NSApp.sendEvent` (`RealKeys.route`), e and d under Arabic past Edit's own items, the keyboard's place after Settings and a dialog, and clicks on a plain `NSButton` and SwiftUI's. `hosted_home.py` runs them on `just apple demo`'s fictional world, naming the temp home, key and keychain stand-in as `TEST_RUNNER_` variables. They take the screen and the keyboard, so `just apple test-hosted` runs only on CI (lane B, `.github/workflows/lane-b.yml`) or with `MAILMIND_LANE_B=1` on a VM; locally, only build them (`build-for-testing -scheme MailMindAppTests`). |
+| `TestKit/` | `MailMindTestKit`, compiled into `MailMindTests` and `MailMindAppTests` and kept free of XCTest so the in-app driver can reuse it: keys pressed as a person presses them (`RealKeys`, posted into the app's queue, a key code read under US, Arabic, Swiss French or German from that layout's own table, never changing the Mac's), the mouse (`RealMouse`: clicks, drags, the wheel, the pointer's moves), finding things by role and label within a region (`Find`), `keyboardIsSomewhere(_:)` and the menu bar's items as AppKit validates them (`menuItem(_:)`, `chooseMenuItem(_:)`). It throws `KitError`s rather than asserting. It also holds the seams' stand-ins: `TestClock`, which stands still until a test moves it (`advance(by:)` runs what comes due, in order; `pendingShortDelays` and `runShortDelays()` are what a settle needs), and `RecordedLinks`. |
+| `AppTests/` | `MailMindAppTests`, the hosted tests: their host is the Mac app itself (Debug: MailMind Dev), so the real scenes, `Commands` and menu bar exist and the window is key in an active app. They hold what the unhosted tests can't: the menu bar's items as AppKit validates them, ⌘ and ⇧⌘ keys through `NSApp.sendEvent` (`RealKeys.route`), e and d under Arabic past Edit's own items, the keyboard's place after Settings and a dialog, and clicks on a plain `NSButton` and SwiftUI's. `hosted_home.py` runs them on `just apple demo`'s fictional world, naming the temp home, key and keychain stand-in as `TEST_RUNNER_` variables. They take the screen and the keyboard, so `just apple test-hosted` runs only on CI (lane B, `.github/workflows/lane-b.yml`) or with `MAILMIND_LANE_B=1` on a VM; locally, only build them (`build-for-testing -scheme MailMindAppTests`). |
 | `Generator/swift_api.py` | Writes `API.gen.swift` from the OpenAPI document `tests/support/openapi_doc.py` makes. `just apple check-api`, in `just verify`, fails when the two differ. |
 | `Measure/` | `measure.sh` and the probes it compiles (the crossing cost, a web view's memory), `smoke.sh`, which CI runs, and `demo_home.py`, which `just apple demo` runs (and its `smoke`, `measure` and `picture`), and the release check on each half of the release's app (`--arch`). |
 | `build/` | The XCFramework, derived data, measurements and releases. Ignored by git. |
@@ -129,12 +134,13 @@ The Mac app is `io.github.lanterno.mailmind`, version `MARKETING_VERSION` in `pr
   temporary home with `MAILMIND_HOME`, a key with `MAILMIND_DB_KEY` and the keychain's stand-in with
   `MAILMIND_TEST_KEYCHAIN` (as `just apple demo` does), and one that names no home opens nothing. Step 0's mailbox
   lives in a folder of its own, never inside the app's.
-- **A run that isn't a person's never touches their preferences,** however it is started. Every build is
+- **A run that isn't a person's never touches their preferences,** however it is started. Every Release build is
   `io.github.lanterno.mailmind`, so macOS would hand a demo, a measure run or one on a home of its own the person's
   defaults. `Sources/main.swift` calls `RunPreferences.keepApart()` before anything reads one: the run's user defaults
   are volatile, so nothing of the person's MailMind is read or written (its settings, read only, the window frames,
   a window's saved state), the Mac's own settings are carried in, and the run's own are kept in its home,
-  `Library/Preferences/io.github.lanterno.mailmind.plist`, which `demo_home.py` checks after each run. Read a run's
+  `Library/Preferences/io.github.lanterno.mailmind.plist` (MailMind Dev's under `io.github.lanterno.mailmind.dev`),
+  which `demo_home.py` and `hosted_home.py` check after each run. Read a run's
   preferences there, never with `defaults` on the app's domain, which is the person's. A new preference goes through
   `UserDefaults.standard` (or a suite a test names), never a file of its own. `CFFIXED_USER_HOME` moves the home folder
   on macOS 26, but not the defaults. Nor does such a run reach the person's Mac otherwise: it never asks to notify or
@@ -180,4 +186,10 @@ The Mac app is `io.github.lanterno.mailmind`, version `MARKETING_VERSION` in `pr
   the window's question (`CoreLink`'s, `ComposeHost`'s or `Wire`'s `asksOverLimit`), and on yes the same call goes
   again once with the leave. A call the app makes on its own (the brief written on opening, a sentence searched for,
   a quick reply's draft, a reply written ahead) passes no question, and says the limit is reached.
+- **The app reaches the system through `AppSeams`.** Read the time with `AppSeams.clock.now` (or `.instant` for how
+  long), wait with `AppSeams.clock.sleep(for:)` (`ticking: true` for one beat of something that repeats) and run later
+  with `AppSeams.clock.after`, never `Date()`, `Task.sleep`, `ContinuousClock` or `asyncAfter`; copy to
+  `AppSeams.pasteboard`, open a link or file with `AppSeams.links`, and post through `AppSeams.notifications`. A test
+  moves its own clock (`TestSeams`, `TestClock.advance(by:)`) and never waits for the Mac's. Only measure mode keeps the
+  Mac's own time.
 - **Comments say why,** in short plain sentences.
