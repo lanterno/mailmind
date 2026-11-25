@@ -147,7 +147,8 @@ slice is built:
   port, and `App::assemble` builds them all.
 - **A test reaches the server only through `Seams`** (`Clock`, `Outside`, `Keychain`), which `mm-served` fills with
   the frozen clock, the tripwire and the fake Keychain. The server has no test hooks; the served suites' `work` line
-  runs one pass of a job (`mm-served/src/jobs.rs`), and one not ported yet answers `failed not on the Rust server yet`.
+  runs one pass of a job (`mm-testworld/src/jobs.rs`, which the Mac app's host shares for a test's home), and one not
+  ported yet answers `failed not on the Rust server yet`.
 - **The log is `mm_kernel::log`**, and `mm_server::logging` is where its lines go: standard error, and from the moment
   a data folder is open, `mailmind.log` in it, as the Python app writes it (JSON lines with a UTC time, fields only
   from the `Field` allowlist, a value holding `@` or `%40` withheld, readable by its owner only, rotated at 1 MiB with

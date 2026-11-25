@@ -330,6 +330,23 @@ probes in a row, within 20 seconds:
 
 The page's own time runs ahead of the core's by the short delays settled through, a few seconds over a scenario.
 
+**In the Mac's core, as built (step 3).** The test clock and the paused jobs are `core/crates/mm-testworld`, which
+`mm-served` and `mm-host` share. Its `Controls` hold a `TestClock` (set, advanced) and the app: `kick`, `pump` (one pass
+of a job, as the `work` line names it), `pump_kicked`, `settle` (the requests being answered and the work they set
+going) and `high_water`; `mm-served` answers its `clock`, `work`, `settle` and `events` lines there, unchanged. In the
+Mac app's process the core runs in the test world only when both hold: the home has a keychain stand-in (the shell
+gives one only for `MAILMIND_TEST_KEYCHAIN`), and its variables say `MAILMIND_TEST_CLOCK=paused`. The clock then stands
+at `MAILMIND_TEST_NOW`, or where the system's stood as it opened, and no worker starts. A home with no stand-in, which a
+person's always is, isn't asked what the variable says; another value, or a time that isn't one, stops the home from
+opening. `mm_server::environment` declares both variables, apart from the table the Python app shares, since only a
+test's run reads them. The shell reaches them through `CoreHost`: `in_test_world`, `test_now`, `test_set_clock` (ISO
+8601), `test_advance_clock` (seconds), `test_kick`, `test_pump`, `test_pump_kicked`, `test_settle` and
+`test_high_water`, each refusing with `TestWorldProblem.NotATestWorld` outside one. As on the page, moving the clock
+runs nothing by itself: a job that came due runs when the driver pumps it, and its settle runs `test_settle` then
+`test_pump_kicked` as `page.py` runs `settle` then `work kicked`. Still for step 4: the shell passes the two variables
+on (`CoreHome.passedOn`, in `Sources/Client/Core.swift`), and `check` (the tripwire's findings) has no in-process
+counterpart yet.
+
 ## 8. The oracle
 
 After every step the runner takes two readings:
@@ -432,7 +449,9 @@ Each step is useful on its own, and the first ones pay off before the Mac driver
 2. **The Mac's seams.** `AppSeams` with the clock and its scheduler first (every `Date()` and `Task.sleep`), then the
    pasteboard, links, notifications, login items and the layout. The Debug build becomes MailMind Dev.
 3. **The core's test clock and jobs in process.** `mm-host` takes a test clock and pauses and pumps jobs, from a crate
-   shared with `mm-served`.
+   shared with `mm-served`. *Built:* `mm-testworld`, and `CoreHost`'s `test_` controls (section 7's "In the Mac's
+   core"). The test world is in the shipped library too, behind the home's check; `release-check` keeping it out of
+   Release waits for the Dev build.
 4. **The driver, lane A.** `MailMindTestKit` from `Tests/RealKeys.swift` and `MailFrameTests.press`; the driver's link,
    input, `find`, `shown`, `settle`, `core`; `mm up mac`. The first scenarios are the review's findings in the list,
    triage, the composer and the reader.
