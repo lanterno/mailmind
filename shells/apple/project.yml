@@ -71,6 +71,16 @@ targets:
     settings:
       base:
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+        # The Swift module stays MailMind whatever the app is called, so the hosted tests import it in either build.
+        PRODUCT_MODULE_NAME: MailMind
+      configs:
+        # The Debug build is MailMind Dev, an app of its own to macOS: its own preferences, saved state, login item,
+        # notification permission and mailto: registration, so a build that is run or tested never stands in for the
+        # person's MailMind (docs/test-architecture.md section 6). Release keeps the identity a person installs.
+        Debug:
+          PRODUCT_NAME: MailMindDev
+          PRODUCT_BUNDLE_IDENTIFIER: io.github.lanterno.mailmind.dev
+          INFOPLIST_KEY_CFBundleDisplayName: MailMind Dev
     scheme:
       testTargets: [MailMindTests]
 
@@ -107,7 +117,7 @@ targets:
         embed: false
       - sdk: Security.framework
 
-  # The hosted tests: their host is the Mac app itself (Debug), so its real scenes, its `Commands` and the menu bar
+  # The hosted tests: their host is the Mac app itself (Debug, MailMind Dev), so its real scenes, its `Commands` and the menu bar
   # AppKit builds from them exist, and the tests reach them through `NSApp`, the window key in an active app. They need
   # a real session and take the screen and the keyboard, so they run on CI's macOS runners only (lane B,
   # docs/test-strategy.md section 4.5), through `just apple test-hosted`, never on a person's Mac.
@@ -123,8 +133,13 @@ targets:
         embed: false
     settings:
       base:
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/MailMind.app/Contents/MacOS/MailMind"
         BUNDLE_LOADER: "$(TEST_HOST)"
+      configs:
+        # The app each configuration builds: MailMind Dev in Debug, which the scheme tests, MailMind in Release.
+        Debug:
+          TEST_HOST: "$(BUILT_PRODUCTS_DIR)/MailMindDev.app/Contents/MacOS/MailMindDev"
+        Release:
+          TEST_HOST: "$(BUILT_PRODUCTS_DIR)/MailMind.app/Contents/MacOS/MailMind"
 
 # The hosted tests' own scheme, so `just apple test` (MailMind-macOS's, the unhosted MailMindTests) stays as it was.
 schemes:

@@ -27,9 +27,9 @@ extension SMAppService: LoginItem {
 /// Settings › General's Open at Login: whether macOS opens MailMind as you log in, so mail scheduled for later goes
 /// at its time and new mail comes in. macOS may ask for it to be allowed in its own Login Items first.
 ///
-/// Only a person's run has it (`CoreHome.isAPersonsRun`). Every build is `io.github.lanterno.mailmind`, so a demo's or
-/// a test's run would add its own build to the person's login items, to open with no home as they log in: such a run
-/// has no item, never asks macOS, and says why under the switch.
+/// Only a person's run has it (`CoreHome.isAPersonsRun`). Every Release build is `io.github.lanterno.mailmind`, so a
+/// demo's or a test's run would add its own build to the person's login items, to open with no home as they log in:
+/// such a run has no item, never asks macOS, and says why under the switch.
 @MainActor
 @Observable
 final class OpenAtLogin {

@@ -59,10 +59,10 @@ test: xcframework project
     cd "{{here}}" && xcodebuild -quiet -project MailMind.xcodeproj -scheme MailMind-macOS -destination 'platform=macOS,arch=arm64' \
         -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=NO test
 
-# The hosted tests (AppTests): the Mac app itself as their host, its real menu bar and its window key, on fictional
-# mail (AppTests/hosted_home.py: fake servers on loopback, a temp home, a key made for the run, a keychain stand-in).
-# They take the screen and the keyboard, so they run in lane B, CI's macOS runners, and refuse a person's Mac; a VM
-# or a spare Mac sets MAILMIND_LANE_B=1. The run's results: build/hosted.xcresult
+# The hosted tests (AppTests): the Mac app's Debug build, MailMind Dev, as their host, its real menu bar and its window
+# key, on fictional mail (AppTests/hosted_home.py: fake servers on loopback, a temp home, a key made for the run, a
+# keychain stand-in). They take the screen and the keyboard, so they run in lane B, CI's macOS runners, and refuse a
+# person's Mac; a VM or a spare Mac sets MAILMIND_LANE_B=1. The run's results: build/hosted.xcresult
 test-hosted: xcframework project
     #!/usr/bin/env bash
     set -euo pipefail

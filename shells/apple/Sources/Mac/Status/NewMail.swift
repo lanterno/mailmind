@@ -166,9 +166,9 @@ extension Notifier {
 }
 
 /// The system's notification center, in a person's run only. A run that isn't a person's (`CoreHome.isAPersonsRun`:
-/// a demo, a test, a measure run) gets one that never asks and never posts: it has no person to answer, every build
-/// is `io.github.lanterno.mailmind`, so it would ask and post as the person's own MailMind, and a test bundle has no
-/// app to post as.
+/// a demo, a test, a measure run) gets one that never asks and never posts: it has no person to answer, every Release
+/// build is `io.github.lanterno.mailmind`, so it would ask and post as the person's own MailMind, and a test bundle has
+/// no app to post as.
 struct SystemNotifier: Notifier {
     static func forThisProcess(_ environment: [String: String] = ProcessInfo.processInfo.environment) -> any Notifier {
         if !CoreHome.isAPersonsRun(environment) || Bundle.main.bundleIdentifier == nil {

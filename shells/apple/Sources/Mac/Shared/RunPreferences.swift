@@ -5,9 +5,10 @@ import Foundation
 /// dismissed), the frames AppKit saves for the windows, and whatever else the app or the system's frameworks put in
 /// the app's defaults.
 ///
-/// Every build of MailMind is `io.github.lanterno.mailmind`, so macOS hands a demo, a measure run or a test's run the
-/// defaults of the person's own MailMind: such a run would read their window frames, and could turn their read-only
-/// switch on. So a run that isn't a person's (`CoreHome.isAPersonsRun`) makes this process's user defaults volatile as
+/// Every Release build of MailMind is `io.github.lanterno.mailmind`, so macOS hands a demo, a measure run or a test's
+/// run the defaults of the person's own MailMind: such a run would read their window frames, and could turn their
+/// read-only switch on. (The Debug build, MailMind Dev, is `io.github.lanterno.mailmind.dev`, a domain of its own, and
+/// is kept apart all the same.) So a run that isn't a person's (`CoreHome.isAPersonsRun`) makes this process's user defaults volatile as
 /// it starts, before anything reads one: nothing of the person's is read or written. It carries in the Mac's own
 /// settings (Dark Mode, language and region), and keeps its own in its home, where a Mac keeps a person's in theirs
 /// (`<MAILMIND_HOME>/Library/Preferences/<identifier>.plist`), read as it starts and written as they change. A run that

@@ -79,8 +79,8 @@ jobs:
       - name: The Python packages
         run: uv sync --frozen
 
-      # The XCFramework, the app (Debug) and its hosted tests, then the tests with the app as their host on fictional
-      # mail: shells/apple/AppTests/hosted_home.py names its temp home, key and keychain stand-in.
+      # The XCFramework, the app (Debug, MailMind Dev) and its hosted tests, then the tests with the app as their host
+      # on fictional mail: shells/apple/AppTests/hosted_home.py names its temp home, key and keychain stand-in.
       - name: The hosted tests
         id: hosted
         run: just apple test-hosted

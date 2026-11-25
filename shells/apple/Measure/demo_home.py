@@ -47,7 +47,8 @@ LAUNCHES = 7
 # Seconds a measured launch may take. The app gives up after a minute without mail; one that never got a window
 # (started where it can't reach the screen, as in a sandbox) never measures at all.
 LIMIT = 120
-# Every build of the app is this one, a person's own MailMind and a demo's alike.
+# Every Release build of the app is this one, a person's own MailMind and a demo's alike. The Debug build, MailMind
+# Dev, is io.github.lanterno.mailmind.dev, and `identifier` reads it from the app.
 IDENTIFIER = "io.github.lanterno.mailmind"
 
 

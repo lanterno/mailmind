@@ -1,8 +1,8 @@
 """`just apple test-hosted`: the hosted tests' app on fictional mail, with nothing of a person's anywhere near it.
 
-The hosted tests' host is the Mac app itself, which xcodebuild starts. This makes the world `just apple demo` runs it
-on (Measure/demo_home.py): three made-up accounts on the fake IMAP and SMTP servers on loopback, the corpus in their
-folders, and the fake Claude API; a temp data folder that goes when this ends, a database key made for the run, and a
+The hosted tests' host is the Mac app itself, its Debug build MailMind Dev, which xcodebuild starts. This makes the
+world `just apple demo` runs it on (Measure/demo_home.py): three made-up accounts on the fake IMAP and SMTP servers on
+loopback, the corpus in their folders, and the fake Claude API; a temp data folder that goes when this ends, a database key made for the run, and a
 file standing in for the login Keychain. Then it runs the command after `--` (xcodebuild's test) with each of those
 handed to the app as xcodebuild hands a variable to the process the tests run in: named `TEST_RUNNER_<name>`, which
 it passes on as `<name>`. The servers stay up until the command ends.
@@ -38,6 +38,9 @@ from fakes.imap_server import FakeIMAPServer        # noqa: E402
 from fakes.smtp_server import FakeSMTPServer        # noqa: E402
 from fixtures import world as w                     # noqa: E402
 
+# The host is the Debug build, MailMind Dev, whose run keeps its preferences under its own identifier.
+DEV_IDENTIFIER = "io.github.lanterno.mailmind.dev"
+
 
 def main():
     if "--" not in sys.argv:
@@ -56,7 +59,7 @@ def main():
         print("The hosted tests' app on fictional mail: a temp home, fake servers on loopback and the fake Claude API.",
               flush=True)
         status = subprocess.run(command, env=env).returncode
-        check_kept_apart(home)
+        check_kept_apart(home, DEV_IDENTIFIER)
     sys.exit(status)
 
 
