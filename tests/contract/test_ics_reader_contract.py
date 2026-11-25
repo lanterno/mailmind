@@ -21,7 +21,9 @@ from mailmind.calendar.domain import invite, rsvp
 from property_runs import runs
 
 NOW = datetime(2026, 11, 1, 12, 0, tzinfo=timezone.utc)
-CPU_SECONDS = 1.0           # far above either budget, far below what any bomb here costs without one
+# Far above the reader's budgets (half a second to read, three tenths to expand) with memory traced, which slows a
+# call several times on a busy runner, and far below what any bomb here costs without a budget: minutes.
+CPU_SECONDS = 3.0
 MEMORY_BYTES = 32_000_000
 
 
