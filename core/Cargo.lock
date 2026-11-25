@@ -1090,6 +1090,7 @@ dependencies = [
  "mm-kernel",
  "mm-mailbox",
  "mm-server",
+ "mm-testworld",
  "serde_json",
  "tempfile",
  "tokio",
@@ -1159,6 +1160,15 @@ dependencies = [
  "serde_json",
  "tempfile",
  "zeroize",
+]
+
+[[package]]
+name = "mm-testworld"
+version = "0.1.0"
+dependencies = [
+ "mm-kernel",
+ "mm-server",
+ "serde_json",
 ]
 
 [[package]]

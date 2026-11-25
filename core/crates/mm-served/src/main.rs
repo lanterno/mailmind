@@ -11,7 +11,8 @@
 //! It writes `ready <port>` on standard output once it answers, then answers each command on standard input with one
 //! line: `clock <ISO 8601>`, `work <job> <JSON>`, `settle`, `check`, `unsanitized on|off`, and `events`, which answers
 //! `events <id>`, the id of the last event the app published (`Hub::high_water`), so a test can wait until the page has
-//! applied it; at the end of its input it stops. Standard output is the protocol's alone: the server's log goes to standard error, which the suite keeps.
+//! applied it; at the end of its input it stops. `clock`, `work`, `settle` and `events` are `mm_testworld`'s, which the
+//! Mac app's host answers for a test's home too. Standard output is the protocol's alone: the server's log goes to standard error, which the suite keeps.
 
 use std::io::{BufRead, Write};
 use std::net::SocketAddr;
@@ -27,13 +28,11 @@ use mm_server::real::StandardError;
 use mm_server::{App, Seams, Server};
 use serde_json::Value;
 
-use mm_served::clock::{FrozenClock, parse_iso};
 use mm_served::keychain::FakeKeychain;
 use mm_served::tripwire::Tripwire;
 use mm_served::unsanitized::Switch;
-
-/// What `settle` waits for the requests being answered, at most.
-const SETTLE: Duration = Duration::from_secs(30);
+use mm_testworld::Controls;
+use mm_testworld::clock::{TestClock, parse_iso};
 
 fn say(line: &str) {
     let mut out = std::io::stdout().lock();
@@ -69,7 +68,7 @@ fn run() -> Result<(), String> {
         .map(PathBuf::from)
         .collect();
     let tripwire = Arc::new(Tripwire::new(&repo_root(), &guarded, &[settings.home.clone(), dist.clone()]));
-    let clock = Arc::new(FrozenClock::at(now));
+    let clock = Arc::new(TestClock::at(now));
     let keychain = FakeKeychain::new(environment.raw("MAILMIND_TEST_KEYCHAIN").map(PathBuf::from), tripwire.clone());
     let sanitizer = Arc::new(Switch::default());
     let nameserver = match environment.raw("MAILMIND_TEST_DNS").filter(|n| !n.is_empty()) {
@@ -98,24 +97,17 @@ fn run() -> Result<(), String> {
     let app = Arc::new(App::assemble(&environment, &settings, dist, port, &seams)?);
     let (stop, stopped) = tokio::sync::watch::channel(false);
     let serving = runtime.spawn(server.run(app.clone(), stopped, Duration::from_secs(3)));
+    let controls = Controls::new(clock, app);
     say(&format!("ready {port}"));
 
     for line in std::io::stdin().lock().lines() {
         let Ok(line) = line else { break };
         let (command, argument) = line.trim().split_once(' ').unwrap_or((line.trim(), ""));
+        if let Some(answer) = controls.answer(command, argument) {
+            say(&answer);
+            continue;
+        }
         let answer = match command {
-            "clock" => match parse_iso(argument) {
-                Some(moment) => {
-                    clock.move_to(moment);
-                    "ok".to_owned()
-                }
-                None => "failed clock: not a time".to_owned(),
-            },
-            "work" => mm_served::jobs::work(&app, argument),
-            "settle" => match app.work.settle(SETTLE) {
-                0 => "ok".to_owned(),
-                n => format!("busy {n} request(s) still being answered"),
-            },
             "check" => {
                 let found = tripwire.take();
                 if found.is_empty() {
@@ -126,7 +118,6 @@ fn run() -> Result<(), String> {
                 }
             }
             "unsanitized" => sanitizer.answer(argument),
-            "events" => format!("events {}", app.events.high_water()),
             other => format!("unknown command {other:?}"),
         };
         say(&answer);

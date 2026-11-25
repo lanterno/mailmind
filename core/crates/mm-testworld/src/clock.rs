@@ -1,5 +1,5 @@
-//! The frozen clock: it stands where the suite puts it (`MAILMIND_TEST_NOW`, then each `clock` command), and only
-//! there.
+//! The test clock: it stands where the test puts it (`MAILMIND_TEST_NOW` as the app starts, then each `clock` line or
+//! move), and only there.
 
 use std::sync::atomic::{AtomicI64, Ordering};
 
@@ -7,21 +7,27 @@ use mm_kernel::seams::{Clock, Moment};
 use mm_kernel::when::days_from_civil;
 
 #[derive(Debug)]
-pub struct FrozenClock {
+pub struct TestClock {
     micros: AtomicI64,
 }
 
-impl FrozenClock {
-    pub fn at(moment: Moment) -> FrozenClock {
-        FrozenClock { micros: AtomicI64::new(moment.micros()) }
+impl TestClock {
+    pub fn at(moment: Moment) -> TestClock {
+        TestClock { micros: AtomicI64::new(moment.micros()) }
     }
 
+    /// Stand at `moment`, before or after where it stood.
     pub fn move_to(&self, moment: Moment) {
         self.micros.store(moment.micros(), Ordering::SeqCst);
     }
+
+    /// Move on by `micros` (back, when it is below 0): where it stands now.
+    pub fn advance(&self, micros: i64) -> Moment {
+        Moment::from_micros(self.micros.fetch_add(micros, Ordering::SeqCst).saturating_add(micros))
+    }
 }
 
-impl Clock for FrozenClock {
+impl Clock for TestClock {
     fn now(&self) -> Moment {
         Moment::from_micros(self.micros.load(Ordering::SeqCst))
     }

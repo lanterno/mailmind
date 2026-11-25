@@ -10,6 +10,8 @@ publish.workspace = true
 [dependencies]
 mm-kernel.workspace = true
 mm-server.workspace = true
+# The frozen clock, the paused jobs and the lines that move them, which mm-host shares.
+mm-testworld.workspace = true
 # The sanitizer the `unsanitized` line takes away from the reader's bodies, and gives back.
 mm-content.workspace = true
 mm-mailbox.workspace = true

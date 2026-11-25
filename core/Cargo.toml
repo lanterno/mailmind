@@ -37,6 +37,8 @@ mm-openai = { path = "crates/mm-openai" }
 mm-oneclick = { path = "crates/mm-oneclick" }
 # The app in a shell's own process (the Mac app's): mm-server's App, its workers and its routes, with no port open.
 mm-host = { path = "crates/mm-host" }
+# A test world's time and jobs, held still and moved by the test: mm-served's, and mm-host's for a test's home.
+mm-testworld = { path = "crates/mm-testworld" }
 
 # SQLCipher everywhere: Apple's CommonCrypto on Apple systems, a vendored OpenSSL on the others (each crate that
 # opens the database adds that feature for those targets), and LibTomCrypt in the browser, through sqlite-wasm-rs.

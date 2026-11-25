@@ -1,0 +1,16 @@
+[package]
+name = "mm-testworld"
+description = "A test world's time and jobs: a clock that stands until a test moves it, jobs paused until it pumps them, settling and the events' high-water id"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+mm-kernel.workspace = true
+mm-server.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

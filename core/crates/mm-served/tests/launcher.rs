@@ -9,10 +9,10 @@ use std::sync::Arc;
 use mm_content::sanitize::sanitize;
 use mm_kernel::seams::{Clock, Keychain, Moment, Outside, Secret, Tripped};
 use mm_mailbox::ports::Sanitizer;
-use mm_served::clock::{FrozenClock, parse_iso};
 use mm_served::keychain::FakeKeychain;
 use mm_served::tripwire::Tripwire;
 use mm_served::unsanitized::Switch;
+use mm_testworld::clock::{TestClock, parse_iso};
 
 const NOW: i64 = 1_793_620_800;
 
@@ -28,7 +28,7 @@ fn the_clock_reads_the_times_pythons_isoformat_writes() {
     for wrong in ["", "soon", "2026-13-02T12:00:00", "2026-11-02T25:00:00", "2026-11-02T12:00:00.1234567"] {
         assert_eq!(at(wrong), None, "{wrong:?}");
     }
-    let clock = FrozenClock::at(Moment::from_micros(NOW * 1_000_000));
+    let clock = TestClock::at(Moment::from_micros(NOW * 1_000_000));
     assert_eq!(clock.now(), clock.now());
     clock.move_to(Moment::from_micros(0));
     assert_eq!(clock.now(), Moment::from_micros(0));
