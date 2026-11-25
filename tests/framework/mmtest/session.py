@@ -45,7 +45,7 @@ events                        the core's high-water event id
 settle                        wait until the page, the core and the fakes are quiet
 picture                       a PNG of the page; prints its path
 save-step PHRASE              append what you did since the last save to build/mm/draft_scenario.py
-truth                         (with the oracle, step 5)
+truth                         what the core holds, as the oracle reads it
 down                          stop the world and the page"""
 
 
@@ -197,7 +197,7 @@ class Session:
         return self.client.picture()
 
     def do_truth(self):
-        return "not yet: Truth comes with the oracle (test-architecture.md section 11, step 5)"
+        return self.client.truth().text()
 
     def do_save_step(self, *phrase):
         os.makedirs(os.path.dirname(DRAFT), exist_ok=True)

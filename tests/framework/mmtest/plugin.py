@@ -130,6 +130,7 @@ def mm_client_kind():
 
 @pytest.fixture
 def mm_client(request, mm_world, mm_client_kind):
+    from .oracle import Oracle
     from .page import PageClient
     from .trace import Trace
     if mm_client_kind != "page":
@@ -138,6 +139,7 @@ def mm_client(request, mm_world, mm_client_kind):
     trace = Trace(mm_world)
     client = PageClient(mm_world, browser, trace=trace)
     trace.client = client
+    trace.oracle = Oracle(mm_world, client, trace)
     mm_world.trace = trace
     request.node.stash[_KEPT] = None
     request.node.mm = {"world": mm_world, "client": client, "trace": trace}

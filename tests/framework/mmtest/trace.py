@@ -29,7 +29,8 @@ class Trace:
         self.world, self.client = world, client
         self.steps = []
         self._open = None
-        self.typed = []                    # what was typed, in order: the oracle's history, when it comes
+        self.typed = []                    # what was typed, in order, and whether into a composer's body: (text, body)
+        self.oracle = None                 # run after every step, once a runner gives the trace one
 
     @contextlib.contextmanager
     def step(self, phrase):
@@ -60,6 +61,25 @@ class Trace:
                 record["failed"] = f"{type(failed).__name__}: {str(failed).splitlines()[0] if str(failed) else ''}"
             record["ms"] = round((time.monotonic() - started) * 1000, 1)
             self.steps.append(record)
+            if failed is None and self.oracle is not None:
+                try:
+                    self.oracle.check()
+                except AssertionError as e:
+                    record["failed"] = f"{type(e).__name__}: {str(e).splitlines()[0]}"
+                    raise
+
+    # ── the oracle's history ────────────────────────────────────────────
+
+    def typed_into(self, text, body):
+        """`text` was typed; `body` says whether into a composer's body, whose words the oracle holds kept."""
+        self.typed.append((text, body))
+
+    def typed_into_bodies(self):
+        return [text for text, body in self.typed if body]
+
+    def discarded(self):
+        """The scenario threw away what it had written: the words typed so far needn't be kept."""
+        self.typed = [(text, False) for text, _ in self.typed]
 
     def settled(self, ms):
         if self._open is not None:

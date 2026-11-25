@@ -86,6 +86,9 @@ HOOK = r"""
 })();
 """
 
+# Whether the keyboard is in a composer's body, where typed words are a person's own: the oracle holds them kept.
+INTO_BODY = """() => !!document.activeElement?.matches('[data-mm="composer"] textarea[aria-label="message body"]')"""
+
 PROBE = """(shortMs) => {
   const mm = window.__mm;
   if (!mm) return null;
@@ -202,6 +205,7 @@ class PageClient:
     """One page in its own browser context, on the world's server. It opens lazily, on its first action."""
 
     kind = "page"
+    keys_reach_the_page = True            # with nothing focused, the page hears keys document-wide (the oracle's)
 
     def __init__(self, world, browser, *, viewport=(1440, 900), trace=None):
         self.world, self.browser, self.viewport, self.trace = world, browser, viewport, trace
@@ -305,7 +309,7 @@ class PageClient:
         """Words typed where the keyboard is."""
         self._ensure_open()
         if self.trace is not None:
-            self.trace.typed.append(text)
+            self.trace.typed_into(text, self.pw.evaluate(INTO_BODY))
         with self._step(f"type {text!r}"):
             self.pw.keyboard.type(text)
 
@@ -364,7 +368,13 @@ class PageClient:
         return Shown.read(self.pw.evaluate(READ))
 
     def truth(self):
-        raise NotImplementedError("Truth, what the core holds, comes with the oracle (test-architecture.md section 11, step 5)")
+        """What the core holds at this mark, as the oracle reads it."""
+        from . import oracle
+        return oracle.read(self.world, self.shown() if self.showing() else None)
+
+    def showing(self):
+        """Whether the page is open and its script loaded: what `shown` reads."""
+        return self.pw is not None and self._loaded()
 
     def picture(self, path=None):
         """A PNG of the page as it is now."""

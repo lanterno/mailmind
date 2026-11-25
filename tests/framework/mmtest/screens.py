@@ -59,6 +59,13 @@ class App:
     def shown(self):
         return self.client.shown()
 
+    def truth(self):
+        return self.client.truth()
+
+    def relax(self, invariant, why):
+        """The oracle leaves `invariant` out after the next step alone, which is about a lag on purpose."""
+        self.client.trace.oracle.relax(invariant, why)
+
     def settle(self):
         self.client.settle()
 
