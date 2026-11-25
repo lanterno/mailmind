@@ -289,8 +289,9 @@ def test_a_row_a_drain_wont_take_doesnt_spin_the_worker(laned):
     add(laned, "due", next_attempt_at=int(time.time()) - 5)
     stop, drains, seen = threading.Event(), [], looks(laned)
     worker = threading.Thread(target=lambda: laned.run_forever(lambda: drains.append(1), stop), daemon=True)
+    # No kick: a row already due is drained at once. A kick arriving after the worker settled would wake it once
+    # more, as a kick should, and on a slow machine it did.
     worker.start()
-    laned.kick()
     try:
         assert wait_until(lambda: len(seen) == 2)                # it has drained and settled on its next wait
         assert drains == [1] and seen[-1][1] == POLL
