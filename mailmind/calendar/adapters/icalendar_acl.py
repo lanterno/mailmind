@@ -28,8 +28,11 @@ from icalendar.parser.ical.component import ComponentIcalParser
 from mailmind.calendar.domain.agenda import local_naive
 from mailmind.calendar.domain.invite import Fields, Invite, Span, invite_of, length, party, read_time, rule_parts, until_bound, zone
 
-_READ_SECONDS = 0.2
-_EXPAND_SECONDS = 0.1
+# Of this thread's time. A real invite takes a tenth of them on an Apple silicon Mac (a weekday series from 1990: 16 ms
+# to expand; 200 events: 20 ms to read), and a slower, busier machine several times more: CI's runners ran out of
+# 0.1 and 0.2. A bomb stopped at these still costs well under a second.
+_READ_SECONDS = 0.5
+_EXPAND_SECONDS = 0.3
 _MAX_TEXT = 1_000_000                       # characters: the library unfolds and splits lines where nothing can stop it
 _MAX_EVENTS = 200                           # of one text: the Agenda reads all of them on every request
 _EXPANDS = {"DAILY", "WEEKLY", "MONTHLY", "YEARLY"}     # anything finer: no date a person would want, and a CPU bomb
