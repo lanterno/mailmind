@@ -260,6 +260,11 @@ such budget is measured in the lab:
 
 The deterministic counts have no tolerance: a count over its limit fails the PR.
 
+`tests/support/budgets.py` holds this rule, and `mm-budgets` the same for the core's entries. Its unit test reads the
+whole file: every entry has its fields, was within its limit when last measured, and is named by a script of its
+section, or says it is measured by hand and how. Each shell's measure writes `name=value` lines, and
+`just apple budgets` judges the Mac's before a release ([releasing.md](releasing.md), step 3).
+
 **Benchmarks in the core** use `divan`, one bench per hot path: list paging, grouping, the sanitizer, MIME parsing,
 search. They replace the ad-hoc ratio tests where they can.
 

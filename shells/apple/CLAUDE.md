@@ -41,6 +41,7 @@ just apple run          # the Mac app as a person runs it: MailMind's own data f
 just apple gen-api      # after a route or schema changes: rewrites Sources/Client/API.gen.swift (commit it on its own)
 just apple smoke        # the Mac app, then the iPhone app in a simulator: each jumps nine tenths down and waits for mail
 just apple measure      # cold start, memory, main-thread time, crossing cost, sizes, a web view's memory: build/measure/results.txt
+just apple budgets      # before a release: measure, then demo measure, each number judged against budgets.toml's [apple]
 just gen-bindings       # after a change to the core's contract: rewrites Generated/ (commit that diff on its own)
 just apple icon         # the Mac app's icon, drawn by Icon/icon.swift into Icon/Assets.xcassets (commit the images on their own)
 just apple fonts        # Meadow's typefaces, joined from the page's by Fonts/fonts.py into Fonts/*.ttf (commit them on their own)

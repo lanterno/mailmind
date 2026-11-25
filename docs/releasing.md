@@ -83,19 +83,24 @@ half in their login Keychain; it never goes in the repo, a file, CI or anyone el
    A version lower than or equal to the last release's is never offered as an update.
 2. **CI on that commit.** The clients workflow's run on it is green, its `mac-floor` jobs among them: they are the
    only run of the app on the macOS it says it needs, so a release waits for them.
-3. **Build it.** `just apple release`. It builds and signs everything, writes the appcast with Sparkle's
+3. **Its budgets.** `just apple budgets`, on a quiet Mac: the shell's measures, then the demo home's, each judged
+   against `budgets.toml`'s `[apple]`. A number at or under its limit passes. A wall time over its limit by no more
+   than its tolerance (10% unless the entry says otherwise) lets the release go, and an issue is opened for that
+   budget. Past the tolerance, or with a number not measured, it exits 1 and the release waits until the number is
+   back or a commit raises the limit and says why. Sizes and memory have no tolerance.
+4. **Build it.** `just apple release`. It builds and signs everything, writes the appcast with Sparkle's
    `generate_appcast`, which signs the .dmg with the key in the login Keychain (macOS asks once to let it use the
    key: **Always Allow** saves asking again), and checks that signature against the public key inside the app. It
    prints the .dmg's size and a `gh release create` command, and says so if the tree has changes not committed.
-4. **Try it.** Open the .dmg, drag MailMind to a folder of your own, open it, and look around.
-5. **The notes.** The template (`shells/apple/Release/notes.md`) opens with one release's news under that release's
+5. **Try it.** Open the .dmg, drag MailMind to a folder of your own, open it, and look around.
+6. **The notes.** The template (`shells/apple/Release/notes.md`) opens with one release's news under that release's
    own version. Before each release's build, that news is this release's: write it over the last one's with the
    version's commit (step 1), so the build copies it into `shells/apple/build/release/notes.md`, where it can still be
    touched up before publishing. The rest of the template says how to
    install and how to open the app the first time, and names the .dmg by `{{version}}`, which the build fills in.
-6. **Publish.** Run the printed command. It tags the commit the build came from, makes the release the latest, and
+7. **Publish.** Run the printed command. It tags the commit the build came from, makes the release the latest, and
    uploads the .dmg and `appcast.xml`. The recipe never publishes by itself.
-7. **Check the update.** Open an older copy and choose **MailMind › Check for Updates…**: it should offer the new
+8. **Check the update.** Open an older copy and choose **MailMind › Check for Updates…**: it should offer the new
    one.
 
 `just apple release-check` runs the whole recipe with a throwaway key made in a temporary folder, never the login
