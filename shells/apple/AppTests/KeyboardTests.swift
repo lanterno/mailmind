@@ -84,12 +84,6 @@ final class KeyboardTests: HostedCase {
         }
     }
 
-    /// A window as a failure names it: its class, identifier, title and whether it can close.
-    static func describe(_ window: NSWindow) -> String {
-        "\(type(of: window)) #\(window.identifier?.rawValue ?? "-") \"\(window.title)\""
-            + (window.styleMask.contains(.closable) ? " closable" : "") + (window.isKeyWindow ? " key" : "")
-    }
-
     /// Single keys read as typed on Arabic, with US as the ASCII-capable layout beside it, until the returned close:
     /// the app's seam, never the Mac's own input source.
     private func readUnderArabic() throws -> () -> Void {

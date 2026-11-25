@@ -57,11 +57,32 @@ class HostedCase: XCTestCase {
     func frontAndKey() async throws {
         Self.activate()
         window.makeKeyAndOrderFront(nil)
-        try await until("the app active and the mail window key", within: 20) {
-            if !NSApp.isActive { Self.activate() }
-            if !self.window.isKeyWindow { self.window.makeKeyAndOrderFront(nil) }
-            return NSApp.isActive && self.window.isKeyWindow
+        do {
+            try await until("the app active and the mail window key", within: 20) {
+                if !NSApp.isActive { Self.activate() }
+                if !self.window.isKeyWindow { self.window.makeKeyAndOrderFront(nil) }
+                return NSApp.isActive && self.window.isKeyWindow
+            }
+        } catch {
+            throw KitError("\(error): \(Self.whereFocusIs(self.window))")
         }
+    }
+
+    /// Who has the screen and the keyboard, for a failure to say: the app in front, the key window, the mail window.
+    static func whereFocusIs(_ window: NSWindow) -> String {
+        let front = NSWorkspace.shared.frontmostApplication
+        let windows = NSApp.windows.filter(\.isVisible).map { describe($0) }
+        return "in front: \(front?.bundleIdentifier ?? front?.localizedName ?? "none") (pid \(front?.processIdentifier ?? 0));"
+            + " this app active: \(NSApp.isActive), pid \(ProcessInfo.processInfo.processIdentifier);"
+            + " key: \(NSApp.keyWindow.map { describe($0) } ?? "none"); main: \(NSApp.mainWindow.map { describe($0) } ?? "none");"
+            + " mail window: \(describe(window)), visible \(window.isVisible), on screen \(window.occlusionState.contains(.visible)),"
+            + " can be key \(window.canBecomeKey); modal: \(NSApp.modalWindow.map { describe($0) } ?? "none"); windows: \(windows)"
+    }
+
+    /// A window as a failure names it: its class, identifier, title and whether it can close.
+    static func describe(_ window: NSWindow) -> String {
+        "\(type(of: window)) #\(window.identifier?.rawValue ?? "-") \"\(window.title)\""
+            + (window.styleMask.contains(.closable) ? " closable" : "") + (window.isKeyWindow ? " key" : "")
     }
 
     /// The app made active, over whatever is in front where it must be: the runner's session has no person in it to
