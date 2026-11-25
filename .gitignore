@@ -55,3 +55,6 @@ mailmind/http/dist/
 
 # the core's build
 core/target/
+
+# the end-to-end framework: traces, the catalogue, the page built for it and drafts `mm save-step` writes
+build/

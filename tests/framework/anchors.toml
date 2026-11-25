@@ -1,0 +1,40 @@
+# The structural anchors: the few places finding by role and label can't reach (test-architecture.md 5.1).
+#
+# Everything else is found the way a person and VoiceOver find it, by role and label within a region, so a new
+# scenario seldom changes the app. An anchor is here only when the region has no role, or a label that changes with
+# what it shows. Each is `data-mm="<name>"` on the page and, once the Mac's driver comes, the same name as an
+# `accessibilityIdentifier`. tests/unit/test_anchors.py holds the page to this list, both ways.
+#
+# Regions found by role and label, with no anchor: the rail (complementary "Accounts and folders"), the top bar
+# (banner), the brief (region "Today’s brief") and dialogs (dialog, by name). The list's rows are its listbox's options;
+# its tabs are its tablist's tabs.
+
+[list]
+what = "The message list: its title, its tabs and its rows. Its listbox is named for the place it shows, which changes."
+page = "web/src/app/App.tsx"
+mac = ""
+
+[reader]
+what = "What is open beside the list: a message, the brief or an empty pane. Only a message's pane has a label."
+page = "web/src/features/reader/Reader.tsx"
+mac = ""
+
+[composer]
+what = "A message being written. Its dialog is named for what it is (New message, Reply, Reply all, Forward), which changes."
+page = "web/src/features/compose/Composer.tsx"
+mac = ""
+
+[toast]
+what = "The few words a toast says. It is hidden from assistive technology (a live region says them), so no role finds it."
+page = "web/src/lib/toast.tsx"
+mac = ""
+
+[float]
+what = "A float at the edge of the page: Undo's offer, a send on its way. Several unnamed status regions hold them."
+page = "web/src/lib/toast.tsx"
+mac = ""
+
+[tray]
+what = "The outbox tray's panel, which has no role: what waits to go, and what can be done about it."
+page = "web/src/features/compose/Outbox.tsx"
+mac = ""

@@ -45,6 +45,9 @@ guard.install()
 # The frozen "now" for golden tests: a Monday noon, a day before the corpus's Outlook invite.
 NOW = datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc)
 
+# The end-to-end framework (tests/framework/mmtest): its options, markers and reports. It acts on tests/scenarios alone.
+pytest_plugins = ["mmtest.plugin"]
+
 
 def pytest_addoption(parser):
     parser.addoption("--update-golden", action="store_true",
@@ -56,7 +59,8 @@ def pytest_addoption(parser):
 
 
 # The tests each run only when asked for: marker -> (option, how to ask).
-_OPT_IN = {"browser": ("--browser", "just test-full"), "dovecot": ("--dovecot", "just test-dovecot")}
+_OPT_IN = {"browser": ("--browser", "just test-full"), "dovecot": ("--dovecot", "just test-dovecot"),
+           "scenario": ("--e2e", "just e2e")}
 
 
 def pytest_collection_modifyitems(config, items):

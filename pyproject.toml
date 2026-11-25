@@ -53,8 +53,9 @@ select = ["F"]
 
 [tool.pytest]
 testpaths = ["tests"]
-# The app's flat modules, the fakes and fixtures beside the tests, and the helpers in tests/support (guard, gate, golden).
-pythonpath = [".", "tests", "tests/support"]
+# The app's flat modules, the fakes and fixtures beside the tests, the helpers in tests/support (guard, gate, golden),
+# and the end-to-end framework in tests/framework (mmtest).
+pythonpath = [".", "tests", "tests/support", "tests/framework"]
 # importlib mode: test modules are imported by path, so a folder like tests/unit/calendar never shadows a module.
 addopts = ["--import-mode=importlib", "-ra"]
 # A test that hangs (a promise in the page that never settles, a fake that never answers) fails after five minutes
