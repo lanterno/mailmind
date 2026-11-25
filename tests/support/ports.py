@@ -8,6 +8,7 @@ starts at 32768, macOS's at 49152), where nothing binds by accident, and each py
 own, so two workers never choose the same one.
 """
 
+import itertools
 import os
 import random
 import socket
@@ -15,7 +16,7 @@ import socket
 _FIRST = 20_000
 _BLOCK = 500
 _BLOCKS = 25                                   # 20000 to 32499: under Linux's ephemeral range, past every known model server's port
-_handed = set()
+_turn = None
 
 
 def _block():
@@ -25,16 +26,22 @@ def _block():
 
 
 def quiet_port():
-    """A port in this worker's block that nothing listens on now and this process hasn't handed out before."""
+    """The next port in this worker's block that nothing listens on now.
+
+    The block is handed out in turn, from a random place in it, so a port comes round again only after every other one
+    has: a server stopped long since, never one a test may still start again. A worker that starts more servers than the
+    block holds goes round again rather than running out."""
+    global _turn
     first = _block()
-    choices = [p for p in range(first, first + _BLOCK) if p not in _handed]
-    random.shuffle(choices)
-    for port in choices:
+    if _turn is None:
+        start = random.randrange(_BLOCK)
+        _turn = itertools.cycle([first + (start + i) % _BLOCK for i in range(_BLOCK)])
+    for _ in range(_BLOCK):
+        port = next(_turn)
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
                 s.bind(("127.0.0.1", port))
             except OSError:
                 continue
-        _handed.add(port)
         return port
     raise RuntimeError(f"no free loopback port from {first} to {first + _BLOCK - 1}")
