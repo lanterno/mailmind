@@ -133,8 +133,9 @@ active. `Tests/RealKeys.swift` and `MailFrameTests.press` already emulate AppKit
   The kit is in `shells/apple/TestKit/` and the unhosted `MailMindTests` use it today. There, no window is ever key
   (the test process may not become active), so the kit sends a key to the window itself, hands a click to the view
   under the pointer, and walks a window's responder chain for a menu item's state. A plain `NSButton` and SwiftUI's
-  controls don't take such a click, and a ⇧⌘ item written lowercase matches only the window server's events: those
-  wait for the hosted target, where the window is key and AppKit routes every event itself.
+  controls don't take such a click, and a ⇧⌘ item written lowercase matches only the window server's events: the
+  hosted target (`shells/apple/AppTests`, in lane B) holds those, where the window is key and AppKit routes every
+  event itself.
 - **Production-shaped web content.** Every test that loads mail does it through the core's `mailmind-frame:` scheme with
   the headers the app serves. A test that sets up WebKit any other way fails a lint.
 - **The page** already has this ring: Playwright on the real build, with console errors and CSP violations failing a test.
@@ -302,12 +303,13 @@ holds them for Python and Rust, and runs in `just lint`.
 
 ## 7. CI
 
-CI runs three workflows. `served.yml` runs `tests/api` and the browser suite on both servers; `clients.yml` runs
-`core-verify`, the core's budgets, `cargo deny`, the Mac's unit tests, its smoke run and the release check; and
+CI runs four workflows. `served.yml` runs `tests/api` and the browser suite on both servers; `clients.yml` runs
+`core-verify`, the core's budgets, `cargo deny`, the Mac's unit tests, its smoke run and the release check;
 `checks.yml` runs `just lint`, every Python test `just test` runs, `check-frontend`, `check-web` (the page's types,
-ESLint and Vitest) and `just audit`, which also runs each Monday. Until November 2026 the third didn't exist, and those
-ran only when someone ran `just verify` on their own Mac. **Still no workflow runs** the Dovecot contract or
-`test-rust-all`; both join the nightly tier.
+ESLint and Vitest) and `just audit`, which also runs each Monday; and `lane-b.yml` runs the Mac's hosted tests (R3,
+`just apple test-hosted`) on a macOS runner, on every push to main and to `ci/` branches. Until November 2026
+`checks.yml` didn't exist, and what it runs ran only when someone ran `just verify` on their own Mac. **Still no
+workflow runs** the Dovecot contract or `test-rust-all`; both join the nightly tier.
 
 The target:
 
