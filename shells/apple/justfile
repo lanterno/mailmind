@@ -59,6 +59,29 @@ test: xcframework project
     cd "{{here}}" && xcodebuild -quiet -project MailMind.xcodeproj -scheme MailMind-macOS -destination 'platform=macOS,arch=arm64' \
         -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=NO test
 
+# The hosted tests (AppTests): the Mac app itself as their host, its real menu bar and its window key, on fictional
+# mail (AppTests/hosted_home.py: fake servers on loopback, a temp home, a key made for the run, a keychain stand-in).
+# They take the screen and the keyboard, so they run in lane B, CI's macOS runners, and refuse a person's Mac; a VM
+# or a spare Mac sets MAILMIND_LANE_B=1. The run's results: build/hosted.xcresult
+test-hosted: xcframework project
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "${CI:-}" != true ] && [ "${MAILMIND_LANE_B:-}" != 1 ]; then
+        echo "The hosted tests take this Mac's screen and keyboard: they run on CI (lane B), or with MAILMIND_LANE_B=1" \
+            "on a VM or a spare Mac. Locally, build them with xcodebuild build-for-testing -scheme MailMindAppTests." >&2
+        exit 2
+    fi
+    cd "{{here}}"
+    xcodebuild -quiet -project MailMind.xcodeproj -scheme MailMindAppTests -destination 'platform=macOS,arch=arm64' \
+        -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=NO build-for-testing
+    /bin/rm -rf build/hosted.xcresult
+    cd ../..
+    uv run python shells/apple/AppTests/hosted_home.py -- \
+        xcodebuild -project shells/apple/MailMind.xcodeproj -scheme MailMindAppTests \
+        -destination 'platform=macOS,arch=arm64' -derivedDataPath shells/apple/build/DerivedData \
+        -resultBundlePath shells/apple/build/hosted.xcresult -test-timeouts-enabled YES \
+        -default-test-execution-time-allowance 180 CODE_SIGNING_ALLOWED=NO test-without-building
+
 # The Mac app as a person runs it: on MailMind's data folder in Application Support and the login Keychain, so your
 # own mail (`just apple demo` runs it on fictional mail)
 run: build

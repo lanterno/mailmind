@@ -104,3 +104,33 @@ targets:
       - framework: build/MailMindCore.xcframework
         embed: false
       - sdk: Security.framework
+
+  # The hosted tests: their host is the Mac app itself (Debug), so its real scenes, its `Commands` and the menu bar
+  # AppKit builds from them exist, and the tests reach them through `NSApp`, the window key in an active app. They need
+  # a real session and take the screen and the keyboard, so they run on CI's macOS runners only (lane B,
+  # docs/test-strategy.md section 4.5), through `just apple test-hosted`, never on a person's Mac.
+  MailMindAppTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: AppTests
+        excludes: ["*.py"]
+      - TestKit
+    dependencies:
+      - target: MailMind-macOS
+        embed: false
+    settings:
+      base:
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/MailMind.app/Contents/MacOS/MailMind"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+
+# The hosted tests' own scheme, so `just apple test` (MailMind-macOS's, the unhosted MailMindTests) stays as it was.
+schemes:
+  MailMindAppTests:
+    build:
+      targets:
+        MailMind-macOS: all
+        MailMindAppTests: [test]
+    test:
+      config: Debug
+      targets: [MailMindAppTests]
