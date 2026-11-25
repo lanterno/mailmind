@@ -214,6 +214,71 @@ then `lint-imports` (import-linter) on the `mailmind` package's layers, then `py
 and strict ones on what `[tool.pyright]` lists, which a package joins once it reaches zero. New tests are pytest-native, in the folder of `tests/` they belong to;
 pytest's `--import-mode=importlib` keeps a folder like `tests/unit/calendar` from shadowing a module.
 
+## The end-to-end scenarios and `mm`
+
+[test-architecture.md](test-architecture.md) is the framework; what exists of it is step 1, the page. A scenario
+drives the real build in Chromium, served by the Rust server (`mailmind-server` behind `mm-served`), over a world of
+fictional mail on the fake servers, and reads like a person's account of what they did:
+
+```python
+from mmtest import mail
+
+def test_a_reply_answers_the_sender_and_threads(world, app):
+    note = world.deliver(mail.from_("lin").subject("Lunch on Friday?"))
+    app.inbox.show_tab("Everything")
+    app.inbox.row(subject="Lunch on Friday?").open()
+    app.reader.reply().type("See you there.")
+    app.composer.send()
+    world.clock.advance(seconds=11)                 # past Undo Send's window
+    assert world.smtp.wait_for_one().message["In-Reply-To"] == note.message_id
+```
+
+```bash
+just e2e                                         # every scenario, four processes at a time (builds mm-served first)
+just e2e -m compose                              # one feature: the folder's name under tests/scenarios
+just e2e tests/scenarios/compose/test_reply.py --keep   # a failure stays up for `just mm attach` until `just mm down`
+just e2e catalogue                               # and write build/catalogue.md: each scenario's sentence and steps
+```
+
+- **Where.** Scenarios are `tests/scenarios/<feature>/test_*.py`, named as sentences; the framework is
+  `tests/framework/mmtest/` (`world.py`, `page.py`, `shown.py`, `screens.py`, `trace.py`, `plugin.py`), loaded by
+  `tests/conftest.py`. They are marked `scenario` and skipped unless pytest runs with `--e2e`.
+- **The world** is a temp home with a copy of the corpus's database, the fake IMAP, SMTP and Claude servers, and the
+  server on it. Its clock stands at `conftest.NOW` and moves only by `world.clock.advance(...)`, which moves the
+  server's and the page's together. Background jobs are paused: `world.run("outbox")` pumps one, and `world.smtp.wait_for_one()`
+  pumps the outbox. `world.judge(note, importance=5)` stands in for the AI's triage, `world.first_run()` for a person
+  the guide hasn't been offered to.
+- **Each action settles** before the next line: the page has applied the core's last event, nothing is in flight, no
+  short delay or animation is pending, and the jobs the app kicked have run. A step that can't settle fails saying what
+  was busy. Don't wait or sleep in a scenario.
+- **What a person sees** is `app.shown()`, a text snapshot (its `text()` is what `mm shown` prints), with `rows`,
+  `chosen`, `open`, `composer`, `floats`, `toast`, `tray`, `focus` and `count(tab)`. Assert on it, or on the world
+  (`world.where(subject)`, `world.smtp.sent`), never on the page's DOM.
+- **Finding things** is by role and label within a region (`app.find("button", "Reply", within="reader")`). The few
+  anchors are `data-mm` attributes, listed in `tests/framework/anchors.toml`; `tests/unit/test_anchors.py` holds the
+  page to that list. Add one only where role and label can't work, and list it there.
+- **A failure** prints a one-line repro (`just e2e <test> --client page`), what was shown when it failed, and every
+  step; `build/traces/<test>/` keeps `trace.txt`, `trace.jsonl`, `shown.txt`, `picture.png` and `server.log`. The run
+  ends with its slowest steps. The page's own problems (an uncaught error, a console error, a request off its origin)
+  and the server's tripwire fail a scenario too.
+
+`mm` is the same framework by hand, on a world of its own in a temp home, under the same tripwire:
+
+```bash
+just mm up page          # a world and the page on it, then an `mm>` prompt (--detach: none; --headed: see Chromium)
+just mm shown            # one verb at a time, as an agent drives it; `just mm help` lists them all
+just mm click tab Everything in list
+just mm press j
+just mm shown --diff     # only what changed
+just mm deliver Venue for Thursday --from lin
+just mm clock +7h
+just mm save-step "open the first row"   # what you did since the last save, appended to build/mm/draft_scenario.py
+just mm down
+```
+
+The session is this worktree's (its socket and record are named from the worktree's path, in the system's temp
+folder), so agents in other worktrees each have their own.
+
 ## The Mac app's runs
 
 `just apple test` runs the Mac app's tests in a test bundle of their own, where no app is launched, each over a suite

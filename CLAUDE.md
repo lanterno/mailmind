@@ -13,6 +13,8 @@ the dev tools on first use, and builds the leaves the app shares with the Rust c
 just verify                       # lint + compile + all tests + frontend check + audit — run before committing
 just test-full                    # every test, plus the browser tests in Chromium (Playwright)
 just test-dovecot                 # the MailSession contract against Dovecot in Docker
+just e2e [-m feature]             # the end-to-end scenarios: the page on the Rust server, on fictional mail
+just mm up page                   # drive that page by hand, a verb at a time (`just mm shown`, `just mm down`)
 just demo [port]                  # the whole app on fictional mail and fake servers: nothing of yours is read or changed
 just dev                          # read-only: writes nothing to a mail server, no background sync
 just run [port]                   # build the app, then the real thing (default http://127.0.0.1:8721)

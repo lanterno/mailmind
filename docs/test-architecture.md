@@ -66,16 +66,24 @@ def test_words_typed_in_a_reply_all_go_above_the_signature(world, app):
     world.account("ada").signature = "Ada at the Guild"
     note = world.deliver(mail.from_("lin").to(6).cc(4).subject("Venue"))
 
+    app.inbox.show_tab("Everything")                # the Inbox opens on what needs you
     app.inbox.row(subject="Venue").open()
     composer = app.reader.reply_all()
     composer.type("Got it, thanks.")
     assert composer.send_button.visible
     composer.send()
+    assert composer.asks[0].startswith("Not sent yet · This reply goes to 10 people.")
+    composer.send_anyway()
+    world.clock.advance(seconds=11)                 # Undo Send's window is a long delay: only the test moves past it
 
     sent = world.smtp.wait_for_one()
     assert sent.text.startswith("Got it, thanks.\n\n-- \nAda at the Guild")
     assert sent.recipients == note.reply_all_recipients(me="ada")
 ```
+
+That is `tests/scenarios/compose/test_reply.py` as it runs on the page. Written first without the app at hand, it
+missed two rules the app holds: a reply all to five people or more asks before it goes, and a send waits out its Undo
+window.
 
 Around each line the framework:
 
@@ -123,6 +131,26 @@ mm> save-step "archive the first row"   # appends the step to a draft scenario
 - Every failure prints a one-line repro: `just e2e tests/scenarios/compose/test_reply.py::test_words_… --client mac`.
 - `mm` replaces the review's file-polled probe and its control scripts. Review passes and scenarios use one driver.
 
+**As built (step 1, the page).** `just mm up page` starts a session in a process of its own (the world, Chromium and
+the page) and opens the prompt; `--detach` leaves out the prompt, as a script or an agent wants, and `--headed` shows
+Chromium. Every verb also runs alone, `just mm shown`, `just mm press e`, which is how an agent drives it. The session
+is the worktree's: its Unix socket and its record are in the system's temp folder, named from the worktree's path. The
+verbs are `shown [--diff]`, `press`, `type`, `click` and `find` (role, label, `in` a region, `subject=`),
+`open`, `deliver` (`--from`, `--to`, `--folder`, `--cc N`, `--long`), `judge`, `clock`, `run`, `first-run`,
+`restart`, `where`, `sent`, `events`, `settle`, `picture` and `save-step`, which appends what was done since the last
+save to `build/mm/draft_scenario.py` as scenario lines. `truth` waits for the oracle. On the tiny world, `mm up page`
+then `mm shown` says:
+
+```
+page "MailMind" /p/5tLAA6gX1uhMHC4kHcq-Yg
+  rail: Ada · [Inbox 10]* [Sent] [Drafts] [Archive] [Junk] [Trash] [Unread] [Flagged] [Has attachments] [Last 7 days] [Feed] [Paper trail] [Notifications] [Action needed] [Finance] [Documents] [Screener 6] [Snoozed]
+  list "Inbox": Needs you* 0 · Everything 11 · Unread 10
+  list: 0 rows
+    (Nothing needs you. Everything else is in Everything.)
+  reader: brief: Good afternoon. · Needs you · Nothing needs you right now.
+  keyboard: nowhere (the page itself)
+```
+
 ## 4. The world
 
 ```python
@@ -145,6 +173,16 @@ class World:
 - **The page's server is `mailmind-server`.** The Mac app runs only the Rust core, and the Python server is retired
   after the flip, so scenarios don't run twice for two servers. The served suites (`tests/api` and the ledger) keep the
   Python server honest until it goes.
+
+**As built (step 1).** The world is `World` in `tests/framework/mmtest/world.py`, over `tests/fakes` and
+`tests/support/served.py`, which starts `mm-served`. Its corpus is `tiny`, the suites' world (`fixtures/world.py`):
+its database is built once a pytest session (or once an `mm` session) by the app's own ingest
+(`world.build_template`) and copied into each home. It has `deliver(message, to, folder)`, which syncs the folder as
+the background sync would, `judge(delivered, importance, …)` in place of the AI's triage, `run(job, …)`,
+`restart_app()`, `first_run()`, `account(name).signature`, `where(subject)` and `smtp.wait_for_one()`. A change the
+app only reads as it starts (the config, a verdict) is made with the server stopped, and each client opens its page
+again. `fault` and the larger corpora are still to come; the fakes' own knobs (`world.imap`, `world.smtp.fake`) serve
+meanwhile.
 
 ## 5. The clients
 
@@ -176,6 +214,13 @@ as `accessibilityIdentifier` on the Mac and `data-mm` on the page. A lint holds 
 other lookup is by role and label, so adding a test seldom means changing the app. And when a control has no label, the
 fix is the one VoiceOver needed anyway.
 
+**As built (step 1).** The page has six anchors: `list`, `reader`, `composer`, `toast`, `float` and `tray`. The rail
+(complementary "Accounts and folders"), the top bar, the brief (region "Today’s brief") and dialogs are found by role
+and label; the list's rows are its listbox's options and its tabs its tablist's. `tests/unit/test_anchors.py` is the
+lint: each anchor in `anchors.toml` is on the page where its entry says, and the page has no other. A few parts nothing
+labels (a row's sender, subject and time, the reader's subject, the composer's recipients) are read by the page's own
+class names, in `shown.py` alone.
+
 ### 5.2 The Mac client
 
 The runner makes a socket in a short temp path (a Unix socket path can't exceed 104 bytes, and agents' homes are
@@ -204,7 +249,14 @@ holds the input code, so the hosted XCTest target sends keys exactly as the driv
 
 Playwright on the real build, in Chromium, served by `mailmind-server`. `find` maps to `get_by_role` within a
 `data-mm` region, `shown` reads the same text snapshot from the DOM (Playwright's aria snapshot, trimmed to the same
-shape), and the page's timers run on `page.clock`, driven by the same test clock. WebKit runs nightly: Playwright's
+shape), and the page's timers run on `page.clock`, driven by the same test clock.
+
+**As built (step 1).** `shown` is one pass over the DOM (`mmtest/shown.py`) rather than the aria snapshot: the
+snapshot gives a row's accessible name as one run of words, and `Shown` needs its parts. Only what the eye reads is
+kept (a screen reader's words clipped to a pixel are left out). The page's clock is installed at the world's time and
+paused, so nothing in the page moves by itself; settling runs its short delays, and `world.clock.advance` jumps it as
+far as the server's (Playwright's `fast_forward`, each timer that came due firing once). The page opens on its first
+action. Its uncaught errors, console errors and any request off its origin fail the scenario as it ends. WebKit runs nightly: Playwright's
 WebKit isn't the Mac's `WKWebView`, so the Mac's own frame is held by its hosted target and the session lane.
 
 ## 6. Safe by construction
@@ -258,6 +310,26 @@ test never waits for a short delay and never misses a long one.
 
 `Truth` is read at that same mark. A step that can't settle within its ceiling fails with what was still busy.
 
+**On the page, as built (step 1).** `mmtest/page.py` settles after every action, probing until all hold on three
+probes in a row, within 20 seconds:
+
+1. *Events.* A script in the page wraps `EventSource`, so each listener the page registers records the id of the event
+   it ran (`hello` carries the stream's opening position). The core's high-water id comes from `mm-served`'s `events`
+   line (`Hub::high_water`). Settled needs the same run and a number at least the core's.
+2. *In flight.* The script counts the page's fetches; Playwright counts every other request (a mail body's frame). The
+   event stream is left out.
+3. *Short delays.* The script wraps the page's `setTimeout` and `requestAnimationFrame` (inside the clock's fakes). A
+   pending one set for two seconds or less runs at once (`clock.run_for` to the next due), up to 30 seconds of the
+   page's time in one settle. It is short by what it was set for, so a toast's 2.6 seconds never come due by the short
+   ones running the clock up to them; and while a request is out the page's time stands, so a frame loop waiting on it
+   doesn't run the clock ahead by as long as the request took. A finite CSS animation or transition that short is finished at once, as the clock doesn't drive
+   them. `setInterval` doesn't count.
+4. *Paused jobs.* Once 1 to 3 hold, the server's `settle` waits for its requests, and a pass of each kicked job runs
+   (`work kicked`); settling goes on while that publishes events.
+5. *The fakes* answer only the server, so they are quiet when it is.
+
+The page's own time runs ahead of the core's by the short delays settled through, a few seconds over a scenario.
+
 ## 8. The oracle
 
 After every step the runner takes two readings:
@@ -308,6 +380,13 @@ An invariant can be relaxed for one step that is about a lag on purpose, never f
 - **By feature.** Scenarios are marked by feature (`-m compose`), matching [test-strategy.md](test-strategy.md)
   section 8, so a change runs its own area first.
 
+**As built (step 1).** A step is a screen's phrase ("reply to all"), a client's verb when it acts alone ("press e"),
+or a world's ("deliver 'Venue' from lin to ada's INBOX"), with the requests the page made, the events it applied, the
+IMAP commands that changed mail and the messages sent, and the `Shown` diff. A failure writes `trace.txt`,
+`trace.jsonl`, `shown.txt`, `picture.png` and `server.log` to `build/traces/<test>/` and prints the repro line, what
+was shown and the steps. The run ends with its eight slowest steps. The feature is the scenario's folder under
+`tests/scenarios/`.
+
 ## 10. Where it runs: two lanes
 
 A Mac app needs a real, active session for some things (the real menu bar as AppKit validates it, activation,
@@ -347,7 +426,9 @@ Each step is useful on its own, and the first ones pay off before the Mac driver
 
 1. **`mm` and the page.** `mmtest` with the world over today's fakes, the page client on `mailmind-server`, the text
    `shown`, settling on event ids and network quiet, the trace, `--keep`, and `mm up page`. Port a handful of browser
-   scenarios.
+   scenarios. *Built:* the sections' "as built" notes say how. The ports are in `tests/scenarios/` (triage of Needs
+   you, reply and reply all, Send Later, filing and Undo, the first run); the browser tests they came from stay until
+   their areas move over. Not yet: `world.fault`, corpora past `tiny`, `@free_running`, keyboard layouts on the page.
 2. **The Mac's seams.** `AppSeams` with the clock and its scheduler first (every `Date()` and `Task.sleep`), then the
    pasteboard, links, notifications, login items and the layout. The Debug build becomes MailMind Dev.
 3. **The core's test clock and jobs in process.** `mm-host` takes a test clock and pauses and pumps jobs, from a crate
