@@ -1,0 +1,114 @@
+# Lane B (docs/test-strategy.md section 4.5): what needs a real, active macOS session, on GitHub's macOS runners,
+# which are throwaway VMs with an unlocked session and no person at the keyboard. Today that is the Mac app's hosted
+# tests (shells/apple/AppTests): the app itself as their host, its real menu bar, its window key.
+#
+# It is the merge gate, so it runs on every push to main that touches what the app or its fictional world is made of,
+# and on branches under ci/ for iterating on it. It has its own workflow because clients.yml runs on pull requests
+# and never on ci/ branches.
+#
+# Every action is pinned to a commit, with its release in a comment, as clients.yml pins them.
+name: lane-b
+
+on:
+  push:
+    branches: [main, "ci/**"]
+    paths:
+      - "core/**"
+      - "shells/apple/**"
+      # The hosted tests' world: the fake servers, the demo's corpus and the Python app that writes its config.
+      - "tests/support/**"
+      - "tests/fakes/**"
+      - "tests/fixtures/**"
+      - "mailmind/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/lane-b.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # On main every push finishes, so each commit there is gated; a newer push to a ci/ branch replaces the run.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  apple-hosted:
+    # The newest macOS image, which carries Xcode 26, as clients.yml's apple job.
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: The newest Xcode 26
+        run: |
+          xcode=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1 || true)
+          if [ -n "$xcode" ]; then sudo xcode-select -s "$xcode"; fi
+          version=$(xcodebuild -version)   # read whole: a pipe closed early by head ends xcodebuild with SIGPIPE
+          echo "$version"
+          [[ "$version" == "Xcode 26"* ]] || { echo "::error::This runner has no Xcode 26"; exit 1; }
+
+      # The core for the app, and the leaves the Python world shares with it (core/crates/mm-py).
+      - name: Rust, as core/rust-toolchain.toml pins it (with the iOS targets)
+        working-directory: core
+        run: rustup toolchain install
+
+      - uses: taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941 # v2.89.1
+        with:
+          tool: just@1.59.0,uv@0.13.5
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: core
+
+      # shells/apple generates its Xcode project from project.yml.
+      - name: XcodeGen
+        run: brew install xcodegen
+
+      # The world the hosted app runs on: the fake servers and the demo's corpus, in Python.
+      - name: The Python packages
+        run: uv sync --frozen
+
+      # The XCFramework, the app (Debug) and its hosted tests, then the tests with the app as their host on fictional
+      # mail: shells/apple/AppTests/hosted_home.py names its temp home, key and keychain stand-in.
+      - name: The hosted tests
+        id: hosted
+        run: just apple test-hosted
+
+      # How many ran, passed, failed and were skipped, from the run's results. A run that ran nothing, or skipped any,
+      # proves nothing about the hosted path, so it fails here.
+      - name: What ran
+        if: ${{ !cancelled() && steps.hosted.outcome != 'skipped' }}
+        run: |
+          results=shells/apple/build/hosted.xcresult
+          [ -d "$results" ] || { echo "::error::no results: the hosted tests never ran"; exit 1; }
+          summary=$(xcrun xcresulttool get test-results summary --path "$results")
+          echo "$summary"
+          read -r total passed failed skipped < <(python3 -c 'import json,sys; s=json.load(sys.stdin); print(s["totalTestCount"], s["passedTests"], s["failedTests"], s["skippedTests"])' <<<"$summary")
+          {
+            echo "### Mac: the hosted tests (macos-26, lane B)"
+            echo "- $total tests: $passed passed, $failed failed, $skipped skipped"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$total" = 0 ] || [ "$skipped" != 0 ]; then
+            echo "::error::$total ran and $skipped were skipped: every hosted test must run"
+            exit 1
+          fi
+
+      - name: The run's results, when it failed
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: hosted-xcresult
+          path: shells/apple/build/hosted.xcresult
+          if-no-files-found: ignore
+          retention-days: 7
