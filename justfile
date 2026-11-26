@@ -61,8 +61,9 @@ test-full *args: setup
 test-browser *args: setup
     uv run pytest -n 4 --browser tests/e2e/browser {{args}}
 
-# The end-to-end scenarios (tests/scenarios): the app through a client on a fictional world, the page on the Rust server,
-# four processes at a time. `just e2e -m compose` runs one feature; `just e2e tests/scenarios/compose/test_reply.py --keep`
+# The end-to-end scenarios (tests/scenarios): the app through a client on a fictional world, the page on the Rust server
+# and MailMind Dev through its driver (built once into shells/apple/build), four processes at a time. `--client mac` (or
+# page) runs one client; `just e2e -m compose` runs one feature; `just e2e tests/scenarios/compose/test_reply.py --keep`
 # leaves a failure up for `just mm attach`; `just e2e catalogue` also writes build/catalogue.md (docs/test-architecture.md)
 [positional-arguments]
 e2e *args: _web-deps
@@ -77,7 +78,7 @@ e2e *args: _web-deps
     done
     uv run pytest ${workers[@]+"${workers[@]}"} --e2e ${where[@]+"${where[@]}"} "$@"
 
-# Drive a live app on a fictional world by hand: `just mm up page`, `just mm shown`, `just mm press e`, `just mm attach`,
+# Drive a live app on a fictional world by hand: `just mm up page` (or mac), `just mm shown`, `just mm press e`, `just mm attach`,
 # `just mm down` (docs/test-architecture.md section 3; `just mm help` once one is up lists the verbs)
 [positional-arguments]
 mm *args: _web-deps
