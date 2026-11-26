@@ -93,12 +93,15 @@ struct MeadowFrame<Pane: View>: View {
             MailboxColumn(app: app, mailbox: mailbox)
                 .meadowPanel()
                 .placed(layout.list ?? layout.full, named: String(localized: "Message list"))
+                // The end-to-end framework's anchor (tests/framework/anchors.toml): the list, whatever it shows.
+                .accessibilityIdentifier("list")
             pane
                 .environment(\.meadowPaneWidth, layout.pane?.width ?? 0)
                 .linkStatusLine()
                 .meadowPanel()
                 .toastRoom(.pane)
                 .placed(layout.pane, named: String(localized: "Reading pane"))
+                .accessibilityIdentifier("reader")
             if let splitter = layout.splitter {
                 MeadowSplitter(shell: shell)
                     .frame(width: splitter.width, height: splitter.height)

@@ -887,6 +887,7 @@ struct MeadowToast<Actions: View>: View {
                       radius: 14)
         .environment(\.meadowToast, colours)
         .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("toast")                 // an anchor (tests/framework/anchors.toml)
     }
 }
 

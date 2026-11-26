@@ -48,6 +48,8 @@ struct MeadowListHead: View {
             }
         } else if place?.isInbox == true {
             MeadowTabs(tabs: InboxTab.allCases.map(tab), selection: $mailbox.tab, label: "Inbox lanes")
+                // The end-to-end framework's anchor (tests/framework/anchors.toml): the list's tabs, named for the place.
+                .accessibilityIdentifier("tabs")
                 .padding(.top, 10)
         } else if let words = sentence(place) {
             Group {

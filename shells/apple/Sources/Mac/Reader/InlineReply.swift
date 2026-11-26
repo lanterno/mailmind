@@ -263,6 +263,7 @@ private struct OpenReply: View {
         .background { BringsIntoView() }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Reply to \(words.name)")
+        .accessibilityIdentifier("composer")              // an anchor (tests/framework/anchors.toml)
         .onChange(of: composer.wantsFiles) { _, wanted in
             if wanted, composer.takeFilesRequest() { attach() }   // the send guard's Attach a file
         }

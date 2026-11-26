@@ -111,6 +111,8 @@ struct ComposerForm: View {
             foot
         }
         .frame(minWidth: 640, idealWidth: 760, minHeight: 460, idealHeight: 600)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("composer")              // an anchor (tests/framework/anchors.toml)
         .background { ComposePaper().ignoresSafeArea() }
         .overlay(alignment: .bottom) { noticeView }
         .overlay {

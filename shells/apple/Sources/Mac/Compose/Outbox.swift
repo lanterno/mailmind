@@ -199,6 +199,8 @@ struct OutboxButton: View {
             .accessibilityLabel(count.map { "Outbox: \($0) waiting" } ?? "Outbox")
             .meadowPopover(isPresented: $shown) {
                 OutboxList(tray: tray, readOnly: composing.digest?.profile == "read-only")
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("tray")      // an anchor (tests/framework/anchors.toml)
                     .task { await tray.load() }
             }
         }
