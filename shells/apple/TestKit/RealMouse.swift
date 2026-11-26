@@ -153,7 +153,7 @@ enum RealMouse {
     /// `events` moved so that each comes out of the app's queue where it was made. A posted event's place goes through
     /// the screen and back, by where the window server holds the window, which for a window far off the screen isn't
     /// quite where AppKit holds it: a probe posted and taken out at once says by how much.
-    private static func placed(_ events: [NSEvent], in window: NSWindow) throws -> [NSEvent] {
+    static func placed(_ events: [NSEvent], in window: NSWindow) throws -> [NSEvent] {
         guard let first = events.first else { return events }
         let probe = try event(.mouseMoved, at: first.locationInWindow, in: window)
         while NSApp.nextEvent(matching: .mouseMoved, until: .distantPast, inMode: .default, dequeue: true) != nil {}
