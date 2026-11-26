@@ -26,15 +26,16 @@ def test_words_typed_in_a_reply_all_go_above_the_signature(world, app):
     assert sent.recipients == note.reply_all_recipients(me="ada")
 
 
+@clients("page", "mac")
 def test_a_reply_answers_the_sender_and_threads(world, app):
     note = world.deliver(mail.from_("lin").subject("Lunch on Friday?").body("Shall we try the new place?"))
 
     app.inbox.show_tab("Everything")
     app.inbox.row(subject="Lunch on Friday?").open()
     composer = app.reader.reply()
-    assert composer.now.title == "Reply"
-    assert composer.now.subject == "Re: Lunch on Friday?"
-    assert composer.now.to == ["lin@example.test"]
+    # The page's composer is titled "Reply"; the Mac's reply box in the reader says whom it answers. What it sends
+    # says the rest, on both.
+    assert composer.now.title.startswith("Reply"), composer.now.title
     assert app.shown().focus["label"] == "message body"
     composer.type("See you there.")
     composer.send()
@@ -42,5 +43,6 @@ def test_a_reply_answers_the_sender_and_threads(world, app):
 
     sent = world.smtp.wait_for_one()
     assert sent.recipients == ["lin@example.test"]
+    assert sent.subject == "Re: Lunch on Friday?"
     assert sent.message["In-Reply-To"] == note.message_id
     assert sent.text.startswith("See you there.")

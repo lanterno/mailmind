@@ -1,4 +1,7 @@
 """Filing from the reader, and Undo. Ported from tests/e2e/browser/test_mailbox.py."""
+from mmtest import clients, known_bug
+
+pytestmark = clients("page", "mac")
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 
@@ -7,6 +10,8 @@ def folders(world, subject):
     return [folder for _, folder, _ in world.where(subject)]
 
 
+@known_bug("mac", "Undo on the Mac says nothing once it has put the message back, where the page's toast says "
+                  "\"Archived undone\" (Mailbox.undoNow says it, and no toast shows; seen in lane A)")
 def test_archive_files_the_open_message_opens_the_next_and_undo_brings_it_back(world, app):
     receipt = world.subject_of(RECEIPT)
     app.inbox.show_tab("Everything")

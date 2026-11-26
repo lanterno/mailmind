@@ -1,6 +1,8 @@
 """Triage: the Inbox's Needs you tab holds what the AI's triage says needs you, until it is dealt with. Ported from
 tests/e2e/browser/test_senders.py and test_brief.py, which judge mail the same way."""
-from mmtest import mail
+from mmtest import clients, mail
+
+pytestmark = clients("page", "mac")
 
 
 def folders(world, subject):

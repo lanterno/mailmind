@@ -1,4 +1,10 @@
 """Send Later: a message held for a time, in the outbox tray until then. Ported from tests/e2e/browser/test_compose.py."""
+from mmtest import clients
+
+# The page only for now: the Mac's Send later is a system popover, which closes at once in an app that isn't active,
+# as MailMind Dev never is in lane A (test-architecture.md 5.2).
+pytestmark = clients("page")
+
 
 
 def scheduled(app):
