@@ -55,6 +55,11 @@ public final class Core: Sendable {
     /// document by its URL (the reader's frame). `overLimit` carries the person's leave to go over today's AI limit
     /// (`X-MailMind-AI-Over-Limit: allow`), the one header the core lets a shell add.
     public func send(_ method: String, _ target: String, _ body: Data, overLimit: Bool = false) async -> CoreAnswer {
+        #if DEBUG
+        // Counted while it is out, for MailMind Dev's driver to settle on (Sources/Dev); nothing when no driver runs.
+        let ticket = CoreWatch.shared.begin("\(method) \(target.split(separator: "?").first ?? "")")
+        defer { CoreWatch.shared.end(ticket) }
+        #endif
         let host = host
         return await Self.onQueue {
             overLimit ? host.requestOverLimit(method: method, target: target, body: body)
@@ -67,17 +72,38 @@ public final class Core: Sendable {
     public func events() async throws -> AsyncStream<CoreEvent> {
         let (stream, continuation) = AsyncStream<CoreEvent>.makeStream(bufferingPolicy: .unbounded)
         let listener = Listener(continuation)
+        #if DEBUG
+        let watched: Int? = CoreWatch.shared.opening()
+        if let tag = watched {
+            listener.heard = { (id: String) in CoreWatch.shared.received(tag, id) }
+        }
+        #endif
         let host = host
         let subscription: EventSubscription
         do {
             subscription = try await Self.onQueue { try host.subscribe(listener: listener) }
         } catch HostProblem.Refused(let answer) {
             continuation.finish()
+            #if DEBUG
+            if let watched { CoreWatch.shared.closed(watched) }
+            #endif
             throw Problem(answer)
         }
         continuation.onTermination = { _ in subscription.cancel() }
+        #if DEBUG
+        if let watched {
+            let mark = try? await Self.onQueue { try host.testHighWater() }
+            CoreWatch.shared.marked(watched, mark)
+            return CoreWatch.shared.tracked(stream, watched)
+        }
+        #endif
         return stream
     }
+
+    #if DEBUG
+    /// The host, for MailMind Dev's driver: the core's test world's controls (`test_*`) and its routes.
+    var testHost: CoreHost { host }
+    #endif
 
     /// The Mac woke from sleep, or its network changed: the core opens IDLE's connections afresh and syncs every
     /// account now. It returns at once, the work going on in the background.
@@ -175,14 +201,21 @@ public struct Unreadable: Error, Hashable, Sendable {
 }
 
 /// Hands each event to the stream, on the core's thread, in the order sent.
-private final class Listener: EventListener {
+private final class Listener: EventListener, @unchecked Sendable {
     private let continuation: AsyncStream<CoreEvent>.Continuation
+    #if DEBUG
+    /// Told each event's id as it comes, for MailMind Dev's driver (`CoreWatch`); set before the stream opens.
+    var heard: (@Sendable (String) -> Void)?
+    #endif
 
     init(_ continuation: AsyncStream<CoreEvent>.Continuation) {
         self.continuation = continuation
     }
 
     func onEvent(event: CoreEvent) {
+        #if DEBUG
+        heard?(event.id)
+        #endif
         continuation.yield(event)
     }
 
