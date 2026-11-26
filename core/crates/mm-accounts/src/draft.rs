@@ -22,6 +22,7 @@ const SAVE_FIRST: &str = "save the account to test a stored secret; before then 
 #[derive(Debug)]
 pub struct Draft {
     pub email: Option<String>,
+    pub gentlemail: bool,
     /// The host typed, or its type's; `None` for one that isn't text, which no name lookup finds.
     pub host: Option<String>,
     pub port: u16,
@@ -82,5 +83,6 @@ pub fn throwaway_account(draft: &Map<String, Value>) -> Result<Draft, NotTried> 
     };
     let password = account::as_kept(password, draft.get("strip_spaces").map_or(defaults.strip_spaces, truthy));
     let email = draft.get("email").and_then(Value::as_str).map(str::to_owned);
-    Ok(Draft { email, host, port, starttls, smtp_host, smtp_port, smtp_starttls, password })
+    let gentlemail = draft.get("type").and_then(Value::as_str) == Some("gentlemail");
+    Ok(Draft { email, gentlemail, host, port, starttls, smtp_host, smtp_port, smtp_starttls, password })
 }

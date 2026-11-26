@@ -50,6 +50,7 @@ sha2.workspace = true
 tokio.workspace = true
 tower-service.workspace = true
 
+
 [dev-dependencies]
 tempfile.workspace = true
 # A loopback IMAP server for the login hold's tests: its certificate, and the TLS it serves.
@@ -58,3 +59,12 @@ rustls.workspace = true
 
 [lints]
 workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+base64 = "0.22.1"
+serde.workspace = true
+zeroize.workspace = true
+
+mail-builder = "0.4"
+mail-parser.workspace = true
+rusqlite.workspace = true

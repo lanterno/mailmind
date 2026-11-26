@@ -88,6 +88,10 @@ impl Transport for SmtpTransport {
             return Err(NotSent { said: error.said(), permanent: false, unanswered: false });
         }
         let Ok(Some(account)) = self.directory.get(email) else { return Err(SEND_FAILED) };
+        #[cfg(target_os = "macos")]
+        if account.kind == "gentlemail" {
+            return crate::gentlemail::send(&account, &self.directory, &*self.outside, raw, envelope);
+        }
         let mut raw_config = self.config.read().map_err(|_| SEND_FAILED)?;
         let Some(entry) = account::find(&mut raw_config, email) else { return Err(SEND_FAILED) };
         let endpoint = account::smtp_endpoint(entry);
@@ -324,7 +328,8 @@ impl Accounts for SendingAccounts {
     fn sending(&self, email: &str) -> Result<Option<SendingAccount>, Fault> {
         Ok(self.directory.get(email)?.map(|a| SendingAccount {
             name: a.alias.clone().unwrap_or_else(|| a.email.clone()),
-            saves_sent: a.kind == "gmail",
+            saves_sent: matches!(a.kind.as_str(), "gmail" | "gentlemail"),
+            local_drafts: a.kind == "gentlemail",
             email: a.email,
         }))
     }

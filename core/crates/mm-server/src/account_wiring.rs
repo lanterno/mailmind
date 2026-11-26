@@ -120,6 +120,13 @@ impl ServerProbe {
 impl LoginProbe for ServerProbe {
     /// Whatever the hold says, since someone asked, and counted as any login is (`try_login`).
     fn saved(&self, account: &Account, timeout: Duration) -> Result<(), LoginTrouble> {
+        #[cfg(target_os = "macos")]
+        if account.kind == "gentlemail" {
+            let key = self.login.directory.password(account).map_err(|f| LoginTrouble(f.class))?;
+            return crate::gentlemail::Client::for_host(account.host.as_str(), key)
+                .and_then(|c| c.verify(&*self.login.outside, &account.email, timeout))
+                .map_err(LoginTrouble);
+        }
         let mut session = self.login.try_login(account, timeout)?;
         session.logout();
         Ok(())
@@ -127,6 +134,17 @@ impl LoginProbe for ServerProbe {
 
     /// Where the draft was typed: no hold is asked or told (`session_for`).
     fn draft(&self, draft: &Draft, timeout: Duration) -> Result<(), LoginTrouble> {
+        #[cfg(target_os = "macos")]
+        if draft.gentlemail {
+            let client = crate::gentlemail::Client::for_host(
+                draft.host.as_deref(),
+                Secret::new(draft.password.expose().to_owned()),
+            )
+            .map_err(LoginTrouble)?;
+            return client
+                .verify(&*self.login.outside, draft.email.as_deref().unwrap_or_default(), timeout)
+                .map_err(LoginTrouble);
+        }
         // A host that isn't text is one no lookup finds, as the Python app's `getaddrinfo` says of it.
         let host = draft.host.as_deref().ok_or(LoginTrouble("NameNotResolved"))?;
         let email = draft.email.as_deref().unwrap_or_default();
@@ -138,7 +156,7 @@ impl LoginProbe for ServerProbe {
 
     /// The outgoing server the file names for the account, or its type gives it (`account::smtp_endpoint`).
     fn saved_outgoing(&self, account: &Account, timeout: Duration) -> Result<(), LoginTrouble> {
-        if self.read_only {
+        if self.read_only || matches!(account.kind.as_str(), "gentlemail") {
             return Ok(());
         }
         let mut raw = self.config.read().map_err(|fault| LoginTrouble(fault.class))?;
@@ -152,7 +170,7 @@ impl LoginProbe for ServerProbe {
     }
 
     fn draft_outgoing(&self, draft: &Draft, timeout: Duration) -> Result<(), LoginTrouble> {
-        if self.read_only {
+        if self.read_only || draft.gentlemail {
             return Ok(());
         }
         let host = draft.smtp_host.as_deref().ok_or(LoginTrouble("NameNotResolved"))?;

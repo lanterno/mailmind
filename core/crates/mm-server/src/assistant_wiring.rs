@@ -208,6 +208,13 @@ impl ApiEngine {
         let model = if model.is_empty() { default_model(provider).to_owned() } else { model };
         let base_url = self.chosen_url(provider, &said(mm_accounts::preferences::AI_BASE_URL));
         let base_url = if base_url.is_empty() { default_base_url(provider).to_owned() } else { base_url };
+        let local = providers::local(provider, &base_url);
+        let has_private_mail = self.file.read().map_or(true, |config| {
+            config.get("accounts").and_then(Value::as_array).is_some_and(|accounts| {
+                accounts.iter().any(|account| matches!(account.get("type").and_then(Value::as_str), Some("gentlemail")))
+            })
+        });
+        let enabled = enabled && (local || !has_private_mail);
         // Turned off, nothing is looked up: not even the Keychain.
         let (key, key_from) = if enabled { self.key(provider) } else { (Secret::new(String::new()), "") };
         let local = providers::local(provider, &base_url);

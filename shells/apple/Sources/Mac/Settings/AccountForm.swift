@@ -60,6 +60,14 @@ struct AccountForm: View {
                             presetWords
                             if let note = draft.note { NoteWords(text: note) }
                             if let taken = draft.alreadySetUp(among: known) { NoteWords(text: taken) }
+                            if draft.editing == nil, draft.type != .gentlemail {
+                                Button("Connect GentleMail…") {
+                                    draft.pick(.gentlemail)
+                                    draft.host = ""
+                                    draft.found = nil
+                                }
+                                .meadowButton(small: true)
+                            }
                         }
                     }
                     if draft.kind != nil, !draft.unsupported {
@@ -70,9 +78,16 @@ struct AccountForm: View {
                                                   fills: false)
                         }
                         if draft.type == .imap { servers }
+                        if draft.type == .gentlemail {
+                            row("GentleMail server") {
+                                TextField("Hostname", text: $draft.host, prompt: Text(verbatim: "mail.example.com"))
+                                    .meadowComposeField()
+                                    .disabled(draft.editing != nil)
+                            }
+                        }
                     }
                     if !draft.unsupported {
-                        row("Password") {
+                        row(draft.type == .gentlemail ? "API key" : "Password") {
                             VStack(alignment: .leading, spacing: 8) {
                                 if let own = draft.protonOwn {
                                     // It logs in with a password of its own, not the Bridge's: said as its card
