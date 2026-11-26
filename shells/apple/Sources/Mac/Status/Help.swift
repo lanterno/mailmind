@@ -244,13 +244,14 @@ struct GuideSheet: View {
                     Text(step.title)
                         .font(.meadow(.display, 20, .bold))
                         .foregroundStyle(meadow.ink)
+                        .accessibilityAddTraits(.isHeader)        // the step's heading, as the page's card has one
                     Text(step.text)
                         .font(.meadow(.ui, 14))
                         .foregroundStyle(meadow.ink2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .accessibilityElement(children: .combine)
+            .accessibilityElement(children: .contain)
             Spacer(minLength: 0)
             HStack(spacing: 8) {
                 if at > 0 { Button("Back") { at -= 1 }.meadowButton() }
