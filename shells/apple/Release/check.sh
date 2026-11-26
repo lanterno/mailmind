@@ -104,6 +104,19 @@ entitled() {
 }
 check "with the entitlement that lets it load Sparkle" entitled
 check "its identifier is io.github.lanterno.mailmind" equal "$(plist "$app" CFBundleIdentifier)" io.github.lanterno.mailmind
+# The end-to-end framework's driver (Sources/Dev), the test kit and its seams' stand-ins are MailMind Dev's alone: a
+# release built from project.yml's Release leaves them out, and its binary names none of them.
+held_apart() {
+    local word
+    for word in MAILMIND_TEST_DRIVER DevDriver DriverCommands DriverLink DevApplication LaneA CoreWatch \
+        MailMindTestKit RealKeys RealMouse TestClock RecordedLinks MailMindDev io.github.lanterno.mailmind.dev; do
+        if grep -aq "$word" "$app/Contents/MacOS/MailMind"; then
+            echo "the release holds $word"
+            return 1
+        fi
+    done
+}
+check "it holds no test driver, test kit or MailMind Dev" held_apart
 floor="$(sed -n 's/^ *macOS: *"\(.*\)"$/\1/p' "$here/project.yml")"
 check "it runs from macOS $floor, project.yml's floor" equal "$(plist "$app" LSMinimumSystemVersion)" "$floor"
 built_for() {
