@@ -237,9 +237,10 @@ pytest's `--import-mode=importlib` keeps a folder like `tests/unit/calendar` fro
 
 ## The end-to-end scenarios and `mm`
 
-[test-architecture.md](test-architecture.md) is the framework; what exists of it is step 1, the page. A scenario
-drives the real build in Chromium, served by the Rust server (`mailmind-server` behind `mm-served`), over a world of
-fictional mail on the fake servers, and reads like a person's account of what they did:
+[test-architecture.md](test-architecture.md) is the framework; what exists of it is its steps 1 to 5. A scenario
+drives the real build in Chromium, served by the Rust server (`mailmind-server` behind `mm-served`), or MailMind Dev
+through its driver (lane A: off the screen, never taking the keyboard or the front), over a world of fictional mail on
+the fake servers, and reads like a person's account of what they did:
 
 ```python
 from mmtest import mail
@@ -256,14 +257,17 @@ def test_a_reply_answers_the_sender_and_threads(world, app):
 
 ```bash
 just e2e                                         # every scenario, four processes at a time (builds mm-served first)
+just e2e --client mac                            # only on MailMind Dev, built once into shells/apple/build if it changed
 just e2e -m compose                              # one feature: the folder's name under tests/scenarios
 just e2e tests/scenarios/compose/test_reply.py --keep   # a failure stays up for `just mm attach` until `just mm down`
 just e2e catalogue                               # and write build/catalogue.md: each scenario's sentence and steps
 ```
 
 - **Where.** Scenarios are `tests/scenarios/<feature>/test_*.py`, named as sentences; the framework is
-  `tests/framework/mmtest/` (`world.py`, `page.py`, `shown.py`, `screens.py`, `trace.py`, `plugin.py`), loaded by
-  `tests/conftest.py`. They are marked `scenario` and skipped unless pytest runs with `--e2e`.
+  `tests/framework/mmtest/` (`world.py`, `page.py`, `mac.py`, `shown.py`, `screens.py`, `trace.py`, `plugin.py`),
+  loaded by `tests/conftest.py`. They are marked `scenario` and skipped unless pytest runs with `--e2e`. A scenario runs
+  on the page unless it says `@clients("page", "mac")` (or `pytestmark = clients(...)` for a file); a bug on one client
+  is `@known_bug("mac", why)`, the scenario stating the right behaviour.
 - **The world** is a temp home with a copy of the corpus's database, the fake IMAP, SMTP and Claude servers, and the
   server on it. Its clock stands at `conftest.NOW` and moves only by `world.clock.advance(...)`, which moves the
   server's and the page's together. Background jobs are paused: `world.run("outbox")` pumps one, and `world.smtp.wait_for_one()`
@@ -276,8 +280,8 @@ just e2e catalogue                               # and write build/catalogue.md:
   `chosen`, `open`, `composer`, `floats`, `toast`, `tray`, `focus` and `count(tab)`. Assert on it, or on the world
   (`world.where(subject)`, `world.smtp.sent`), never on the page's DOM.
 - **Finding things** is by role and label within a region (`app.find("button", "Reply", within="reader")`). The few
-  anchors are `data-mm` attributes, listed in `tests/framework/anchors.toml`; `tests/unit/test_anchors.py` holds the
-  page to that list. Add one only where role and label can't work, and list it there.
+  anchors are `data-mm` attributes on the page and `.accessibilityIdentifier`s in the Mac app, listed in
+  `tests/framework/anchors.toml`; `tests/unit/test_anchors.py` holds both to that list. Add one only where role and label can't work, and list it there.
 - **The oracle** runs after every step (`mmtest/oracle.py`): something visible has the keyboard, words typed into a
   composer's body are kept (on screen, a draft, the outbox or sent), and the open message is among its folder's rows
   or the reader says where it is. `Truth` is read from the world's database, read only. A step that breaks one fails
@@ -292,6 +296,7 @@ just e2e catalogue                               # and write build/catalogue.md:
 
 ```bash
 just mm up page          # a world and the page on it, then an `mm>` prompt (--detach: none; --headed: see Chromium)
+just mm up mac           # or MailMind Dev on it, through its driver, and the same verbs
 just mm shown            # one verb at a time, as an agent drives it; `just mm help` lists them all
 just mm click tab Everything in list
 just mm press j

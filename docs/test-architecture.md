@@ -245,6 +245,35 @@ link speaks JSON lines:
 The driver runs its own work off the main thread, except for accessibility reads and posting events. `MailMindTestKit`
 holds the input code, so the hosted XCTest target sends keys exactly as the driver does.
 
+**As built (step 4).** The driver is `shells/apple/Sources/Dev/Driver/`, compiled with `TestKit/` into the Debug build
+only (`project.yml`: the app's sources leave out `Sources/Dev`, the macOS target adds it and `TestKit` back, and Release
+excludes both by name). `main.swift` starts it (`DevDriver.startIfAsked`) before anything else when
+`MAILMIND_TEST_DRIVER` names the runner's socket; it connects out (`DriverLink`), says hello with its lane and what it
+can't vouch for, and answers one JSON line at a time on the main actor (`DriverCommands`). Its verbs: `press` (chords,
+under `us`, `arabic`, `swiss-french` or `german`, through `RealKeys`), `type`, `click` (`count`), `drag`, `scroll`,
+`menu` (the item validated as AppKit would, then performed; lane A says it never saw the real menu bar), `find` (role
+and label, `exact`/`prefix`/`contains`/`regex`, within a region by identifier or by role and label, `near`, a row by
+`subject` or `sender`), `shown`, `tree` (the accessibility tree as text, for writing a scenario), `picture` (the window
+drawn by itself, approximate), `settle`, `clock` and `core` (the core's clock, `kick`, `pump`, `kicked`, `settle`,
+`high_water`, and a route called in process, which is how the world posts `/api/preferences` and reads `truth`).
+On the Python side `mmtest/mac.py` builds MailMind Dev once a run (`build`, xcodegen and xcodebuild into
+`shells/apple/build/DerivedData`, under a lock, only when a source is newer), starts it by path as the world's app
+(`DevApp`, its own process group, its pid in the home) and drives it as `MacClient`, with `PageClient`'s interface.
+`shown` is read from the accessibility tree in `Shown`'s shape (`DriverShown`): the list's rows from the cells that draw
+them, a composer's recipients from its chips' Remove buttons, the toasts that offer something as the page's floats.
+What the two clients do differently, and why:
+
+- A click on SwiftUI goes through the window (`window.sendEvent`), which hands it to SwiftUI's gestures; a click on an
+  AppKit view goes to the view, as `RealMouse` routes one for a window that isn't key. A click on a row of the list is
+  made on the row (`RealMouse`), and since the table's own tracking of a draggable row reads the Mac's real mouse, which
+  lane A never presses, the row is then chosen as the table chooses one at a click, through its delegate. A double
+  click on a row is refused there: lane B holds it.
+- `open("/m/<account>/<folder>")` clicks the folder's place in the rail; the Mac's rail shows every account's Inbox as
+  one place.
+- A system popover (`.popover`, an `NSPopover`) closes at once in an app that isn't active, so Send later's chooser is
+  lane B's; Meadow's own popovers (a child panel) work.
+- `Shown.path` is empty, so the oracle's open-message check skips the Mac (it needs the page's place).
+
 ### 5.3 The page client
 
 Playwright on the real build, in Chromium, served by `mailmind-server`. `find` maps to `get_by_role` within a
@@ -293,13 +322,19 @@ before. The stand-ins are `TestKit/TestClock.swift` and `TestKit/RecordedLinks.s
 The Debug configuration builds MailMind Dev: `io.github.lanterno.mailmind.dev`, `MailMindDev.app` with the executable
 `MailMindDev`, shown as "MailMind Dev", its Swift module still `MailMind` so the hosted tests import it as before; their
 `TEST_HOST` is it. Release is `io.github.lanterno.mailmind` and `MailMind.app` as before, which `release-check` already
-checks; Sparkle stays off in Dev (`Updates.checks` is false in any Debug build). No app build compiles `TestKit/` or
-`Tests/`, so a shipped app can't hold the test seams; the check for the driver comes with it in step 4.
+checks; Sparkle stays off in Dev (`Updates.checks` is false in any Debug build). No Release build compiles `TestKit/`,
+`Tests/` or `Sources/Dev/`, so a shipped app can't hold the test seams or the driver, and `just apple release-check`
+fails if the release's binary names any of them or MailMind Dev (`held_apart` in `Release/check.sh`).
 
 Not behind a seam yet: AppKit's own Copy and Paste in a text field (the general pasteboard, under the composer's own
-paste); the system's notifications of a wake, a changed clock or zone, and of contrast, which the app hears; and a Dev
-run that names no home, which still opens MailMind's own data folder and the login Keychain as a Debug run did. The
-driver's refusal to start off a temp home (step 4) is what keeps a scenario off them.
+paste); and the system's notifications of a wake, a changed clock or zone, and of contrast, which the app hears.
+
+**The driver refuses to start** (exit 78, saying why) unless it is MailMind Dev (`io.github.lanterno.mailmind.dev`),
+`MAILMIND_HOME` lies under the system's temp folder, `MAILMIND_TEST_KEYCHAIN` names a stand-in, `MAILMIND_DB_KEY` is
+set and `MAILMIND_TEST_CLOCK` is `paused` (`DriverSafety`, which `DriverSafetyTests` hold). Under it the seams are the
+stand-ins: the `TestClock` at `MAILMIND_TEST_NOW`, `RecordedLinks`, a pasteboard of its own, the `Silent` notifier and
+no login item. The runner starts it with only the variables it needs, in a process group of its own, writes its pid
+into the home and stops only that pid: asked to quit first, signalled only if it won't.
 
 ## 7. Time and settling
 
@@ -380,8 +415,14 @@ test's run reads them. The shell reaches them through `CoreHost`: `in_test_world
 `test_high_water`, each refusing with `TestWorldProblem.NotATestWorld` outside one. As on the page, moving the clock
 runs nothing by itself: a job that came due runs when the driver pumps it, and its settle runs `test_settle` then
 `test_pump_kicked` as `page.py` runs `settle` then `work kicked`. The shell passes the two variables on
-(`CoreHome.passedOn`, in `Sources/Client/Core.swift`). Still for step 4: `check` (the tripwire's findings) has no
-in-process counterpart yet.
+(`CoreHome.passedOn`, in `Sources/Client/Core.swift`). `check` (the tripwire's findings) has no in-process
+counterpart yet: on the Mac it checks nothing.
+
+**The Mac's settle, as built (step 4)** (`DriverSettle`): every event stream the app opened has taken, and dealt with,
+each event up to the core's high water (`CoreWatch`, which Debug's `Core` reports to: the streams it hands out and the
+route calls it has out); no route call is out; the app's short delays have run (`TestClock.runShortDelays`); three
+quiet probes in a row; then `test_settle` and `test_pump_kicked`, done when the high water hasn't moved. It fails at
+its ceiling saying what was still busy.
 
 ## 8. The oracle
 
@@ -482,6 +523,15 @@ flowchart TB
   accessory app with its windows off-screen. In Dev under a driver, an `NSApplication` subclass answers `isActive` and
   `keyWindow` from the window the driver made key through AppKit's own `makeKeyWindow`. That's what the review's probe
   did, without swizzling. A result from lane A says it can't vouch for activation, the real menu bar or a drag.
+
+  *As built (step 4):* `DevApplication` is the app's class under the driver, made before `NSApp` is first read; it
+  refuses `activate`, unhides without activating and never asks for attention. The activation policy is `.accessory`
+  before any window exists, and the app hides itself as it launches. `LaneA` parks every window as it arrives (through
+  `AppSeams.windowArrived`, before it is first drawn) and again as it becomes key, moves or resizes and at each turn of
+  the run loop: see-through (alpha 0), no shadow, far off every screen, and passing the person's clicks through, since
+  AppKit keeps a corner of a window on a screen however far it is sent. Every answer the driver sends says if any of its
+  windows could be seen, and the runner fails on it. Checked with a watcher polling the window server every 2 ms
+  through whole runs: none of MailMind Dev's windows on a screen with any opacity, and the front app never changed.
 - **Lane B, the gate.** Scenarios marked `@needs_session` (menus, activation, drag and drop, notifications, pictures)
   and the whole catalogue on merges. It runs on GitHub's macOS runners, which are throwaway VMs with an unlocked
   session, and free for a public repository, so the catalogue is sharded across several. They can't run a VM inside
@@ -510,7 +560,12 @@ Each step is useful on its own, and the first ones pay off before the Mac driver
    Release waits for the Dev build.
 4. **The driver, lane A.** `MailMindTestKit` from `Tests/RealKeys.swift` and `MailFrameTests.press`; the driver's link,
    input, `find`, `shown`, `settle`, `core`; `mm up mac`. The first scenarios are the review's findings in the list,
-   triage, the composer and the reader.
+   triage, the composer and the reader. *Built:* sections 5.2, 6, 7 and 10 say how. `just e2e --client mac` and
+   `just mm up mac`; `@clients("page", "mac")` runs a scenario on both, and `@known_bug("mac", why)` marks one that
+   states the right behaviour and fails there (`xfail(strict=True)`). On the Mac now: Needs you and its Undo, a reply,
+   the guide walked by keyboard, and archive with Undo (a known bug: the Mac's Undo says nothing). Not yet: Send later
+   (a system popover, lane B's), the guide offered once (opening the app again is a relaunch), the open message's key in
+   `shown`, and `check`.
 5. **The oracle's three invariants**, run after every step. *Built:* section 8's "as built" note says how; `tests/unit/test_oracle.py` holds
    what each catches and lets be.
 6. **Lane B on CI**, sharded, with `@needs_session` scenarios and the catalogue on merges.
