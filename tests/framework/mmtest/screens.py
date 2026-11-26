@@ -202,7 +202,8 @@ class Composer:
 
     @property
     def send_button(self):
-        return self._find("button", re.compile(r"^Send\b"))
+        # "Send", with its keys on the Mac ("Send, ⌘↵"); never its Send later.
+        return self._find("button", re.compile(r"^Send\b(?! later)"))
 
     @phrase("address it to {who}")
     def to(self, who):
@@ -239,7 +240,7 @@ class Composer:
 
     @phrase("send it later, {when}")
     def send_later(self, when):
-        self.app.client.click(self._find("button", re.compile("^Later")))
+        self.app.client.click(self._find("button", re.compile("^(Send l|L)ater")))
         self.app.client.click(self.app.find("button", re.compile(re.escape(when) + "$")))
 
     @phrase("close the composer")
@@ -259,7 +260,7 @@ class Tray:
 
     @phrase("open the outbox tray")
     def open(self):
-        self.app.client.click(self.app.find("button", "Outbox and changes waiting"))
+        self.app.client.click(self.app.find("button", re.compile("^Outbox")))
 
     @phrase("cancel {subject!r} in the tray")
     def cancel(self, subject):

@@ -212,12 +212,15 @@ class World:
         self.clock = TestClock(self)
         self.trace = None                         # the scenario's trace, once a runner gives it one
         self.app = None
+        self.kind = "page"
         self._log = log
         self._stack = contextlib.ExitStack()
 
     # ── up and down ─────────────────────────────────────────────────────
 
-    def start(self, dist):
+    def start(self, dist=None, kind="page"):
+        """The world up, with the app over it: the page's server (`kind` "page", serving the build in `dist`) or
+        MailMind Dev ("mac")."""
         import time_machine
         from fakes.imap_server import FakeIMAPServer
         from fakes.smtp_server import FakeSMTPServer
@@ -247,17 +250,35 @@ class World:
         self.accounts = {name: Account(self, name, address)
                          for name, (address, *_rest) in zip(("ada", "bea", "cy"), corpus.ACCOUNTS)}
         local = stack.enter_context(time_machine.travel(NOW, tick=False))
-        # served.command() reads the launcher from here: the Rust one, always.
-        stack.enter_context(_variable("MAILMIND_TEST_SERVER", server_command()))
-        env = {**os.environ, "MAILMIND_HOME": self.home, "MAILMIND_TEST_DIST": dist, "MAILMIND_TEST_GUARDED": self.guarded}
-        env.setdefault("MAILMIND_TEST_LOCAL_AI", "")          # set and empty: no model server on this Mac is asked
-        self.app = served.Served(env, NOW, local, os.path.join(self.home, "server.log"))
-        canaries.log_file(self.app.log_path)      # the world's canaries are never in what the server says
+        self.kind = kind
+        if kind == "mac":
+            # The Mac app runs the core in its own process, over this home (mac.py): MailMind Dev, by its driver.
+            from .mac import DevApp
+            self.app = DevApp(self.home, NOW, local, os.path.join(self.home, "app.log"))
+            # The Mac app reads what it offers as it opens, so a new world is past the first run before it starts.
+            self._config_preferences(guide_offered=True)
+        else:
+            # served.command() reads the launcher from here: the Rust one, always.
+            stack.enter_context(_variable("MAILMIND_TEST_SERVER", server_command()))
+            env = {**os.environ, "MAILMIND_HOME": self.home, "MAILMIND_TEST_DIST": dist,
+                   "MAILMIND_TEST_GUARDED": self.guarded}
+            env.setdefault("MAILMIND_TEST_LOCAL_AI", "")      # set and empty: no model server on this Mac is asked
+            self.app = served.Served(env, NOW, local, os.path.join(self.home, "server.log"))
+        canaries.log_file(self.app.log_path)      # the world's canaries are never in what the app says
         self.app.start()
         stack.callback(self._stop_app)
         # Past the first run: a new world has had the guide offered, so it stays out of every scenario but its own.
         self._preferences(guide_offered=True)
         return self
+
+    def _config_preferences(self, **chosen):
+        """Preferences written into the home's config, as the app keeps them, while no app runs over it."""
+        from mailmind.accounts.domain import preferences
+        with open(self._config_path()) as f:
+            written = json.load(f)
+        preferences.apply(written, chosen)
+        with open(self._config_path(), "w") as f:
+            json.dump(written, f, indent=2)
 
     def _preferences(self, **chosen):
         answer = self.app.post("/api/preferences", chosen)
@@ -289,6 +310,11 @@ class World:
     def first_run(self):
         """A person who hasn't been offered the first-run guide yet; each client opens its page again on that."""
         with self.doing("a first run: the guide not yet offered"):
+            if self.kind == "mac":
+                # The Mac app offers the guide as it opens: it opens again on the change.
+                with self.app.stopped():
+                    self._config_preferences(guide_offered=False)
+                return
             self._preferences(guide_offered=False)
             for client in self.clients:
                 client.app_restarted()

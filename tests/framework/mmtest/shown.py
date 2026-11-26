@@ -237,7 +237,7 @@ class Shown:
     # ── as text ─────────────────────────────────────────────────────────
 
     def text(self):
-        lines = [f'page "{self.title}" {self.path}']
+        lines = [f'page "{self.title}" {self.path}' if self.path else f'window "{self.title}"']
         if self.rail:
             places = " ".join(f"[{p['name']}]{'*' if p['current'] else ''}" for p in self.rail["places"])
             lines.append(f"  rail: {self.rail['account']} · {places}".rstrip())

@@ -2,9 +2,9 @@
 
 - Every scenario is marked `scenario` (run with --e2e, as `just e2e` does) and by its feature, its folder's name
   (`-m compose`), so a change runs its own area first.
-- `@clients(...)` runs one on each client named, `--client` narrows the run to one. The Mac's client isn't built yet,
-  so a scenario asking for it is skipped there.
-- The fixtures `mm_world`, `mm_client` and `mm_app` make a world, a page client on it, and the screens over that;
+- `@clients(...)` runs one on each client named, `--client` narrows the run to one: "page" (the page in Chromium on
+  the served app) or "mac" (MailMind Dev through its driver, lane A: mmtest/mac.py), built once a run.
+- The fixtures `mm_world`, `mm_client` and `mm_app` make a world, a client on it, and the screens over that;
   tests/scenarios/conftest.py names them `world` and `app`. The page's problems (an uncaught error, a console error, a
   request off its origin) and the server's tripwire fail the scenario as it ends.
 - A failing scenario writes its trace to build/traces/<test>/ and prints a one-line repro. With --keep it leaves the
@@ -44,6 +44,7 @@ def _features(root):
 def pytest_configure(config):
     for line in ("scenario: an end-to-end scenario (tests/scenarios); skipped unless pytest runs with --e2e",
                  "clients(*names): the clients a scenario runs on (mmtest.clients)",
+                 "known_bug(client, why): a known bug on one client, xfail(strict=True) there (mmtest.known_bug)",
                  "free_running: background jobs run by themselves (not yet)",
                  "needs_session: needs a real, active session (lane B)"):
         config.addinivalue_line("markers", line)
@@ -73,13 +74,14 @@ def pytest_generate_tests(metafunc):
     marker = metafunc.definition.get_closest_marker("clients")
     names = marker.args if marker else ("page",)
     only = metafunc.config.getoption("--client")
+    bugs = {m.args[0]: m.args[1] for m in metafunc.definition.iter_markers("known_bug")}
     params = []
     for name in names:
         marks = []
         if only and name != only:
             marks.append(pytest.mark.skip(reason=f"--client {only}"))
-        elif name == "mac":
-            marks.append(pytest.mark.skip(reason="the Mac's client comes with its driver (test-architecture.md 11, step 4)"))
+        elif name in bugs:
+            marks.append(pytest.mark.xfail(strict=True, reason=bugs[name]))
         params.append(pytest.param(name, marks=marks, id=name))
     metafunc.parametrize("mm_client_kind", params)
 
@@ -90,6 +92,13 @@ def pytest_generate_tests(metafunc):
 def mm_dist():
     from .world import page_build
     return page_build()
+
+
+@pytest.fixture(scope="session")
+def mm_mac():
+    """MailMind Dev, built once a run for what the sources hold now (a worker that finds it built uses it)."""
+    from . import mac
+    return mac.build()
 
 
 @pytest.fixture(scope="session")
@@ -110,14 +119,19 @@ def mm_guarded():
 
 
 @pytest.fixture
-def mm_world(request, tmp_path, world_template, mm_dist, mm_guarded):
-    """A world over the fakes, with the app's server on it, for this scenario alone."""
+def mm_world(request, tmp_path, world_template, mm_guarded, mm_client_kind):
+    """A world over the fakes, with the app on it for this scenario alone: the served app for the page, MailMind Dev
+    for the Mac."""
     import canaries
     from .world import World
     world = World(tmp_path / "home", world_template, guarded=mm_guarded)
     asked = {name for mark in request.node.iter_markers("asks_ai_about") for name in mark.args}
     with canaries.watching(world.home, asked) as watch:
-        world.start(mm_dist)
+        if mm_client_kind == "mac":
+            request.getfixturevalue("mm_mac")
+            world.start(kind="mac")
+        else:
+            world.start(request.getfixturevalue("mm_dist"))
         yield world
     if request.node.stash.get(_KEPT, None) is None:
         try:
@@ -135,13 +149,14 @@ def mm_client_kind():
 @pytest.fixture
 def mm_client(request, mm_world, mm_client_kind):
     from .oracle import Oracle
-    from .page import PageClient
     from .trace import Trace
-    if mm_client_kind != "page":
-        pytest.skip(f"no {mm_client_kind} client yet")
-    browser = request.getfixturevalue("mm_browser")
     trace = Trace(mm_world)
-    client = PageClient(mm_world, browser, trace=trace)
+    if mm_client_kind == "mac":
+        from .mac import MacClient
+        client = MacClient(mm_world, trace=trace)
+    else:
+        from .page import PageClient
+        client = PageClient(mm_world, request.getfixturevalue("mm_browser"), trace=trace)
     trace.client = client
     trace.oracle = Oracle(mm_world, client, trace)
     mm_world.trace = trace
@@ -154,7 +169,7 @@ def mm_client(request, mm_world, mm_client_kind):
         _keep(request, mm_world, client)
         return
     try:
-        if not failed:
+        if not failed and mm_client_kind == "page":
             assert client.problems == [], f"the page had problems: {client.problems}"
             assert client.blocked == [], f"the page reached past its origin: {client.blocked}"
     finally:
@@ -202,8 +217,8 @@ def pytest_runtest_makereport(item, call):
         folder = folder_for(item.nodeid)
         shown = picture = None
         try:
-            shown = client.shown().text() if client.pw is not None else None
-            picture = client.picture() if client.pw is not None else None
+            shown = client.shown().text() if client.showing() else None
+            picture = client.picture() if client.showing() else None
         except Exception as e:                           # a page that broke can't always be read
             shown = f"(couldn't read what's shown: {e})"
         trace.write(folder, shown, picture)
