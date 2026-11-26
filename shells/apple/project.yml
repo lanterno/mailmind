@@ -105,6 +105,8 @@ targets:
       # MailMindTestKit: keys, the mouse, the keyboard's place and the menu bar's items, as a person meets them. The
       # in-app driver (Sources/Dev) reuses it, so it holds no XCTest.
       - TestKit
+      # When the driver may start, which DriverSafetyTests hold
+      - Sources/Dev/Driver/DriverSafety.swift
       - Sources/ListModel.swift
       - Generated/MailMindCore.swift
       # The seams the app reaches the system through, which the tests put their own into
