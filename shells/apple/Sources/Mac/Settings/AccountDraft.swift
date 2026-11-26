@@ -16,7 +16,7 @@ import Foundation
 struct AccountDraft: Equatable {
     /// The types an account is saved as: Gmail, Proton through its Bridge, and any other IMAP server.
     enum Kind: String, CaseIterable, Identifiable, Sendable {
-        case gmail, imap, proton, hodhod
+        case gmail, imap, proton, hodhod, gentlemail
         var id: String { rawValue }
         var label: String {
             switch self {
@@ -24,6 +24,7 @@ struct AccountDraft: Equatable {
             case .imap: String(localized: "Other IMAP")
             case .proton: "Proton"
             case .hodhod: "HodHod"
+            case .gentlemail: "GentleMail"
             }
         }
     }
@@ -130,7 +131,7 @@ struct AccountDraft: Equatable {
     /// The address the server is asked which preset it takes: one typed with an @ in it, only while adding, since a
     /// saved account's type is its own.
     var presetQuery: String? {
-        guard editing == nil, type != .hodhod else { return nil }
+        guard editing == nil, type != .hodhod, type != .gentlemail else { return nil }
         let typed = email.trimmed
         return typed.contains("@") ? typed : nil
     }
@@ -175,7 +176,7 @@ struct AccountDraft: Equatable {
 
     /// A type picked by hand: what a preset filled in is no longer its.
     mutating func pick(_ picked: Kind) {
-        if type == .hodhod, picked != .hodhod { password = "" }
+        if type != picked, [Kind.hodhod, .gentlemail].contains(type) || picked == .gentlemail { password = "" }
         kind = picked
         applied = nil
         trash = nil
@@ -266,6 +267,7 @@ struct AccountDraft: Equatable {
     var problem: String? {
         if editing == nil, !address.contains("@") { return String(localized: "Type the account’s email address.") }
         if unsupported { return note ?? String(localized: "MailMind can’t log in to this account yet.") }
+        if type == .gentlemail, host.trimmed.isEmpty { return String(localized: "Enter the hostname of your GentleMail server.") }
         if type == .imap, host.trimmed.isEmpty { return String(localized: "Type the incoming server’s name.") }
         if editing == nil, credential == nil {
             return type == .hodhod ? String(localized: "Import a HodHod mailbox profile.")
@@ -287,6 +289,7 @@ struct AccountDraft: Equatable {
     private var servers: (host: JSONValue?, port: JSONValue?, starttls: Bool?, smtpHost: JSONValue?, smtpPort: JSONValue?,
                           smtpStarttls: Bool?)
     {
+        if type == .gentlemail { return (.string(host.trimmed), .number(443), nil, nil, nil, nil) }
         guard type == .imap else { return (nil, nil, nil, nil, nil, nil) }
         return (.string(host.trimmed), .number(Double(port993)), security == .starttls,
                 smtpHost.trimmed.isEmpty ? nil : .string(smtpHost.trimmed),
@@ -361,7 +364,7 @@ struct AccountDraft: Equatable {
         case .gmail: keptElsewhere == nil ? Self.appPasswords.absoluteString : nil
         case .imap: keptElsewhere == nil ? link?.url : nil
         case .proton: link?.url
-        case .hodhod: nil
+        case .hodhod, .gentlemail: nil
         }
     }
 

@@ -62,7 +62,15 @@ struct AccountForm: View {
                             presetWords
                             if let note = draft.note { NoteWords(text: note) }
                             if let taken = draft.alreadySetUp(among: known) { NoteWords(text: taken) }
-                            if draft.editing == nil, draft.type != .hodhod {
+                            if draft.editing == nil, draft.type != .gentlemail {
+                                Button("Connect GentleMail…") {
+                                    draft.pick(.gentlemail)
+                                    draft.host = ""
+                                    draft.found = nil
+                                }
+                                .meadowButton(small: true)
+                            }
+                            if draft.editing == nil, draft.type != .hodhod, draft.type != .gentlemail {
                                 Button("Import HodHod profile…", action: chooseHodHod)
                                     .meadowButton(small: true)
                                     .disabled(importingHodHod)
@@ -77,9 +85,16 @@ struct AccountForm: View {
                                                   fills: false)
                         }
                         if draft.type == .imap { servers }
+                        if draft.type == .gentlemail {
+                            row("GentleMail server") {
+                                TextField("Hostname", text: $draft.host, prompt: Text(verbatim: "mail.example.com"))
+                                    .meadowComposeField()
+                                    .disabled(draft.editing != nil)
+                            }
+                        }
                     }
                     if !draft.unsupported {
-                        row(draft.type == .hodhod ? "Profile" : "Password") {
+                        row(draft.type == .gentlemail ? "API key" : draft.type == .hodhod ? "Profile" : "Password") {
                             VStack(alignment: .leading, spacing: 8) {
                                 if draft.type == .hodhod {
                                     Button("Import HodHod profile…", action: chooseHodHod)

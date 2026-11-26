@@ -240,7 +240,7 @@ pub(crate) fn probe(secret: &Secret, outside: &dyn Outside, email: &str, timeout
 }
 
 pub(crate) struct Session {
-    profile: Profile,
+    transport: Transport,
     outside: std::sync::Arc<dyn Outside>,
     timeout: Duration,
     folders: Vec<HostedFolder>,
@@ -252,6 +252,11 @@ pub(crate) struct Session {
     readonly: bool,
 }
 
+enum Transport {
+    HodHod(Profile),
+    GentleMail(crate::gentlemail::MailboxSession),
+}
+
 impl Session {
     pub(crate) fn open(
         account: &Account,
@@ -259,15 +264,30 @@ impl Session {
         outside: std::sync::Arc<dyn Outside>,
         timeout: Duration,
     ) -> Result<Self, ServerError> {
-        let profile = Profile::read(&directory.password(account).map_err(ServerError::Failed)?)?;
-        profile.check(&*outside, &account.email, timeout)?;
-        let path = format!("/v2/mailboxes/{}/folders", profile.mailbox);
-        let folders: Folders = json_response(profile.request(&*outside, "GET", &path, None, None, timeout)?)?;
+        let secret = directory.password(account).map_err(ServerError::Failed)?;
+        let (transport, folders) = if account.kind == "gentlemail" {
+            let session = crate::gentlemail::MailboxSession::open(account, secret, &*outside, timeout)?;
+            let folders = ["inbox", "sent", "archive", "spam", "trash"]
+                .into_iter()
+                .map(|id| HostedFolder {
+                    id: id.into(),
+                    name: format!("{}{}", id[..1].to_uppercase(), &id[1..]),
+                    role: Some(id.into()),
+                })
+                .collect();
+            (Transport::GentleMail(session), folders)
+        } else {
+            let profile = Profile::read(&secret)?;
+            profile.check(&*outside, &account.email, timeout)?;
+            let path = format!("/v2/mailboxes/{}/folders", profile.mailbox);
+            let folders: Folders = json_response(profile.request(&*outside, "GET", &path, None, None, timeout)?)?;
+            (Transport::HodHod(profile), folders.folders)
+        };
         let mut session = Self {
-            profile,
+            transport,
             outside,
             timeout,
-            folders: folders.folders,
+            folders,
             rows: BTreeMap::new(),
             locations: BTreeMap::new(),
             local_headers: BTreeMap::new(),
@@ -280,6 +300,27 @@ impl Session {
     }
 
     fn refresh(&mut self) -> Result<(), ServerError> {
+        if let Transport::GentleMail(client) = &self.transport {
+            let snapshot = client.snapshot(&*self.outside, self.timeout)?;
+            let mut rows = BTreeMap::new();
+            let mut headers = BTreeMap::new();
+            for (uid, msg) in snapshot {
+                headers.insert(uid, msg.headers()?);
+                rows.insert(
+                    uid,
+                    Message {
+                        received: msg.timestamp()?,
+                        read: msg.is_read,
+                        id: msg.id,
+                        folder: msg.folder,
+                        key_version: 0,
+                    },
+                );
+            }
+            self.rows = rows;
+            self.local_headers = headers;
+            return Ok(());
+        }
         loop {
             let page: Changes = json_response(self.request("GET", &format!("changes?after={}", self.cursor), None)?)?;
             if page.cursor < self.cursor || (page.has_more && page.cursor == self.cursor) {
@@ -330,8 +371,9 @@ impl Session {
     }
 
     fn request(&self, verb: &str, tail: &str, body: Option<&Value>) -> Result<Response, ServerError> {
-        let path = format!("/v2/mailboxes/{}/{tail}", self.profile.mailbox);
-        self.profile.request(&*self.outside, verb, &path, body, None, self.timeout)
+        let Transport::HodHod(profile) = &self.transport else { return Err(UNSUPPORTED) };
+        let path = format!("/v2/mailboxes/{}/{tail}", profile.mailbox);
+        profile.request(&*self.outside, verb, &path, body, None, self.timeout)
     }
 
     fn folder(&self, name: &str) -> Result<&HostedFolder, ServerError> {
@@ -395,7 +437,7 @@ impl MailSession for Session {
 
 impl MailServer for Session {
     fn capabilities(&self) -> Vec<String> {
-        vec!["MOVE".to_owned()]
+        if matches!(self.transport, Transport::GentleMail(_)) { Vec::new() } else { vec!["MOVE".to_owned()] }
     }
 
     fn select(&mut self, name: &str, readonly: bool) -> Result<Selected, ServerError> {
@@ -466,6 +508,9 @@ impl MailServer for Session {
 
     fn body(&mut self, uid: u32) -> Result<Option<Vec<u8>>, ServerError> {
         let Some(row) = self.opened(uid) else { return Ok(None) };
+        if let Transport::GentleMail(client) = &self.transport {
+            return client.body(&*self.outside, &row.id, self.timeout).map(Some);
+        }
         let response = self.request("GET", &format!("messages/{}", row.id), None)?;
         if response.status == 404 {
             return Ok(None);
@@ -476,7 +521,8 @@ impl MailServer for Session {
         if response.status != 200 {
             return Err(UNREACHABLE);
         }
-        self.profile.decrypt(row, &response.body).map(Some)
+        let Transport::HodHod(profile) = &self.transport else { return Err(INVALID) };
+        profile.decrypt(row, &response.body).map(Some)
     }
 
     fn arrivals(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, i64>, ServerError> {

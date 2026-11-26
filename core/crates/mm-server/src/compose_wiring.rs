@@ -89,6 +89,10 @@ impl Transport for SmtpTransport {
         }
         let Ok(Some(account)) = self.directory.get(email) else { return Err(SEND_FAILED) };
         #[cfg(target_os = "macos")]
+        if account.kind == "gentlemail" {
+            return crate::gentlemail::send(&account, &self.directory, &*self.outside, raw, envelope);
+        }
+        #[cfg(target_os = "macos")]
         if account.kind == "hodhod" {
             // The HTTPS submission uses a durable idempotency key, so a crash can safely replay it.
             return crate::hosted_mail::send(&account, &self.directory, &*self.outside, raw, envelope);
@@ -314,8 +318,8 @@ impl Accounts for SendingAccounts {
     fn sending(&self, email: &str) -> Result<Option<SendingAccount>, Fault> {
         Ok(self.directory.get(email)?.map(|a| SendingAccount {
             name: a.alias.clone().unwrap_or_else(|| a.email.clone()),
-            saves_sent: matches!(a.kind.as_str(), "gmail" | "hodhod"),
-            local_drafts: a.kind == "hodhod",
+            saves_sent: matches!(a.kind.as_str(), "gmail" | "hodhod" | "gentlemail"),
+            local_drafts: matches!(a.kind.as_str(), "hodhod" | "gentlemail"),
             email: a.email,
         }))
     }

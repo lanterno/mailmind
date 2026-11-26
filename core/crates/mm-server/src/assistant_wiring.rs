@@ -211,7 +211,9 @@ impl ApiEngine {
         let local = providers::local(provider, &base_url);
         let has_private_mail = self.file.read().map_or(true, |config| {
             config.get("accounts").and_then(Value::as_array).is_some_and(|accounts| {
-                accounts.iter().any(|account| account.get("type").and_then(Value::as_str) == Some("hodhod"))
+                accounts
+                    .iter()
+                    .any(|account| matches!(account.get("type").and_then(Value::as_str), Some("hodhod" | "gentlemail")))
             })
         });
         let enabled = enabled && (local || !has_private_mail);

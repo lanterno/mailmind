@@ -30,7 +30,7 @@ impl MailServers for ImapServers {
         let failed = ServerError::Failed;
         let account = self.login.directory.get(account).map_err(failed)?.ok_or(failed(Fault::new("UnknownAccount")))?;
         #[cfg(target_os = "macos")]
-        if account.kind == "hodhod" {
+        if matches!(account.kind.as_str(), "hodhod" | "gentlemail") {
             let connection = crate::hosted_mail::Session::open(
                 &account,
                 &self.login.directory,

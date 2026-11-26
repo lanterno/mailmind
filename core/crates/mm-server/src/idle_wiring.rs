@@ -46,11 +46,17 @@ pub(crate) struct DirectoryIdle(pub(crate) Arc<Directory>);
 
 impl IdleAccounts for DirectoryIdle {
     fn accounts(&self) -> Result<Vec<Reached>, Fault> {
-        Ok(self.0.accounts()?.into_iter().filter(|account| account.kind != "hodhod").map(reached).collect())
+        Ok(self
+            .0
+            .accounts()?
+            .into_iter()
+            .filter(|account| !matches!(account.kind.as_str(), "hodhod" | "gentlemail"))
+            .map(reached)
+            .collect())
     }
 
     fn get(&self, email: &str) -> Result<Option<Reached>, Fault> {
-        Ok(self.0.get(email)?.filter(|account| account.kind != "hodhod").map(reached))
+        Ok(self.0.get(email)?.filter(|account| !matches!(account.kind.as_str(), "hodhod" | "gentlemail")).map(reached))
     }
 }
 
