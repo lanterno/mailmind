@@ -36,7 +36,9 @@ targetTemplates:
   App:
     type: application
     sources:
-      - Sources
+      # MailMind Dev's driver is the Mac target's alone, and its Debug build's (below).
+      - path: Sources
+        excludes: ["Dev/**"]
       - Generated/MailMindCore.swift
       # Meadow's typefaces, which the app registers as it starts (Fonts/fonts.py makes them from the page's).
       - path: Fonts
@@ -68,12 +70,22 @@ targets:
   MailMind-macOS:
     templates: [App]
     platform: macOS
+    sources:
+      # MailMind Dev's driver (docs/test-architecture.md section 5.2) and MailMindTestKit, which it presses keys and
+      # finds things with. Release leaves both out (EXCLUDED_SOURCE_FILE_NAMES below), and every file of the driver is
+      # inside `#if DEBUG` besides.
+      - Sources/Dev
+      - TestKit
     settings:
       base:
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
         # The Swift module stays MailMind whatever the app is called, so the hosted tests import it in either build.
         PRODUCT_MODULE_NAME: MailMind
       configs:
+        # The driver (Sources/Dev) and the test kit it stands on (TestKit) are compiled into MailMind Dev only: the
+        # shipped app holds neither, which `just apple release-check` checks (docs/test-architecture.md section 6).
+        Release:
+          EXCLUDED_SOURCE_FILE_NAMES: '*/Sources/Dev/* */TestKit/*'
         # The Debug build is MailMind Dev, an app of its own to macOS: its own preferences, saved state, login item,
         # notification permission and mailto: registration, so a build that is run or tested never stands in for the
         # person's MailMind (docs/test-architecture.md section 6). Release keeps the identity a person installs.
@@ -91,7 +103,7 @@ targets:
     sources:
       - Tests
       # MailMindTestKit: keys, the mouse, the keyboard's place and the menu bar's items, as a person meets them. The
-      # in-app driver will reuse it, so it holds no XCTest.
+      # in-app driver (Sources/Dev) reuses it, so it holds no XCTest.
       - TestKit
       - Sources/ListModel.swift
       - Generated/MailMindCore.swift

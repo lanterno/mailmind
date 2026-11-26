@@ -54,6 +54,12 @@ enum AppSeams {
         (TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
          TISCopyCurrentASCIICapableKeyboardLayoutInputSource()?.takeRetainedValue())
     }
+
+    #if DEBUG
+    /// Told of each of the app's windows as its content first moves in, before it is drawn: MailMind Dev's driver
+    /// parks it off the screen there (lane A, Sources/Dev). None in any other run, and a Release build has no such seam.
+    @MainActor static var windowArrived: ((NSWindow) -> Void)?
+    #endif
     #endif
 }
 

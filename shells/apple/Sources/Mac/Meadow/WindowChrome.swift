@@ -71,6 +71,10 @@ final class WindowChromeView: NSView {
         for token in watching { NotificationCenter.default.removeObserver(token) }
         watching = []
         guard let window else { return }
+        #if DEBUG
+        // Under MailMind Dev's driver, off the screen before it is first drawn (lane A, Sources/Dev).
+        AppSeams.windowArrived?(window)
+        #endif
         Self.dress(window)
         let names: [Notification.Name] = [
             NSWindow.didResizeNotification, NSWindow.didEndLiveResizeNotification, NSWindow.didBecomeKeyNotification,
