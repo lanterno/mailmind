@@ -2,32 +2,35 @@
 #
 # Everything else is found the way a person and VoiceOver find it, by role and label within a region, so a new
 # scenario seldom changes the app. An anchor is here only when the region has no role, or a label that changes with
-# what it shows. Each is `data-mm="<name>"` on the page and, once the Mac's driver comes, the same name as an
-# `accessibilityIdentifier`. tests/unit/test_anchors.py holds the page to this list, both ways.
+# what it shows. Each is `data-mm="<name>"` on the page (`page`, a file) and the same name as an
+# `.accessibilityIdentifier` in the Mac app (`mac`, its files; "" where the Mac has no such region, `page` "" where only
+# the Mac needs one). tests/unit/test_anchors.py holds both to this list, both ways.
 #
-# Regions found by role and label, with no anchor: the rail (complementary "Accounts and folders"), the top bar
-# (banner), the brief (region "Today’s brief") and dialogs (dialog, by name). The list's rows are its listbox's options;
-# its tabs are its tablist's tabs.
+# Regions found by role and label, with no anchor: the rail (complementary "Accounts and folders"; the Mac's group
+# "Mailboxes"), the top bar (banner), the brief (region "Today’s brief") and dialogs (dialog, by name; a sheet's window on
+# the Mac). The list's rows are its listbox's options (the Mac's table's cells); its tabs are its tablist's tabs.
 
 [list]
 what = "The message list: its title, its tabs and its rows. Its listbox is named for the place it shows, which changes."
 page = "web/src/app/App.tsx"
-mac = ""
+mac = ["shells/apple/Sources/Mac/Meadow/Frame.swift"]
 
 [reader]
 what = "What is open beside the list: a message, the brief or an empty pane. Only a message's pane has a label."
 page = "web/src/features/reader/Reader.tsx"
-mac = ""
+mac = ["shells/apple/Sources/Mac/Meadow/Frame.swift"]
 
 [composer]
 what = "A message being written. Its dialog is named for what it is (New message, Reply, Reply all, Forward), which changes."
 page = "web/src/features/compose/Composer.tsx"
-mac = ""
+mac = ["shells/apple/Sources/Mac/Compose/ComposeWindow.swift", "shells/apple/Sources/Mac/Reader/InlineReply.swift"]
 
 [toast]
-what = "The few words a toast says. It is hidden from assistive technology (a live region says them), so no role finds it."
+what = """The few words a toast says. It is hidden from assistive technology (a live region says them), so no role finds it.
+On the Mac every toast at the window's foot is one; those that offer something (Undo, a send's Cancel) are the page's
+floats."""
 page = "web/src/lib/toast.tsx"
-mac = ""
+mac = ["shells/apple/Sources/Mac/Meadow/Overlays.swift"]
 
 [float]
 what = "A float at the edge of the page: Undo's offer, a send on its way. Several unnamed status regions hold them."
@@ -37,4 +40,9 @@ mac = ""
 [tray]
 what = "The outbox tray's panel, which has no role: what waits to go, and what can be done about it."
 page = "web/src/features/compose/Outbox.tsx"
-mac = ""
+mac = ["shells/apple/Sources/Mac/Compose/Outbox.swift"]
+
+[tabs]
+what = "The Mac only: the Inbox's lanes, a group of buttons named for the place, which the list's tabs are on the page."
+page = ""
+mac = ["shells/apple/Sources/Mac/Meadow/Heads.swift"]
