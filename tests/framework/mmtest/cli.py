@@ -1,6 +1,7 @@
 """`mm`: the framework as a command, for driving a live app by hand (test-architecture.md section 3).
 
     just mm up page            # a world, the page on it, and a prompt (`--detach`: no prompt; `--headed`: see Chromium)
+    just mm up mac             # a world and MailMind Dev on it, through its driver (lane A: off the screen, never key)
     just mm attach             # a prompt on the session that is up
     just mm shown              # one verb, and its answer: what a script or an agent uses
     just mm down               # stop it
@@ -22,7 +23,7 @@ FRAMEWORK = os.path.dirname(HERE)
 MM = os.path.join(FRAMEWORK, "mm")
 USAGE = """\
 mm up page [--world tiny] [--headed] [--detach]   start a world and the page on it, then a prompt
-mm up mac                                          (with the Mac's driver, test-architecture.md 11, step 4)
+mm up mac [--world tiny] [--detach]                start a world and MailMind Dev on it, then a prompt
 mm attach                                          a prompt on the session that is up
 mm down                                            stop it
 mm VERB [ARGS…]                                    one verb: mm shown, mm press e, mm help…"""
@@ -53,10 +54,8 @@ def up(args):
     if not args or args[0] not in ("page", "mac"):
         print("mm up page | mac", file=sys.stderr)
         return 2
-    if args[0] == "mac":
-        print("The Mac's client comes with its driver (test-architecture.md section 11, step 4): `mm up page` for now.",
-              file=sys.stderr)
-        return 2
+    kind = args[0]
+    what = "the page" if kind == "page" else "MailMind Dev"
     record = session.read_record()
     if session.alive(record):
         print(f"already up at {record['origin']}: `just mm attach`, or `just mm down` first")
@@ -64,15 +63,16 @@ def up(args):
     world = _option(args, "--world", "tiny")
     log = os.path.join(tempfile.gettempdir(), session._NAME + ".log")
     with open(log, "wb") as out:
-        child = subprocess.Popen([sys.executable, MM, "_serve", "page", world, "--headed" if "--headed" in args else ""],
+        child = subprocess.Popen([sys.executable, MM, "_serve", kind, world, "--headed" if "--headed" in args else ""],
                                  stdin=subprocess.DEVNULL, stdout=out, stderr=out, start_new_session=True)
-    print(f"starting a {world} world and the page (its log: {log})…", flush=True)
+    print(f"starting a {world} world and {what} (its log: {log})…", flush=True)
     record = session.wait_for_record(child.pid)
     if record is None:
         with open(log, encoding="utf-8", errors="replace") as f:
             print("it didn't start:\n" + "".join(f.readlines()[-30:]), file=sys.stderr)
         return 1
-    print(f"up: the page at {record['origin']}, its home {record['home']}\n"
+    where = f" at {record['origin']}" if kind == "page" else ""
+    print(f"up: {what}{where}, its home {record['home']}\n"
           "  just mm attach    a prompt     just mm shown    one verb     just mm down    stop it")
     if "--detach" in args or not sys.stdin.isatty():
         return 0
@@ -147,7 +147,8 @@ def down():
 
 
 def _serve(args):
-    """The session's own process: the world, Chromium and the page, answering on the socket until `down`."""
+    """The session's own process: the world, and Chromium and the page or MailMind Dev, answering on the socket until
+    `down`."""
     kind, world_name = args[0], args[1] if len(args) > 1 else "tiny"
     guarded = prepare()
     from fixtures import world as corpus
@@ -160,16 +161,24 @@ def _serve(args):
         os.environ["ANTHROPIC_BASE_URL"] = claude.url        # no key, so AI is off; and nothing reaches a real API
         template = corpus.build_template(tempfile.mkdtemp(prefix="mm-template-"), NOW, guard.KEYCHAIN)
         world = World(os.path.join(home, "home"), template, guarded=guarded).corpus(world_name)
-        world.start(page_build())
-        playwright, browser = launch(headed="--headed" in args)
-        client = PageClient(world, browser)
+        playwright = browser = None
+        if kind == "mac":
+            from . import mac
+            mac.build()
+            world.start(kind="mac")
+            client = mac.MacClient(world)
+        else:
+            world.start(page_build())
+            playwright, browser = launch(headed="--headed" in args)
+            client = PageClient(world, browser)
         try:
             client.open("/")
             session.serve(session.Session(world, client), record={"kind": kind, "world": world_name})
         finally:
             client.close()
-            browser.close()
-            playwright.stop()
+            if browser is not None:
+                browser.close()
+                playwright.stop()
             world.stop()
             import shutil
             shutil.rmtree(home, ignore_errors=True)
