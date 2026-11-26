@@ -192,6 +192,10 @@ Python app gets fixes only.
   miss a budget, with a GTK4 shell in Rust as Linux's fallback.
 - **Developer ID signing and notarization** · medium value · effort S · [#42](https://github.com/lanterno/mailmind/issues/42) — Waits on the
   owner's paid Apple Developer account.
+- **Leave the core's test world out of the Release build** · low value · effort S · [#72](https://github.com/lanterno/mailmind/issues/72) —
+  `mm-host` depends on `mm-testworld` always, so every release carries its paused clock and `test_*` controls, which a
+  person's run can't reach (no keychain stand-in, so no controls). Put it behind a cargo feature the Debug build,
+  `mm-served` and the tests turn on, then add `TestClock` back to the words `Release/check.sh` refuses.
 - **Enter App Password on the Sync card for a provider on its own domain** · low value · effort S · [#67](https://github.com/lanterno/mailmind/issues/67) —
   The card finds the provider by the address's domain, the core's test words by the IMAP host first: an iCloud or
   Yahoo account on a domain of its own gets Change Password… while its test asks for an app password.
