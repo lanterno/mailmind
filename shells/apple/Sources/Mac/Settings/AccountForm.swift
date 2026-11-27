@@ -24,6 +24,7 @@ struct AccountForm: View {
 
     @State private var problem = ""
     @State private var saving = false
+    @State private var moreProviders = false
     /// The account added from the first run whose test then failed: the sheet stays open on it until Done.
     @State private var added: String?
     /// The field the sheet was opened to fix (#51), focused as it opens and again when a fix didn't work.
@@ -44,75 +45,9 @@ struct AccountForm: View {
                 .accessibilityAddTraits(.isHeader)
             FootInSight(change: Foot(tested: tested, problem: problem)) {
                 VStack(spacing: 0) {
-                    row("Email") {
-                        VStack(alignment: .leading, spacing: 4) {
-                            // Each field says its row's name to VoiceOver: a plain field's own title is never shown,
-                            // and VoiceOver read only its prompt, or nothing once it held text.
-                            TextField("Email", text: $draft.email, prompt: Text(verbatim: "you@example.com"))
-                                .textContentType(.emailAddress)
-                                .meadowComposeField()
-                                .accessibilityLabel("Email")
-                                .disabled(draft.editing != nil)
-                            if draft.editing != nil {
-                                SettingHelp(String(localized:
-                                    "Identity is fixed — remove and re-add to change the address."))
-                            }
-                            presetWords
-                            if let note = draft.note { NoteWords(text: note) }
-                            if let taken = draft.alreadySetUp(among: known) { NoteWords(text: taken) }
-
-                        }
-                    }
-                    if !draft.unsupported {
-                        row("Type") {
-                            MeadowSegmentedChoice(label: String(localized: "Type"),
-                                                  selection: Binding(get: { draft.kind }, set: { if let kind = $0 { draft.pick(kind) } }),
-                                                  options: AccountDraft.Kind.allCases.map { (Optional($0), $0.label) },
-                                                  fills: false)
-                        }
-                        if draft.kind == .imap { servers }
-                        if draft.type == .gentlemail {
-                            row("GentleMail server") {
-                                TextField("Hostname", text: $draft.host, prompt: Text(verbatim: "mail.example.com"))
-                                    .meadowComposeField()
-                                    .disabled(draft.editing != nil)
-                            }
-                        }
-                    }
-                    if !draft.unsupported {
-                        row(draft.type == .gentlemail ? "API key" : "Password") {
-                            VStack(alignment: .leading, spacing: 8) {
-                                if let own = draft.protonOwn {
-                                    // It logs in with a password of its own, not the Bridge's: said as its card
-                                    // says it, and kept as it is.
-                                    CredentialWords(credential: own)
-                                        .font(.meadow(.ui, 14))
-                                        .foregroundStyle(meadow.ink)
-                                    SettingHelp(String(localized: "This account logs in with its own password, which an edit keeps."))
-                                } else if draft.type == .proton {
-                                    SettingHelp(String(localized:
-                                        "Proton accounts log in through Proton Bridge, with the Bridge’s password."))
-                                    BridgePasswordView(status: status)
-                                    if let link = draft.link { LinkButton(link: link) }
-                                    if added == nil, let later = draft.testsOnceAdded { SettingHelp(later) }
-                                } else {
-                                    credential
-                                }
-                            }
-                        }
-                    }
-                    row("Alias") {
-                        TextField("Alias", text: $draft.alias,
-                                  prompt: Text("Optional: the name shown in the sidebar and on rows"))
-                            .meadowComposeField()
-                            .accessibilityLabel("Alias")
-                    }
-                    row("Signature") {
-                        TextField("Signature", text: $draft.signature, prompt: Text(signaturePrompt), axis: .vertical)
-                            .lineLimit(3...6)
-                            .padding(.vertical, 7)
-                            .meadowComposeField()
-                            .accessibilityLabel("Signature")
+                    if draft.editing == nil { providerChoices }
+                    if !choosingAdditionalProvider {
+                        accountFields
                     }
                 }
             }
@@ -141,7 +76,7 @@ struct AccountForm: View {
             HStack(spacing: 8) {
                 Button("Test Connection") { Task { await test() } }
                     .meadowButton(small: true)
-                    .disabled(tested == .running || draft.unsupported || (added == nil && draft.testsOnceAdded != nil))
+                    .disabled(choosingAdditionalProvider || tested == .running || draft.unsupported || (added == nil && draft.testsOnceAdded != nil))
                 Spacer()
                 if let added {
                     Button("Done") { finish(added, adding: true) }
@@ -160,7 +95,7 @@ struct AccountForm: View {
                     }
                     .meadowButton(.primary)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(saving || draft.unsupported)
+                    .disabled(choosingAdditionalProvider || saving || draft.unsupported)
                 }
             }
             .padding(.horizontal, 16)
@@ -175,6 +110,129 @@ struct AccountForm: View {
         .task(id: draft.presetQuery) { await askPreset() }
         .background { ComposePaper() }
         .presentationBackground { ComposePaper() }
+    }
+
+    private func sectionTitle(_ title: LocalizedStringKey) -> some View {
+        Text(title)
+            .font(.meadow(.ui, 13, .bold))
+            .foregroundStyle(meadow.ink2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 9)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    @ViewBuilder private var accountFields: some View {
+        row("Email") {
+            VStack(alignment: .leading, spacing: 4) {
+                // Each field says its row's name to VoiceOver: a plain field's own title is never shown,
+                // and VoiceOver read only its prompt, or nothing once it held text.
+                TextField("Email", text: $draft.email, prompt: Text(verbatim: "you@example.com"))
+                    .textContentType(.emailAddress)
+                    .meadowComposeField()
+                    .accessibilityLabel("Email")
+                    .disabled(draft.editing != nil)
+                if draft.editing != nil {
+                    SettingHelp(String(localized:
+                        "Identity is fixed — remove and re-add to change the address."))
+                }
+                presetWords
+                if let note = draft.note { NoteWords(text: note) }
+                if let taken = draft.alreadySetUp(among: known) { NoteWords(text: taken) }
+            }
+        }
+        if !draft.unsupported {
+            if draft.editing != nil {
+                row("Type") {
+                    MeadowSegmentedChoice(label: String(localized: "Type"),
+                                          selection: Binding(get: { draft.kind }, set: { if let kind = $0 { draft.pick(kind) } }),
+                                          options: AccountDraft.Kind.allCases.map { (Optional($0), $0.label) },
+                                          fills: false)
+                }
+            }
+            if draft.kind == .imap { servers }
+            if draft.type == .gentlemail {
+                row("GentleMail server") {
+                    TextField("Hostname", text: $draft.host, prompt: Text(verbatim: "mail.example.com"))
+                        .meadowComposeField()
+                        .disabled(draft.editing != nil)
+                }
+            }
+        }
+        if !draft.unsupported {
+            row(draft.type == .gentlemail ? "API key" : "Password") {
+                VStack(alignment: .leading, spacing: 8) {
+                    if let own = draft.protonOwn {
+                        // It logs in with a password of its own, not the Bridge's: said as its card
+                        // says it, and kept as it is.
+                        CredentialWords(credential: own)
+                            .font(.meadow(.ui, 14))
+                            .foregroundStyle(meadow.ink)
+                        SettingHelp(String(localized: "This account logs in with its own password, which an edit keeps."))
+                    } else if draft.type == .proton {
+                        SettingHelp(String(localized:
+                            "Proton accounts log in through Proton Bridge, with the Bridge’s password."))
+                        BridgePasswordView(status: status)
+                        if let link = draft.link { LinkButton(link: link) }
+                        if added == nil, let later = draft.testsOnceAdded { SettingHelp(later) }
+                    } else {
+                        credential
+                    }
+                }
+            }
+        }
+        if draft.editing == nil { sectionTitle("Personalization") }
+        row("Alias") {
+            TextField("Alias", text: $draft.alias,
+                      prompt: Text("Optional: the name shown in the sidebar and on rows"))
+                .meadowComposeField()
+                .accessibilityLabel("Alias")
+        }
+        row("Signature") {
+            TextField("Signature", text: $draft.signature, prompt: Text(signaturePrompt), axis: .vertical)
+                .lineLimit(3...6)
+                .padding(.vertical, 7)
+                .meadowComposeField()
+                .accessibilityLabel("Signature")
+        }
+    }
+
+    private var choosingAdditionalProvider: Bool { moreProviders && draft.kind != .gentlemail }
+
+    private var providerChoices: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Email provider")
+                .font(.meadow(.ui, 13, .bold))
+                .accessibilityAddTraits(.isHeader)
+            MeadowSegmentedChoice(
+                label: String(localized: "Email provider"),
+                selection: Binding<String?>(get: {
+                    moreProviders || draft.kind == .gentlemail ? "more" : draft.kind?.rawValue
+                }, set: { value in
+                    moreProviders = value == "more"
+                    if let value, let kind = AccountDraft.Kind(rawValue: value) { draft.pick(kind) }
+                }),
+                options: [("gmail", "Gmail"), ("proton", "Proton"),
+                          ("imap", String(localized: "Other IMAP")), ("more", String(localized: "More options"))],
+                symbol: { value in
+                    switch value {
+                    case "gmail": "envelope"
+                    case "proton": "shield"
+                    case "imap": "server.rack"
+                    default: "ellipsis.circle"
+                    }
+                }
+            )
+            if moreProviders || draft.kind == .gentlemail {
+                Button { draft.pick(.gentlemail) } label: {
+                    Label("GentleMail", systemImage: draft.kind == .gentlemail ? "checkmark.circle.fill" : "paperplane")
+                }
+                .meadowButton(small: true)
+            }
+        }
+        .foregroundStyle(meadow.ink)
+        .padding(.horizontal, 18)
+        .padding(.bottom, 12)
     }
 
     /// What stands under the form and takes room from it: a test's words, and a problem.

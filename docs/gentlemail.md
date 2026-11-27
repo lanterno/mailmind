@@ -1,6 +1,6 @@
 # GentleMail in MailMind for Mac
 
-Open Settings → Accounts, add an account, and choose **GentleMail** in the Type row. Enter your mailbox address, your GentleMail HTTPS hostname, and an API key scoped to that mailbox. Give the key permission to read messages and attachments and to send mail. MailMind keeps the credential in the macOS Keychain.
+Open Settings → Accounts, add an account, and select **More options**, then choose **GentleMail**. Enter your mailbox address, your GentleMail HTTPS hostname, and an API key scoped to that mailbox. Give the key permission to read messages and attachments and to send mail. MailMind keeps the credential in the macOS Keychain.
 
 Use the ordinary inbox, message reader, and composer. MailMind downloads mail from the existing GentleMail deployment and sends replies through its API. Connecting the account does not require DNS changes or a mailbox migration.
 
