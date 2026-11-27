@@ -24,7 +24,7 @@ struct AccountForm: View {
 
     @State private var problem = ""
     @State private var saving = false
-    @State private var moreProviders = false
+    @State private var providerTab = "automatic"
     /// The account added from the first run whose test then failed: the sheet stays open on it until Done.
     @State private var added: String?
     /// The field the sheet was opened to fix (#51), focused as it opens and again when a fix didn't work.
@@ -102,12 +102,12 @@ struct AccountForm: View {
             .padding(.vertical, 12)
             .overlay(alignment: .top) { ComposeHairline() }
         }
-        .frame(width: 560)
+        .frame(width: draft.editing == nil ? 640 : 560)
         .frame(minHeight: 540)
         .defaultFocus($focused, AccountFormField.fixing(draft.fixing))
         .onAppear { focusTheFix() }
-        .onChange(of: draft.presetQuery) { draft.found = nil }
-        .task(id: draft.presetQuery) { await askPreset() }
+        .onChange(of: automaticQuery) { draft.found = nil }
+        .task(id: automaticQuery) { await askPreset() }
         .background { ComposePaper() }
         .presentationBackground { ComposePaper() }
     }
@@ -197,7 +197,9 @@ struct AccountForm: View {
         }
     }
 
-    private var choosingAdditionalProvider: Bool { moreProviders && draft.kind != .gentlemail }
+    private var automaticQuery: String? { providerTab == "automatic" ? draft.presetQuery : nil }
+
+    private var choosingAdditionalProvider: Bool { providerTab == "more" && draft.kind != .gentlemail }
 
     private var providerChoices: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -206,16 +208,22 @@ struct AccountForm: View {
                 .accessibilityAddTraits(.isHeader)
             MeadowSegmentedChoice(
                 label: String(localized: "Email provider"),
-                selection: Binding<String?>(get: {
-                    moreProviders || draft.kind == .gentlemail ? "more" : draft.kind?.rawValue
-                }, set: { value in
-                    moreProviders = value == "more"
-                    if let value, let kind = AccountDraft.Kind(rawValue: value) { draft.pick(kind) }
+                selection: Binding(get: { providerTab }, set: { tab in
+                    guard tab != providerTab else { return }
+                    providerTab = tab
+                    draft.found = nil
+                    if tab == "automatic" {
+                        draft.pick(.imap)
+                        draft.kind = nil
+                    } else if let kind = AccountDraft.Kind(rawValue: tab) {
+                        draft.pick(kind)
+                    }
                 }),
-                options: [("gmail", "Gmail"), ("proton", "Proton"),
+                options: [("automatic", String(localized: "Automatic")), ("gmail", "Gmail"), ("proton", "Proton"),
                           ("imap", String(localized: "Other IMAP")), ("more", String(localized: "More options"))],
                 symbol: { value in
                     switch value {
+                    case "automatic": "wand.and.stars"
                     case "gmail": "envelope"
                     case "proton": "shield"
                     case "imap": "server.rack"
@@ -223,7 +231,7 @@ struct AccountForm: View {
                     }
                 }
             )
-            if moreProviders || draft.kind == .gentlemail {
+            if providerTab == "more" {
                 Button { draft.pick(.gentlemail) } label: {
                     Label("GentleMail", systemImage: draft.kind == .gentlemail ? "checkmark.circle.fill" : "paperplane")
                 }
@@ -347,7 +355,7 @@ struct AccountForm: View {
     /// Ask the server which preset the address takes once it has rested. A new address has forgotten what the last one
     /// was told (`onChange`).
     private func askPreset() async {
-        guard let email = draft.presetQuery, let core = status.core else { return }
+        guard let email = automaticQuery, let core = status.core else { return }
         do {
             try await AppSeams.clock.sleep(for: Self.askAfter)
             let found = try await core.get(API.Get.AccountsPreset.self, ["email": email])
