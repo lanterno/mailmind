@@ -7,6 +7,12 @@ use std::path::{Component, Path, PathBuf};
 
 use mm_kernel::seams::Secret;
 
+/// Location of the Mac connector's persistent remote-to-local UID mapping.
+#[cfg(target_os = "macos")]
+pub(crate) fn gentlemail_mapping_dir() -> Option<PathBuf> {
+    Some(PathBuf::from(std::env::var_os("HOME")?).join("Library/Application Support/MailMind/GentleMail"))
+}
+
 /// The data directory (settings). Unset or empty, the repo root. It must exist.
 pub const HOME: &str = "MAILMIND_HOME";
 /// The key the database is encrypted with, 64 hex digits, in place of the Keychain's: for the tests, the demo and a

@@ -12,12 +12,13 @@ struct MeadowSegmentedChoice<Value: Hashable>: View {
     let options: [(value: Value, title: String)]
     /// Each choice as wide as the widest, filling the strip; else each as wide as its words.
     var fills = true
+    var symbol: (Value) -> String? = { _ in nil }
     @Environment(\.meadow) private var meadow
 
     var body: some View {
         HStack(spacing: 2) {
             ForEach(Array(options.enumerated()), id: \.offset) { index, option in
-                MeadowSegment(title: option.title, chosen: option.value == selection, fills: fills) {
+                MeadowSegment(title: option.title, symbol: symbol(option.value), chosen: option.value == selection, fills: fills) {
                     selection = option.value
                 }
                 .onKeyPress(.rightArrow) { step(from: index, by: 1) }
@@ -40,6 +41,7 @@ struct MeadowSegmentedChoice<Value: Hashable>: View {
 
 private struct MeadowSegment: View {
     let title: String
+    let symbol: String?
     let chosen: Bool
     let fills: Bool
     let choose: () -> Void
@@ -49,7 +51,10 @@ private struct MeadowSegment: View {
 
     var body: some View {
         Button(action: choose) {
-            Text(title)
+            HStack(spacing: 5) {
+                if let symbol { Image(systemName: symbol).accessibilityHidden(true) }
+                Text(title)
+            }
                 .font(.meadow(.ui, 13, .bold))
                 .foregroundStyle(chosen || hovering ? meadow.ink : meadow.ink2)
                 .lineLimit(1)

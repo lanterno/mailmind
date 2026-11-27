@@ -60,6 +60,7 @@ pub fn defaults(entry: &Map<String, Value>) -> TypeDefaults {
     match entry.get("type") {
         None => IMAP,
         Some(Value::String(t)) if t == "gmail" => GMAIL,
+        Some(Value::String(t)) if t == "gentlemail" => TypeDefaults { port: 443, ..IMAP },
         Some(Value::String(t)) if t == "proton" => PROTON,
         Some(_) => IMAP,
     }
@@ -204,6 +205,9 @@ impl Account {
             Some(Value::String(t)) => t.clone(),
             _ => "imap".to_owned(),
         };
+        if kind == "gentlemail" && !cfg!(target_os = "macos") {
+            return None;
+        }
         Some(Account {
             email,
             kind,
@@ -362,12 +366,15 @@ pub fn validate_new(entry: &Map<String, Value>) -> Result<(), Problem> {
     }
     let kind = match entry.get("type") {
         None => Some("imap"),
-        Some(Value::String(t)) => ["gmail", "imap", "proton"].contains(&t.as_str()).then_some(t.as_str()),
+        Some(Value::String(t)) => ["gmail", "imap", "proton", "gentlemail"].contains(&t.as_str()).then_some(t.as_str()),
         Some(_) => None,
     };
     let Some(kind) = kind else {
         return Err(Problem::refused("type must be gmail, imap, or proton"));
     };
+    if kind == "gentlemail" && !cfg!(target_os = "macos") {
+        return Err(Problem::refused("GentleMail accounts require macOS"));
+    }
     let host = match entry.get("host") {
         Some(v) if truthy(v) => match v {
             Value::String(s) => s.clone(),
@@ -375,7 +382,7 @@ pub fn validate_new(entry: &Map<String, Value>) -> Result<(), Problem> {
         },
         _ => String::new(),
     };
-    if kind == "imap" && text::strip(&host).is_empty() {
+    if matches!(kind, "imap" | "gentlemail") && text::strip(&host).is_empty() {
         return Err(Problem::refused("a host is required for a generic IMAP account"));
     }
     match entry.get("port") {

@@ -421,7 +421,12 @@ struct Ada {
 
 impl Accounts for Ada {
     fn sending(&self, email: &str) -> Result<Option<SendingAccount>, Fault> {
-        Ok(Some(SendingAccount { email: email.to_owned(), name: "Ada".to_owned(), saves_sent: self.saves_sent }))
+        Ok(Some(SendingAccount {
+            email: email.to_owned(),
+            name: "Ada".to_owned(),
+            saves_sent: self.saves_sent,
+            local_drafts: false,
+        }))
     }
 
     fn undo_send_seconds(&self) -> Option<i64> {
