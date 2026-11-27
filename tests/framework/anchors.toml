@@ -46,3 +46,8 @@ mac = ["shells/apple/Sources/Mac/Compose/Outbox.swift"]
 what = "The Mac only: the Inbox's lanes, a group of buttons named for the place, which the list's tabs are on the page."
 page = ""
 mac = ["shells/apple/Sources/Mac/Meadow/Heads.swift"]
+
+[reader-subject]
+what = "The open message's subject. Several Mac reader headings have changing labels, including sender and date."
+page = ""
+mac = ["shells/apple/Sources/Mac/Reader/Document.swift"]

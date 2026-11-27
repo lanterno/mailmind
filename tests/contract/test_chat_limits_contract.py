@@ -43,7 +43,19 @@ class Peer:
             try:
                 asked = b""
                 while b"\r\n\r\n" not in asked:
-                    asked += conn.recv(4096) or b"\r\n\r\n"
+                    chunk = conn.recv(4096)
+                    if not chunk:
+                        return
+                    asked += chunk
+                headers, body = asked.split(b"\r\n\r\n", 1)
+                length = next((int(h.split(b":", 1)[1]) for h in headers.splitlines()
+                               if h.lower().startswith(b"content-length:")), 0)
+                remaining = length - len(body)
+                while remaining > 0:
+                    chunk = conn.recv(min(4096, remaining))
+                    if not chunk:
+                        return
+                    remaining -= len(chunk)
                 self._answering(conn, self.stop)
             except OSError:
                 pass                                    # the client let it go
