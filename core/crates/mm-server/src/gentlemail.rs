@@ -178,8 +178,7 @@ impl MailboxSession {
     pub fn open(account: &Account, key: Secret, outside: &dyn Outside, timeout: Duration) -> Result<Self, ServerError> {
         let client = Client::for_host(account.host.as_str(), key).map_err(ServerError::Refused)?;
         client.verify(outside, &account.email, timeout).map_err(ServerError::Refused)?;
-        let root = std::path::PathBuf::from(std::env::var_os("HOME").ok_or(INVALID)?)
-            .join("Library/Application Support/MailMind/GentleMail");
+        let root = crate::environment::gentlemail_mapping_dir().ok_or(INVALID)?;
         std::fs::create_dir_all(&root).map_err(|_| INVALID)?;
         let identity = format!("{}\n{}", client.endpoint.host, account.email);
         let name: String = Sha256::digest(identity.as_bytes()).iter().map(|b| format!("{b:02x}")).collect();
