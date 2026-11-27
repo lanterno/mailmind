@@ -134,27 +134,20 @@ READ = r"""
 """
 
 
-def _installed(kind):
-    from playwright.sync_api import sync_playwright
-    with sync_playwright() as p:
-        return os.path.exists(getattr(p, kind).executable_path)
-
-
 @pytest.mark.browser
 @pytest.mark.parametrize("kind", ["chromium", "firefox"])
-def test_nothing_the_sanitizer_lets_through_acts_in_a_browsers_own_parser(kind):
-    if not _installed(kind):
+def test_nothing_the_sanitizer_lets_through_acts_in_a_browsers_own_parser(kind, browser_runtime):
+    engine = getattr(browser_runtime, kind)
+    if not os.path.exists(engine.executable_path):
         pytest.skip(f"{kind} isn't installed for Playwright here (`uv run playwright install {kind}`)")
-    from playwright.sync_api import sync_playwright
     cases = outputs()
-    with sync_playwright() as p:
-        browser = getattr(p, kind).launch(headless=True)
-        try:
-            page = browser.new_context(java_script_enabled=True).new_page()
-            page.set_content("<!doctype html><title>parse</title>")
-            found = page.evaluate(READ, [[out, blocked] for _, out, blocked in cases])
-        finally:
-            browser.close()
+    browser = engine.launch(headless=True)
+    try:
+        page = browser.new_context(java_script_enabled=True).new_page()
+        page.set_content("<!doctype html><title>parse</title>")
+        found = page.evaluate(READ, [[out, blocked] for _, out, blocked in cases])
+    finally:
+        browser.close()
     acting = [(given, out, said) for (given, out, _), said in zip(cases, found) if said]
     assert len(found) == len(cases)
     assert acting == [], "\n".join(f"{given!r}\n  -> {out!r}\n  {said}" for given, out, said in acting[:5])

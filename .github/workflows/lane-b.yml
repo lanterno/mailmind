@@ -85,6 +85,9 @@ jobs:
         id: hosted
         run: just apple test-hosted
 
+      - name: The scenarios on the Mac client
+        run: uv run pytest --e2e --client mac tests/scenarios
+
       # How many ran, passed, failed and were skipped, from the run's results. A run that ran nothing, or skipped any,
       # proves nothing about the hosted path, so it fails here.
       - name: What ran

@@ -56,12 +56,10 @@ def app(request, world, built, tmp_path_factory):
 
 
 @pytest.fixture(scope="session")
-def chromium():
-    from playwright.sync_api import sync_playwright
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        yield browser
-        browser.close()
+def chromium(browser_runtime):
+    browser = browser_runtime.chromium.launch()
+    yield browser
+    browser.close()
 
 
 def place_route(place):

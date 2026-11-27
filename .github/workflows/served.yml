@@ -109,7 +109,7 @@ jobs:
       # The end-to-end scenarios (tests/scenarios), on the page against the Rust server, the only one they run on.
       - name: The scenarios on the page
         if: ${{ !cancelled() && matrix.server == 'rust' }}
-        run: just e2e --basetemp="$RUNNER_TEMP/e2e"
+        run: just e2e --client page --basetemp="$RUNNER_TEMP/e2e"
 
       # A failing scenario writes its trace, its last `shown` and a picture to build/traces.
       - name: What the scenarios saw

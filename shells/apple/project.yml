@@ -141,7 +141,6 @@ targets:
     sources:
       - path: AppTests
         excludes: ["*.py"]
-      - TestKit
     dependencies:
       - target: MailMind-macOS
         embed: false

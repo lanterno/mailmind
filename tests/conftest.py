@@ -406,3 +406,11 @@ def golden(request, world, app):
     yield rec
     if request.node.stash.get(_CALL_PASSED, False):
         rec.verify()
+
+
+@pytest.fixture(scope="session")
+def browser_runtime():
+    """Share one synchronous Playwright loop per pytest worker across browser suites."""
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as runtime:
+        yield runtime
