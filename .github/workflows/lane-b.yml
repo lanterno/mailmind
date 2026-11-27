@@ -16,6 +16,8 @@ on:
       - "core/**"
       - "shells/apple/**"
       # The hosted tests' world: the fake servers, the demo's corpus and the Python app that writes its config.
+      - "tests/scenarios/**"
+      - "tests/framework/**"
       - "tests/support/**"
       - "tests/fakes/**"
       - "tests/fixtures/**"

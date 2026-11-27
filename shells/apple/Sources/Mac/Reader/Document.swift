@@ -169,6 +169,7 @@ struct DocumentHead: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
                 .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("reader-subject")
                 .padding(.top, 10)
                 .padding(.bottom, 18)
         }

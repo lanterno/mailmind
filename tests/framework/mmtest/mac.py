@@ -436,7 +436,10 @@ class MacClient:
             if not found:
                 return
             name = PLACES.get(found.group(2), found.group(2))
-            rail = self.shown().rail or {}
+            shown = self.shown()
+            if (shown.list or {}).get("title") == name:
+                return
+            rail = shown.rail or {}
             if any(p["current"] and (p["name"] == name or p["name"].startswith(name + " ")) for p in rail.get("places", [])):
                 return
             self.app.ask("click", count=1, **self.find("button", name, within="rail").spec)

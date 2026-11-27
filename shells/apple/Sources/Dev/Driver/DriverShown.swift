@@ -82,8 +82,7 @@ enum DriverShown {
     private static func reader(_ reader: Found, in window: NSWindow) -> [String: Any] {
         let under = Find.all(in: reader.element).filter { DriverFind.visible($0, in: window) }
         if let from = under.first(where: { $0.role == "AXGroup" && $0.label.hasPrefix("Message from ") }) {
-            let subject = under.first { $0.role == "AXHeading" && DriverFind.value($0.element) == $0.label }?.label
-                ?? under.first { $0.role == "AXHeading" }?.label ?? ""
+            let subject = Find.all(in: reader.element).first { $0.identifier == "reader-subject" }.map { said($0) } ?? ""
             let thread = under.first { $0.role == "AXStaticText" && (DriverFind.value($0.element) ?? "")
                 .range(of: #"^\d+ messages?$"#, options: .regularExpression) != nil }
             return ["kind": "message", "subject": subject, "sender": String(from.label.dropFirst("Message from ".count)),
