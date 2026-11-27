@@ -178,7 +178,11 @@ struct AccountDraft: Equatable {
 
     /// A type picked by hand: what a preset filled in is no longer its.
     mutating func pick(_ picked: Kind) {
-        if type != picked, type == .gentlemail || picked == .gentlemail { password = "" }
+        if type != picked, type == .gentlemail || picked == .gentlemail {
+            password = ""
+            host = ""
+            found = nil
+        }
         kind = picked
         applied = nil
         trash = nil

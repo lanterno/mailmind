@@ -60,24 +60,17 @@ struct AccountForm: View {
                             presetWords
                             if let note = draft.note { NoteWords(text: note) }
                             if let taken = draft.alreadySetUp(among: known) { NoteWords(text: taken) }
-                            if draft.editing == nil, draft.type != .gentlemail {
-                                Button("Connect GentleMail…") {
-                                    draft.pick(.gentlemail)
-                                    draft.host = ""
-                                    draft.found = nil
-                                }
-                                .meadowButton(small: true)
-                            }
+
                         }
                     }
-                    if draft.kind != nil, !draft.unsupported {
+                    if !draft.unsupported {
                         row("Type") {
                             MeadowSegmentedChoice(label: String(localized: "Type"),
-                                                  selection: Binding(get: { draft.type }, set: { draft.pick($0) }),
-                                                  options: AccountDraft.Kind.allCases.map { ($0, $0.label) },
+                                                  selection: Binding(get: { draft.kind }, set: { if let kind = $0 { draft.pick(kind) } }),
+                                                  options: AccountDraft.Kind.allCases.map { (Optional($0), $0.label) },
                                                   fills: false)
                         }
-                        if draft.type == .imap { servers }
+                        if draft.kind == .imap { servers }
                         if draft.type == .gentlemail {
                             row("GentleMail server") {
                                 TextField("Hostname", text: $draft.host, prompt: Text(verbatim: "mail.example.com"))
