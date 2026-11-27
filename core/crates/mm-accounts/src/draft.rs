@@ -68,6 +68,10 @@ fn host_of(draft: &Map<String, Value>, key: &str, default: Option<String>) -> Op
 /// then its outgoing server's port, then its credential. Its password is tried as it would be kept
 /// (`account::as_kept`).
 pub fn throwaway_account(draft: &Map<String, Value>) -> Result<Draft, NotTried> {
+    let gentlemail = draft.get("type").and_then(Value::as_str) == Some("gentlemail");
+    if gentlemail && !cfg!(target_os = "macos") {
+        return Err(NotTried::Refused("GentleMail accounts require macOS"));
+    }
     let defaults = account::defaults(draft);
     let port = port_of(draft, "port", defaults.port).ok_or(NotTried::BadPort)?;
     let host = host_of(draft, "host", defaults.host.map(str::to_owned)).ok_or(NotTried::Refused(NO_HOST))?;
@@ -83,6 +87,5 @@ pub fn throwaway_account(draft: &Map<String, Value>) -> Result<Draft, NotTried> 
     };
     let password = account::as_kept(password, draft.get("strip_spaces").map_or(defaults.strip_spaces, truthy));
     let email = draft.get("email").and_then(Value::as_str).map(str::to_owned);
-    let gentlemail = draft.get("type").and_then(Value::as_str) == Some("gentlemail");
     Ok(Draft { email, gentlemail, host, port, starttls, smtp_host, smtp_port, smtp_starttls, password })
 }

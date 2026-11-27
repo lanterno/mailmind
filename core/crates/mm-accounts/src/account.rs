@@ -205,7 +205,7 @@ impl Account {
             Some(Value::String(t)) => t.clone(),
             _ => "imap".to_owned(),
         };
-        if matches!(kind.as_ref(), "gentlemail") && !cfg!(target_os = "macos") {
+        if kind == "gentlemail" && !cfg!(target_os = "macos") {
             return None;
         }
         Some(Account {
@@ -372,7 +372,7 @@ pub fn validate_new(entry: &Map<String, Value>) -> Result<(), Problem> {
     let Some(kind) = kind else {
         return Err(Problem::refused("type must be gmail, imap, or proton"));
     };
-    if matches!(kind.as_ref(), "gentlemail") && !cfg!(target_os = "macos") {
+    if kind == "gentlemail" && !cfg!(target_os = "macos") {
         return Err(Problem::refused("GentleMail accounts require macOS"));
     }
     let host = match entry.get("host") {

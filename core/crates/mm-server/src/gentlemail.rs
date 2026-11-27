@@ -135,12 +135,12 @@ impl Message {
             .from(self.from.pair())
             .to(self.to.iter().map(Address::pair).collect::<Vec<_>>())
             .subject(clean(&self.subject))
-            .message_id(clean(self.message_id.as_deref().unwrap_or(&self.id)));
+            .message_id(bare_message_id(self.message_id.as_deref().unwrap_or(&self.id)));
         if !self.cc.is_empty() {
             b = b.cc(self.cc.iter().map(Address::pair).collect::<Vec<_>>());
         }
         if let Some(reply) = &self.in_reply_to {
-            b = b.in_reply_to(clean(reply));
+            b = b.in_reply_to(bare_message_id(reply));
         }
         if let Some(reply) = &self.reply_to {
             b = b.reply_to(clean(reply));
@@ -151,6 +151,11 @@ impl Message {
         self.builder()?.text_body("").write_to_vec().map_err(|_| INVALID)
     }
 }
+// mail-builder supplies the outer angle brackets when serializing an RFC message ID.
+fn bare_message_id(value: &str) -> String {
+    clean(value.trim().trim_matches(['<', '>']))
+}
+
 fn segment(id: &str) -> Result<&str, ServerError> {
     if !id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric() || b"_-".contains(&b)) {
         Ok(id)
@@ -300,5 +305,23 @@ pub(crate) fn send(
         200..=299 => Ok(()),
         400..=499 => Err(rejected),
         _ => Err(uncertain),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reconstructs_ids_with_one_pair_of_brackets() {
+        let message = MessageBuilder::new()
+            .message_id(bare_message_id("<sample@example.test>"))
+            .in_reply_to(bare_message_id("parent@example.test"))
+            .text_body("test")
+            .write_to_vec()
+            .unwrap();
+        let headers = String::from_utf8(message).unwrap();
+        assert!(headers.contains("Message-ID: <sample@example.test>"));
+        assert!(headers.contains("In-Reply-To: <parent@example.test>"));
     }
 }

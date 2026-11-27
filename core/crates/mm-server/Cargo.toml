@@ -64,7 +64,6 @@ workspace = true
 base64 = "0.22.1"
 serde.workspace = true
 zeroize.workspace = true
-
 mail-builder = "0.4"
 mail-parser.workspace = true
 rusqlite.workspace = true
